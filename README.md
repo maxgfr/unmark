@@ -55,11 +55,43 @@ density, triples, negative parallelism, marker vocabulary, sentence-length varia
 refuses to measure below 120 words, because one em dash in twelve words is
 eighty-three per thousand and that is a division, not a signal.
 
+**Making text read less like a machine wrote it** is a separate, opt-in pass,
+following [Wikipedia's _Signs of AI writing_](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing).
+That catalogue splits in two, and the split is the whole design:
+
+- **One right answer → fixed.** Em and en dashes, curly quotes and ellipses to
+  ASCII. Filler (`in order to` → `to`, `has the ability to` → `can`), stacked
+  hedges, chat pleasantries, signposting, cutoff disclaimers, decorative emoji on
+  headings and bullets.
+- **Needs a rewrite → reported, never guessed at.** Rule-of-three cadence,
+  promotional tone, passive voice, the word _delve_. There is no correct
+  substitution for _delve_; rewriting the sentence is the fix, and that takes a
+  writer. A tool that guessed would produce mangled prose and call it humanised.
+
+French guillemets and the apostrophe in _l'été_ are left alone — straightening
+those damages real text for nothing.
+
+Neither pass removes a watermark, and both are off by default. They still _run_
+on every inspection, so the report lists what they would do before you have
+guessed to turn anything on.
+
 **Files.** Provenance metadata across eleven formats: PNG, JPEG, WebP, GIF, SVG,
 PDF, DOCX, ODT, HTML, Markdown and plain text. C2PA manifests, EXIF, XMP, IPTC,
 document properties, generator tags. Removal only — dropping a PNG chunk leaves
 every other chunk's CRC valid, and JPEG's scan is copied verbatim, so the pixels
-come out byte-identical.
+of two real camera JPEGs come out byte-identical after their EXIF and XMP are
+stripped.
+
+Including the places the format specs make easy to miss:
+
+| Where                                            | Why it matters                                                                                                                                                                     |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JPEG **APP2 = MPF**                              | Either an ICC profile or an MPF block, told apart only by an identifier. MPF can hold **an entire second photograph**.                                                             |
+| **ICC profile**                                  | Kept, since removing it changes rendering — but reported: it survives an EXIF strip and names the software. Facebook stamps its own with `Copyright: FB`.                          |
+| DOCX **tracked changes, comments, `people.xml`** | Author names and timestamps on every edit, and a list of everyone who ever opened it. Accepting all changes removes none of it.                                                    |
+| DOCX **`docProps/thumbnail.jpeg`**               | A rendered picture of the first page. No text-level clean touches it.                                                                                                              |
+| DOCX **RSIDs**                                   | Revision save ids that fingerprint editing sessions and link documents to one machine.                                                                                             |
+| PDF **incremental saves**                        | Every earlier draft is still in the file, including text under a black rectangle someone called a redaction. Reported, not removed: rebuilding the document is beyond a byte pass. |
 
 **Images.** A corner scan finds flat semi-transparent overlays and snaps to their
 real edges, then **unblends** them: a composited badge is an invertible transform of
@@ -113,6 +145,10 @@ unmark inspect suspicious.txt     # report every mark, change nothing
 unmark decode  suspicious.txt     # recover what the invisible characters spell
 unmark clean   suspicious.txt --in-place
 unmark audit   ./docs             # walk a tree, list what is marked
+
+# The two opt-in style passes
+unmark clean draft.md --typography   # em dashes, curly quotes, ellipses → ASCII
+unmark clean draft.md --humanise     # filler, pleasantries, signposting, decorative emoji
 ```
 
 Zero dependencies — one file, no install step. Exit codes compose: `inspect`

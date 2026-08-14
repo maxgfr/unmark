@@ -33,6 +33,23 @@ node skills/unmark/scripts/unmark.mjs --help
 3. **`clean`** to strip. It removes what is removable and leaves what it cannot
    justify removing, listing both.
 
+Two further passes exist for making text read less like a machine wrote it. They
+are **off unless asked for**, and neither removes a watermark:
+
+- `--typography` — em and en dashes, curly quotes and ellipses to ASCII. French
+  guillemets and the apostrophe in _l'été_ are deliberately left alone.
+- `--humanise` — filler (`in order to` → `to`), stacked hedges, chat pleasantries,
+  signposting, cutoff disclaimers, decorative emoji on headings and bullets. Only
+  phrases with one unambiguous shorter form.
+
+Everything needing a rewrite — rule-of-three cadence, promotional tone, the word
+_delve_ — is **reported and left alone**, because there is no correct substitution
+for it. If the user wants that fixed, rewrite the prose yourself; do not expect
+these flags to do it.
+
+An `inspect` reports what both passes would do even when neither is enabled, so
+you can show the user before suggesting either.
+
 ```bash
 node scripts/unmark.mjs inspect suspicious.txt
 node scripts/unmark.mjs decode suspicious.txt
