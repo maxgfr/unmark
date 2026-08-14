@@ -38,6 +38,18 @@ export const INERT_HOSTS = [
   ['c2pa.org', 'C2PA manifest namespace, matched when detecting provenance chunks'],
   ['maxgfr.github.io', "the app's own canonical address in meta tags and the manifest"],
   ['github.com', 'the "read the source" link in the footer — an anchor, not a request'],
+  [
+    'rolldown.rs',
+    "documentation URL inside a thrown Error about `require` in the bundler's runtime",
+  ],
+  [
+    'web.dev',
+    'cross-origin-isolation guide linked from an onnxruntime-web console.warn about threads',
+  ],
+  [
+    'huggingface.co',
+    'provenance of the pinned MI-GAN weights, recorded in scripts/fetch-assets.mjs',
+  ],
 ]
 
 // `wasm-unsafe-eval` is what lets WebAssembly.compile run at all; without it the

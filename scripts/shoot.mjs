@@ -25,12 +25,17 @@ const PORT = 4178
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
+  '.mjs': 'text/javascript',
   '.css': 'text/css',
   '.json': 'application/json',
   '.webmanifest': 'application/manifest+json',
   '.woff2': 'font/woff2',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  // Served with the right type so the runtime uses streaming instantiation,
+  // which is the path production takes.
+  '.wasm': 'application/wasm',
+  '.onnx': 'application/octet-stream',
 }
 
 const server = createServer(async (request, response) => {
@@ -134,6 +139,14 @@ for (const shot of shots) {
 {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   page.on('pageerror', (error) => problems.push(`image: ${error.message}`))
+  page.on('response', (response) => {
+    if (response.status() >= 400) problems.push(`image: ${response.status()} ${response.url()}`)
+    // Print every wasm and model fetch: this is where a runtime that decided
+    // to reach for a CDN would become visible.
+    if (/wasm|onnx/.test(response.url())) {
+      console.log('  fetched:', response.url().replace(/^http:\/\/[^/]+/, ''))
+    }
+  })
   page.on('console', (message) => {
     if (message.type() === 'error') problems.push(`image: console ${message.text()}`)
   })
@@ -163,6 +176,20 @@ for (const shot of shots) {
 
     await page.getByRole('button', { name: 'Unblend' }).click()
     await page.waitForTimeout(300)
+
+    // MI-GAN, for real: 40 MB of model and runtime off our own origin, then an
+    // actual inference. Shipping an "AI inpaint" button that was never run
+    // would be exactly the kind of claim this project refuses to make.
+    await page.getByRole('button', { name: 'AI inpaint' }).click()
+    await page.getByRole('button', { name: 'Download and run' }).click()
+
+    try {
+      await page.waitForSelector('text=/Filled from a \\d+×\\d+ window/', { timeout: 120_000 })
+      const note = await page.locator('text=/Filled from a/').first().textContent()
+      console.log(`  MI-GAN: ${note?.trim()}`)
+    } catch {
+      problems.push('image: MI-GAN never reported a completed fill')
+    }
   }
 
   await page.screenshot({ path: '/tmp/unmark-desktop-image.png', fullPage: true })

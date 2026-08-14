@@ -23,7 +23,14 @@ const VENDOR = join(ROOT, 'public', 'vendor')
 // Each entry: where it lands under public/vendor/, where it comes from, its
 // SHA-256, and why the app needs it. Regenerate a checksum with:
 //   curl -sL <url> | shasum -a 256
-export const ASSETS = []
+export const ASSETS = [
+  {
+    file: 'models/migan-pipeline-v2.onnx',
+    url: 'https://huggingface.co/andraniksargsyan/migan/resolve/main/migan_pipeline_v2.onnx',
+    sha256: '6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b',
+    why: 'MI-GAN 512 Places2, the opt-in AI inpainter (MIT, Picsart AI Research)',
+  },
+]
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
@@ -76,8 +83,4 @@ for (const asset of ASSETS) {
   fetched += 1
 }
 
-if (ASSETS.length === 0) {
-  console.log('  No pinned assets yet — the image pipeline lands in a later milestone.')
-} else {
-  console.log(`  Assets ready — ${fetched} fetched, ${cached} already present and verified.`)
-}
+console.log(`  Assets ready — ${fetched} fetched, ${cached} already present and verified.`)

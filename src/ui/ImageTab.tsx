@@ -11,6 +11,12 @@ import {
   type Rect,
 } from '../image/detect/overlay.ts'
 import { inpaint, rectMask } from '../image/inpaint/telea.ts'
+import {
+  inpaintWithMigan,
+  isMiganLoaded,
+  MODEL_BYTES,
+  RUNTIME_BYTES,
+} from '../image/inpaint/migan.ts'
 import type { Raster } from '../image/raster.ts'
 import { cleanContainer } from '../core/container/index.ts'
 import type { Finding } from '../core/report.ts'
@@ -38,6 +44,8 @@ export function ImageTab() {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
 
+  const [aiPrompt, setAiPrompt] = useState(false)
+  const [aiNote, setAiNote] = useState('')
   const [lowBits, setLowBits] = useState(false)
   const [resampleRound, setResampleRound] = useState(false)
   const [crop, setCrop] = useState(false)
@@ -131,7 +139,40 @@ export function ImageTab() {
     URL.revokeObjectURL(url)
   }, [raster, loaded])
 
+  const runMigan = useCallback(async () => {
+    if (!raster || !selection) return
+    setAiPrompt(false)
+    setAiNote('')
+    setBusy(isMiganLoaded() ? 'inpainting with MI-GAN' : 'downloading the model')
+
+    try {
+      const mask = rectMask(raster.width, raster.height, selection)
+      const result = await inpaintWithMigan(raster, mask, (stage) => {
+        setBusy(
+          stage === 'runtime'
+            ? 'downloading the runtime'
+            : stage === 'model'
+              ? 'downloading the model'
+              : 'inpainting with MI-GAN',
+        )
+      })
+      if (!result) {
+        setAiNote('Nothing was selected to fill.')
+        return
+      }
+      apply(result.raster, raster)
+      setAiNote(
+        `Filled from a ${result.window.width}×${result.window.height} window in ${result.milliseconds} ms.`,
+      )
+    } catch (cause) {
+      setError(cause instanceof Error ? `MI-GAN failed: ${cause.message}` : 'MI-GAN failed to run')
+    } finally {
+      setBusy('')
+    }
+  }, [raster, selection, apply])
+
   const anyDisruption = lowBits || resampleRound || crop || jpeg || noise
+  const downloadSize = Math.round((MODEL_BYTES + RUNTIME_BYTES) / 1024 / 1024)
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-12">
@@ -356,7 +397,59 @@ export function ImageTab() {
               >
                 Inpaint
               </button>
+              <button
+                type="button"
+                onClick={() => (isMiganLoaded() ? void runMigan() : setAiPrompt(true))}
+                disabled={busy !== ''}
+                className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                AI inpaint
+              </button>
             </div>
+
+            {/* The download is a decision, so it is asked for rather than
+                started. A page that quietly pulls 41 MB because a button looked
+                like the others has spent someone's data without asking. */}
+            {aiPrompt ? (
+              <div className="mt-4 border border-[var(--color-rule-bright)] p-3">
+                <p className="text-sm text-[var(--color-bone)]">
+                  MI-GAN needs a one-time {downloadSize} MB download.
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  The model and its runtime are served from this site, not from a third party, and
+                  your image is not part of the request — it never leaves the tab. The browser
+                  caches both, so this happens once.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void runMigan()}
+                    className="rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)]"
+                  >
+                    Download and run
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiPrompt(false)}
+                    className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors duration-150 hover:text-[var(--color-bone)]"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            ) : undefined}
+
+            {aiNote ? (
+              <p className="tnum mt-3 font-mono text-xs text-[var(--color-muted)]">{aiNote}</p>
+            ) : undefined}
+
+            <p className="mt-3 text-xs text-[var(--color-muted)]">
+              <span className="text-[var(--color-bone)]">Inpaint</span> continues the edges of the
+              hole inward — right for smooth or repeating surroundings, obviously wrong across a
+              face or a texture boundary.{' '}
+              <span className="text-[var(--color-bone)]">AI inpaint</span> invents plausible content
+              instead, and costs a one-time {downloadSize} MB download.
+            </p>
           </Section>
         ) : undefined}
 
