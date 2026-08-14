@@ -39,8 +39,11 @@ says who marked the text. And it states plainly what it cannot remove.
 
 ## Non-negotiables
 
-- **Nothing is uploaded.** There is no server. The CSP pins `connect-src` to a
-  documented allowlist and a build gate fails CI if that changes.
+- **Nothing is uploaded, and nothing can be.** There is no server, and
+  `connect-src 'self'` means the browser refuses any request to any other
+  origin — including from a dependency that decides to phone home. Every asset,
+  down to the 28 MB inpainting model, is served from this site. A build gate
+  fails CI if that ever stops being true.
 - **Honesty over reassurance.** Robust pixel watermarks (SynthID, Tree-Ring,
   StableSignature) survive this tool, and statistical text watermarks survive
   every deterministic edit it makes. Both are stated on the screen that does the

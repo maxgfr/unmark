@@ -11,11 +11,11 @@
 // browser refuses the request either way. This scanner is the second line: it
 // makes a new origin visible at build time rather than at incident time.
 //
-// unmark cannot make the stronger "zero origins" claim its siblings make,
-// because the opt-in WebLLM rewrite downloads weights from HuggingFace. So the
-// gate checks the weaker, still-provable thing: nothing reaches anywhere that
-// scripts/csp.mjs has not justified in writing, and the shipped CSP says
-// exactly that and nothing more.
+// The claim is the strong one: zero outbound origins. Every asset, including a
+// 28 MB inpainting model and a 13 MB WebAssembly runtime, is served from this
+// site — so there is nowhere for a file to go. The gate proves it by walking
+// the built bundle, and by checking that the shipped CSP still says exactly
+// what scripts/csp.mjs declares and nothing more.
 
 import { readdir, readFile } from 'node:fs/promises'
 import { join, extname, relative } from 'node:path'

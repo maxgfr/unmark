@@ -36,7 +36,6 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@mlc-ai/web-llm": "^0.2.79",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",

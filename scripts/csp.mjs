@@ -6,20 +6,22 @@
 // imports it to assert the shipped bundle reaches nowhere else.
 
 // Every origin the app may open a connection to, with the reason it is here.
-// Adding a row is the deliberate act of widening the privacy promise — the gate
-// prints these reasons when it reports, so an unjustified entry is visible in CI.
+//
+// There is exactly one, and it is our own. Everything the page loads — the
+// fonts, the ONNX runtime, the 28 MB inpainting model — is served from this
+// site, so the browser will refuse a request to anywhere else outright.
+//
+// An in-browser paraphrase for statistical text watermarks was considered and
+// dropped for this: it would have meant permitting huggingface.co and two CDNs
+// for *every* visitor, since a CSP is static and cannot be widened only for the
+// ones who opt in. A best-effort feature is not worth the only claim on this
+// page that the browser itself enforces.
+//
+// Adding a row here is the deliberate act of widening that promise. The gate
+// prints these reasons when it reports, so an unjustified entry is visible in
+// CI rather than only in a diff.
 export const CONNECT_ALLOWLIST = [
-  ["'self'", 'every model, wasm blob and asset is served from our own origin'],
-  [
-    'https://huggingface.co',
-    'opt-in WebLLM weights, fetched only after the user confirms the download',
-  ],
-  ['https://cdn-lfs.hf.co', 'HuggingFace LFS CDN backing those same weights'],
-  ['https://cdn-lfs-us-1.hf.co', 'HuggingFace LFS CDN backing those same weights'],
-  [
-    'https://raw.githubusercontent.com',
-    'mlc-ai/binary-mlc-llm-libs — the WebGPU shader library WebLLM pairs with the weights',
-  ],
+  ["'self'", 'every asset, font, wasm blob and model is served from our own origin'],
 ]
 
 // Hosts allowed to appear as inert strings in the bundle: documentation URLs

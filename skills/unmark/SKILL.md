@@ -45,8 +45,9 @@ the same core plus the image pipeline, entirely in their browser.
 
 **It cannot remove a statistical text watermark.** SynthID-Text-class marks live in
 word choice, not in characters, and survive every deterministic edit this tool makes.
-Say so plainly rather than implying a clean report means unwatermarked text. The
-browser app offers an opt-in local paraphrase for that, labelled best-effort.
+Removing one means rewriting the prose, which is the user's call and not something
+this tool does behind their back. Say so plainly rather than letting a clean report
+imply unwatermarked text.
 
 ## Reading a report
 
