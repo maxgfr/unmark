@@ -84,7 +84,7 @@ describe('inspect', () => {
     // the one line worth reading.
     await main(['inspect', await file('marked.txt', MARKED)])
     expect(stdout().split('\n').length).toBeLessThan(12)
-    expect(stdout()).toMatch(/\d+ × zwj_family/)
+    expect(stdout()).toMatch(/\d+ × zero-width character/)
   })
 
   it('emits parseable JSON', async () => {

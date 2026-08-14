@@ -1,5 +1,12 @@
 import { useCallback, useState, type ReactNode } from 'react'
-import { collapseRuns, type Finding, type Verdict } from '../core/report.ts'
+import {
+  collapseRuns,
+  KIND_LABEL,
+  outcomeOf,
+  type Finding,
+  type Outcome,
+  type Verdict,
+} from '../core/report.ts'
 import { IconCheck, IconCopy } from './icons.tsx'
 
 /** A ruled region. Not a card — the hairline is what makes this read as a report. */
@@ -29,18 +36,28 @@ export function Section({
 
 // Verdict is carried by weight and colour together. Colour alone would fail for
 // anyone who cannot separate the amber from the bone.
+//
+// Nothing is struck through. An earlier version struck out the
+// `likely_false_positive` row, which reads as "this was deleted" — the exact
+// opposite of what happened to it.
 const VERDICT_STYLE: Record<Verdict, string> = {
   confirmed: 'text-[var(--color-signal)] font-medium',
   probable: 'text-[var(--color-bone)]',
   informational: 'text-[var(--color-muted)]',
-  likely_false_positive: 'text-[var(--color-muted)] line-through decoration-1',
+  likely_false_positive: 'text-[var(--color-muted)]',
 }
 
 const VERDICT_LABEL: Record<Verdict, string> = {
   confirmed: 'confirmed',
   probable: 'probable',
   informational: 'info',
-  likely_false_positive: 'kept',
+  likely_false_positive: 'false pos.',
+}
+
+const OUTCOME_STYLE: Record<Outcome, string> = {
+  removed: 'border-[var(--color-rule-bright)] text-[var(--color-muted)]',
+  kept: 'border-[var(--color-clean)]/40 text-[var(--color-clean)]',
+  reported: 'border-[var(--color-rule)] text-[var(--color-muted)]',
 }
 
 export function FindingsTable({ findings }: { findings: readonly Finding[] }) {
@@ -53,42 +70,53 @@ export function FindingsTable({ findings }: { findings: readonly Finding[] }) {
     )
   }
 
-  // Eighty-eight carriers spelling one payload become one row. Listing each
-  // would bury the single line the visitor came for.
+  // Eighty-eight carriers spelling one payload become one row, and the rows are
+  // ordered by verdict so the answer to "did anything matter" is the first one.
   const rows = collapseRuns(findings)
 
   return (
     <ul className="divide-y divide-[var(--color-rule)] border-y border-[var(--color-rule)]">
-      {rows.map((finding, index) => (
-        <li
-          key={`${finding.kind}-${finding.offset}-${finding.label}`}
-          className="finding-row grid grid-cols-[auto_1fr] gap-x-3 py-2.5 sm:grid-cols-[5.5rem_7.5rem_4rem_1fr]"
-          style={{ '--row': index } as React.CSSProperties}
-        >
-          <span className={`font-mono text-xs ${VERDICT_STYLE[finding.verdict]}`}>
-            {VERDICT_LABEL[finding.verdict]}
-          </span>
-          <span className="font-mono text-xs text-[var(--color-muted)] sm:order-none">
-            {finding.kind}
-          </span>
-          <span className="tnum hidden font-mono text-xs text-[var(--color-muted)] sm:block">
-            {finding.length > 0 ? finding.offset : '—'}
-          </span>
-          <div className="col-span-2 sm:col-span-1">
-            <p className="text-sm text-[var(--color-bone)]">{finding.label}</p>
-            {finding.evidence ? (
-              <p className="mt-1 truncate font-mono text-xs text-[var(--color-muted)]">
-                {finding.evidence}
+      {rows.map((finding, index) => {
+        const outcome = outcomeOf(finding)
+        return (
+          <li
+            key={`${finding.kind}-${finding.offset}-${finding.label}`}
+            className="finding-row grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 py-3"
+            style={{ '--row': index } as React.CSSProperties}
+          >
+            <div className="min-w-0">
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-[var(--color-bone)]">
+                <span className="font-medium">{KIND_LABEL[finding.kind]}</span>
+                <span className={`font-mono text-xs ${VERDICT_STYLE[finding.verdict]}`}>
+                  {VERDICT_LABEL[finding.verdict]}
+                </span>
+                {finding.length > 0 ? (
+                  <span className="tnum font-mono text-xs text-[var(--color-muted)]">
+                    at {finding.offset}
+                  </span>
+                ) : undefined}
               </p>
-            ) : undefined}
-            {finding.preserved ? (
-              <p className="mt-1 text-xs text-[var(--color-muted)] italic">
-                kept — {finding.preserved}
-              </p>
-            ) : undefined}
-          </div>
-        </li>
-      ))}
+              <p className="mt-0.5 text-sm text-[var(--color-muted)]">{finding.label}</p>
+              {finding.evidence ? (
+                <p className="mt-1 font-mono text-xs break-all text-[var(--color-bone)]">
+                  {finding.evidence}
+                </p>
+              ) : undefined}
+              {finding.preserved ? (
+                <p className="mt-1 text-xs text-[var(--color-muted)] italic">{finding.preserved}</p>
+              ) : undefined}
+            </div>
+
+            {/* The column the table was missing: what was done, not how sure we
+                are. A confirmed emoji joiner is kept; a probable XMP packet goes. */}
+            <span
+              className={`h-fit rounded-full border px-2 py-0.5 font-mono text-[10px] tracking-wide uppercase ${OUTCOME_STYLE[outcome]}`}
+            >
+              {outcome}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   )
 }

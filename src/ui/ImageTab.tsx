@@ -19,7 +19,7 @@ import {
 } from '../image/inpaint/migan.ts'
 import type { Raster } from '../image/raster.ts'
 import { cleanContainer } from '../core/container/index.ts'
-import type { Finding } from '../core/report.ts'
+import { summariseOutcomes, type Finding } from '../core/report.ts'
 import { FindingsTable, Limits, Section, Toggle } from './parts.tsx'
 import { IconDownload } from './icons.tsx'
 
@@ -303,7 +303,7 @@ export function ImageTab() {
         </Section>
 
         {loaded ? (
-          <Section title="Metadata in the file" aside={`${loaded.metadata.length} found`}>
+          <Section title="Metadata in the file" aside={summariseOutcomes(loaded.metadata)}>
             <FindingsTable findings={loaded.metadata} />
             <p className="mt-2 text-xs text-[var(--color-muted)]">
               Stripped from the downloaded copy. This is the lossless half — the pixels are not

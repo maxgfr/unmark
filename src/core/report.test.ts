@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { byPosition, collapseRuns, isRemovable, worstVerdict, type Finding } from './report.ts'
+import {
+  byPosition,
+  bySeverity,
+  collapseRuns,
+  isRemovable,
+  KIND_LABEL,
+  outcomeOf,
+  worstVerdict,
+  type Finding,
+} from './report.ts'
 
 const finding = (over: Partial<Finding> = {}): Finding => ({
   kind: 'zwj_family',
@@ -85,7 +94,7 @@ describe('collapseRuns', () => {
   it('folds a crowd into one summary carrying the count and the span', () => {
     const collapsed = collapseRuns(many(88))
     expect(collapsed).toHaveLength(1)
-    expect(collapsed[0]?.label).toContain('88 ×')
+    expect(collapsed[0]?.label).toContain('88 × zero-width character')
     expect(collapsed[0]?.offset).toBe(0)
     expect(collapsed[0]?.length).toBe(87 * 2 + 1)
   })
@@ -115,5 +124,78 @@ describe('collapseRuns', () => {
 
   it('is a no-op on an empty report', () => {
     expect(collapseRuns([])).toEqual([])
+  })
+})
+
+describe('outcomeOf', () => {
+  it('separates what was done from how sure we are', () => {
+    // The distinction the table exists to show: a confirmed emoji joiner is
+    // kept, and a merely probable XMP packet is removed. Reading the verdict
+    // alone answers the wrong question.
+    const keptJoiner = finding({
+      kind: 'zwj_family',
+      verdict: 'confirmed',
+      preserved: 'emoji sequence glue',
+    })
+    const removedXmp = finding({ kind: 'xmp', verdict: 'probable' })
+
+    expect(outcomeOf(keptJoiner)).toBe('kept')
+    expect(outcomeOf(removedXmp)).toBe('removed')
+  })
+
+  it('calls a decoded payload reported, not removed', () => {
+    // Its carriers are stripped on their own; the payload line is the record of
+    // what they said, and nothing removes a record.
+    expect(outcomeOf(finding({ kind: 'stego_payload' }))).toBe('reported')
+  })
+
+  it('calls a style tell reported', () => {
+    expect(outcomeOf(finding({ kind: 'stylometry', verdict: 'probable' }))).toBe('reported')
+  })
+})
+
+describe('bySeverity', () => {
+  it('puts the confirmed finding first even when it is last in the file', () => {
+    // Document order buries the point: an EXIF timestamp at offset 20 would sit
+    // above a signed C2PA manifest at offset 900.
+    const rows = [
+      finding({ kind: 'exif', verdict: 'informational', offset: 20 }),
+      finding({ kind: 'c2pa', verdict: 'confirmed', offset: 900 }),
+    ].sort(bySeverity)
+    expect(rows[0]?.kind).toBe('c2pa')
+  })
+
+  it('keeps document order inside a verdict', () => {
+    const rows = [
+      finding({ verdict: 'probable', offset: 50 }),
+      finding({ verdict: 'probable', offset: 10 }),
+    ].sort(bySeverity)
+    expect(rows.map((f) => f.offset)).toEqual([10, 50])
+  })
+})
+
+describe('KIND_LABEL', () => {
+  it('names every kind, so no row can fall back to a machine identifier', () => {
+    const kinds: Finding['kind'][] = [
+      'zwj_family',
+      'bidi',
+      'tag_chars',
+      'variation_selector',
+      'space',
+      'confusable',
+      'stego_payload',
+      'stylometry',
+      'c2pa',
+      'exif',
+      'xmp',
+      'iptc',
+      'text_chunk',
+      'doc_property',
+      'generator_tag',
+    ]
+    for (const kind of kinds) {
+      expect(KIND_LABEL[kind], kind).toBeTruthy()
+      expect(KIND_LABEL[kind]).not.toContain('_')
+    }
   })
 })

@@ -65,6 +65,22 @@ export function sniffZipDocument(entries: readonly ZipEntry[]): boolean {
   return zipDocumentKind(entries) !== undefined
 }
 
+/**
+ * Empty every element's text while leaving the document's shape alone.
+ *
+ * For parts under docProps/ that are not in the table above. Real writers add
+ * their own: Apple's puts a `docProps/meta.xml` carrying
+ * `<generator>CocoaOOXMLWriter/…</generator>`, which a fixed list of part names
+ * walks straight past — a gap that only turned up on a document produced by an
+ * actual word processor rather than by a test.
+ *
+ * Emptying rather than replacing, because there is no way to know what schema
+ * an unknown part follows, and a consumer that expects its own root element
+ * should still find it.
+ */
+const emptyElements = (xml: string): string =>
+  xml.replaceAll(/>([^<>]+)</g, (match, text) => (/^\s*$/.test(text as string) ? match : '><'))
+
 export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResult> {
   const entries = await readZip(bytes)
   const findings: Finding[] = []
@@ -76,21 +92,28 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
     // customXml parts are where add-ins and document-management systems park
     // per-document identifiers. Emptying the item keeps its relationship valid.
     const isCustomXml = /^customXml\/item\d*\.xml$/.test(entry.name)
+    // Anything else under docProps/ is document properties by definition, even
+    // when a particular writer invented the part name.
+    const isOtherProperty = /^docProps\/.+\.xml$/.test(entry.name)
 
-    if (rule || isCustomXml) {
+    if (rule || isCustomXml || isOtherProperty) {
       const before = decodeUtf8(entry.data)
-      const evidence = describe(before)
+      const evidence = describe(before) || snippet(before.replaceAll(/<[^>]*>/g, ' '))
+
       findings.push({
         kind: 'doc_property',
         verdict: rule?.verdict ?? 'probable',
         offset: 0,
         length: entry.data.length,
-        label: `${entry.name} — ${rule?.what ?? 'custom XML part'}`,
+        label: `${entry.name} — ${rule?.what ?? (isCustomXml ? 'custom XML part' : 'writer-specific properties')}`,
         ...(evidence ? { evidence } : {}),
       })
+
+      const replacement = rule ? rule.replacement : isCustomXml ? '<root/>' : emptyElements(before)
+
       rebuilt.push({
         name: entry.name,
-        data: encode(rule?.replacement ?? '<root/>'),
+        data: encode(replacement),
         ...(entry.stored ? { stored: true } : {}),
       })
       continue

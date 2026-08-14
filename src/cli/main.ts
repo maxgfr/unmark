@@ -12,7 +12,14 @@ import process from 'node:process'
 import { VERSION } from '../core/index.ts'
 import { cleanContainer, inspectContainer, type ContainerFormat } from '../core/container/index.ts'
 import { decodeStego } from '../core/text/stego.ts'
-import { collapseRuns, isRemovable, type Finding, type Verdict } from '../core/report.ts'
+import {
+  collapseRuns,
+  KIND_LABEL,
+  outcomeOf,
+  type Finding,
+  type Outcome,
+  type Verdict,
+} from '../core/report.ts'
 import { decodeUtf8 } from '../core/container/types.ts'
 
 const USAGE = `unmark ${VERSION} — find, decode and strip watermarks and provenance marks
@@ -55,6 +62,16 @@ const VERDICT_COLOR: Record<Verdict, string> = {
 
 const colourVerdict = (verdict: Verdict) => paint(VERDICT_COLOR[verdict], verdict)
 
+// What was done, not how sure we are — the two are different questions, and a
+// report that answers only the second leaves the reader guessing at the first.
+const OUTCOME_COLOR: Record<Outcome, string> = {
+  removed: '31',
+  kept: '32',
+  reported: '2',
+}
+
+const colourOutcome = (outcome: Outcome) => paint(OUTCOME_COLOR[outcome], outcome)
+
 const pad = (text: string, width: number) => text.padEnd(width)
 
 function renderFindings(all: readonly Finding[], out: string[]): void {
@@ -68,31 +85,39 @@ function renderFindings(all: readonly Finding[], out: string[]): void {
   // identical rows, so crowds are folded into one summary each.
   const findings = collapseRuns(all)
 
+  const outcomeWidth = 8
+  const positionWidth = 6
   const verdictWidth = Math.max(...findings.map((f) => f.verdict.length))
-  const kindWidth = Math.max(...findings.map((f) => f.kind.length))
+  const kindWidth = Math.max(...findings.map((f) => KIND_LABEL[f.kind].length))
+  // Line up the continuation lines under the label column: two leading spaces,
+  // then every column plus the single space that follows each of them.
+  const indent = ' '.repeat(outcomeWidth + verdictWidth + kindWidth + positionWidth + 4)
 
   for (const finding of findings) {
+    const outcome = outcomeOf(finding)
     const position = finding.length > 0 ? String(finding.offset) : '-'
+
     out.push(
-      `  ${pad(colourVerdict(finding.verdict), verdictWidth + (tty ? 9 : 0))} ` +
-        `${dim(pad(finding.kind, kindWidth))} ${dim(pad(position, 8))} ${finding.label}`,
+      `  ${pad(colourOutcome(outcome), outcomeWidth + (tty ? 9 : 0))} ` +
+        `${pad(colourVerdict(finding.verdict), verdictWidth + (tty ? 9 : 0))} ` +
+        `${pad(KIND_LABEL[finding.kind], kindWidth)} ${dim(pad(position, positionWidth))} ${dim(finding.label)}`,
     )
-    if (finding.evidence)
-      out.push(`  ${' '.repeat(verdictWidth + kindWidth + 11)}${dim('└')} ${finding.evidence}`)
-    if (finding.preserved) {
-      out.push(`  ${' '.repeat(verdictWidth + kindWidth + 11)}${dim(`kept: ${finding.preserved}`)}`)
-    }
+    if (finding.evidence) out.push(`  ${indent}${dim('└')} ${finding.evidence}`)
+    if (finding.preserved) out.push(`  ${indent}${dim(finding.preserved)}`)
   }
 }
 
 function summarise(findings: readonly Finding[], out: string[]): void {
-  const removable = findings.filter((f) => isRemovable(f)).length
-  const kept = findings.filter((f) => f.preserved).length
-  const reported = findings.length - removable - kept
-  const parts = [`${removable} removable`]
-  if (kept > 0) parts.push(`${kept} kept as legitimate`)
-  if (reported > 0) parts.push(`${reported} reported only`)
-  out.push('', dim(`  ${parts.join(', ')}`))
+  const counts = { removed: 0, kept: 0, reported: 0 }
+  for (const finding of findings) counts[outcomeOf(finding)] += 1
+
+  const parts = [
+    counts.removed > 0 ? `${counts.removed} removed` : '',
+    counts.kept > 0 ? `${counts.kept} kept as legitimate` : '',
+    counts.reported > 0 ? `${counts.reported} reported only` : '',
+  ].filter(Boolean)
+
+  out.push('', dim(`  ${parts.length > 0 ? parts.join(', ') : 'nothing to do'}`))
 }
 
 // ------------------------------------------------------------------ input

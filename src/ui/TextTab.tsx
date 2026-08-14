@@ -10,6 +10,7 @@ import {
 } from '../core/text/index.ts'
 import { byPosition } from '../core/report.ts'
 import { CopyButton, FindingsTable, Limits, Section, Toggle } from './parts.tsx'
+import { summariseOutcomes } from '../core/report.ts'
 
 const EXAMPLE = `Quarterly results are attached. Please keep this internal.${encodeStego(
   'recipient-4417',
@@ -131,7 +132,7 @@ export function TextTab() {
 
         <Section
           title="Findings"
-          aside={input.length > 0 ? `${report.findings.length} total` : undefined}
+          aside={input.length > 0 ? summariseOutcomes(report.findings) : undefined}
         >
           {input.length === 0 ? (
             <p className="py-2 text-sm text-[var(--color-muted)]">
