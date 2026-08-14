@@ -10,3 +10,4 @@ export const VERSION = '0.1.0'
 
 export * from './report.ts'
 export * from './text/index.ts'
+export * from './container/index.ts'

@@ -66,6 +66,15 @@ build([
 	...fullwidth()
 ]);
 new TextDecoder("utf-8", { fatal: false });
+(() => {
+	const table = /* @__PURE__ */ new Uint32Array(256);
+	for (let i = 0; i < 256; i += 1) {
+		let value = i;
+		for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
+		table[i] = value >>> 0;
+	}
+	return table;
+})();
 //#endregion
 //#region src/core/index.ts
 var VERSION = "0.1.0";
