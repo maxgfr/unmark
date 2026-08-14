@@ -9,3 +9,9 @@ coverage
 # scripts/fetch-assets.mjs. Keeping them out of git keeps a clone small; the
 # deployed site still serves them from its own origin.
 public/vendor/
+
+# The skill bundle directory holds exactly one build artifact: unmark.mjs.
+# Vite would otherwise copy public/ into it, putting the site's fonts and its
+# 28 MB model inside a skill that cannot use either.
+skills/unmark/scripts/*
+!skills/unmark/scripts/unmark.mjs

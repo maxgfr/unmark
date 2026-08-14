@@ -9,6 +9,10 @@ import { resolve } from 'node:path'
 // what the page reports and what the terminal reports cannot drift, because
 // there is only one of them.
 export default defineConfig({
+  // Without this, Vite copies public/ into outDir — which here means the site's
+  // fonts and its 28 MB inpainting model land inside the published skill, and
+  // `npx skills add` downloads a model the CLI cannot even use.
+  publicDir: false,
   build: {
     target: 'node20',
     outDir: 'skills/unmark/scripts',
