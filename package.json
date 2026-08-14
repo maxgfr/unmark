@@ -28,7 +28,7 @@
     "build:skill": "vite build --config vite.skill.config.ts",
     "verify:skill": "node scripts/verify-skill-bundle.mjs",
     "check:network": "node scripts/check-network.mjs dist",
-    "smoke": "node scripts/smoke.mjs",
+    "shoot": "node scripts/shoot.mjs",
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build:skill && pnpm verify:skill && pnpm build && pnpm check:network"
   },
   "dependencies": {

@@ -10,7 +10,16 @@ import { cleanText, inspectText, isLoadBearing, type TextOptions } from './unico
 import { decodeStego, encodeStego, stegoFindings, type StegoDecoding } from './stego.ts'
 import { analyzeStyle, stylometryFindings, type StyleReport } from './stylometry.ts'
 
-export { analyzeStyle, cleanText, decodeStego, encodeStego, inspectText, isLoadBearing }
+export {
+  analyzeStyle,
+  cleanText,
+  decodeStego,
+  encodeStego,
+  inspectText,
+  isLoadBearing,
+  stegoFindings,
+  stylometryFindings,
+}
 export { MIN_SENTENCES, MIN_WORDS } from './stylometry.ts'
 export type { StegoDecoding, StyleReport, TextOptions }
 export type { StyleMetric } from './stylometry.ts'

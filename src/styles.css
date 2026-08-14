@@ -1,36 +1,140 @@
 @import 'tailwindcss';
 
+/* Self-hosted, latin subset, variable. Served from our own origin like every
+   other asset — a font CDN would be a request this app promises not to make. */
+/* IBM Plex Sans was drawn for technical documentation, which is exactly the
+   register this page is in. Space Grotesk was the first choice and got dropped:
+   it is one of the handful of faces every recent interface converges on, so it
+   reads as a default rather than a decision. */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('/unmark/fonts/ibm-plex-sans-latin.woff2') format('woff2');
+  font-weight: 100 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F, U+2122, U+2212;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/unmark/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F, U+2122, U+2212;
+}
+
 @theme {
-  /* Forensic report: a near-black ground, bone text, one amber signal reserved
-     for a confirmed finding. Nothing else in the palette competes with it. */
+  /* Forensic report: a near-black ground, bone text, one amber reserved for a
+     confirmed finding and a recovered payload. See DESIGN.md. */
   --color-ground: #0b0b0c;
   --color-panel: #121214;
+  --color-panel-high: #17171a;
   --color-rule: #26262a;
+  --color-rule-bright: #3a3a40;
   --color-bone: #e8e6e1;
   --color-muted: #8b8a86;
   --color-signal: #ffb020;
+  --color-signal-dim: #4a3413;
   --color-clean: #6ee7a8;
 
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html {
   color-scheme: dark;
   background: var(--color-ground);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   background: var(--color-ground);
   color: var(--color-bone);
-  font-family: var(--font-mono);
-  /* Offsets and codepoint counts sit in columns; proportional digits would make
-     them jitter as findings stream in. */
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Browser surfaces we did not draw still carry the design. A default blue
+   selection would be the loudest colour on a page whose whole scanning
+   affordance is one reserved amber. */
+::selection {
+  background: var(--color-signal-dim);
+  color: var(--color-bone);
 }
 
 :focus-visible {
   outline: 2px solid var(--color-signal);
   outline-offset: 2px;
+  border-radius: 2px;
+}
+
+* {
+  scrollbar-color: var(--color-rule-bright) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-rule-bright);
+  border: 3px solid var(--color-ground);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+textarea,
+input {
+  caret-color: var(--color-signal);
+}
+
+/* Offsets, counts and codepoints sit in columns. Proportional digits make them
+   jitter every time a report re-renders under a keystroke. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* The one authored moment: findings rise as a report resolves, staggered by
+   index. Everything else on the page simply appears. */
+@keyframes finding-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.finding-row {
+  animation: finding-in 420ms var(--ease-out-expo) both;
+  animation-delay: calc(var(--row) * 12ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finding-row {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
 }
