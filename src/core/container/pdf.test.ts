@@ -94,3 +94,44 @@ describe('cleanPdf', () => {
     expect([...twice.output]).toEqual([...once.output])
   })
 })
+
+describe('incremental saves', () => {
+  /** A PDF saved twice: the format appends rather than rewrites. */
+  const incremental = () => {
+    const first = pdf({ info: { Producer: 'Draft Writer 1.0' } })
+    const appended = new TextEncoder().encode(
+      '\n4 0 obj\n<< /Producer (Second Pass 2.0) >>\nendobj\nxref\n0 1\ntrailer\n<< >>\nstartxref\n0\n%%EOF\n',
+    )
+    const out = new Uint8Array(first.length + appended.length)
+    out.set(first)
+    out.set(appended, first.length)
+    return out
+  }
+
+  it('reports that earlier versions of the document are still in the file', async () => {
+    // The famous redaction failure: a black rectangle drawn over text and saved
+    // incrementally leaves the text underneath perfectly recoverable.
+    const result = cleanPdf(incremental())
+    const warning = result.findings.find((f) => f.label.includes('earlier version'))
+
+    expect(warning).toBeDefined()
+    expect(warning?.verdict).toBe('confirmed')
+    expect(warning?.evidence).toContain('covered over rather than deleted')
+  })
+
+  it('says how many earlier versions there are', async () => {
+    expect(
+      cleanPdf(incremental()).findings.find((f) => f.label.includes('earlier version'))?.label,
+    ).toContain('1 earlier version')
+  })
+
+  it('does not warn about a document saved once', () => {
+    const result = cleanPdf(pdf({ info: { Producer: 'X' } }))
+    expect(result.findings.some((f) => f.label.includes('earlier version'))).toBe(false)
+  })
+
+  it('still blanks the information dictionary in an incrementally saved file', () => {
+    const text = decodeUtf8(cleanPdf(incremental()).output)
+    expect(text).not.toContain('Draft Writer 1.0')
+  })
+})

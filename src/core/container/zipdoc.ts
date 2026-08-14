@@ -89,8 +89,12 @@ const emptyElements = (xml: string): string =>
  * and on `word/people.xml`, which lists everyone who has ever edited the file.
  * Accepting all changes in Word does not remove any of it.
  */
+// The namespace prefix is matched generically. Listing them by hand produced
+// `(?:w14?|w15|…)`, which means "w1 followed by an optional 4" and therefore
+// never matched plain `w:author` — the single most common case in the format.
+// The code read correctly and did nothing at all.
 const IDENTITY_ATTRIBUTE =
-  /\s(?:w14?|w15|cp|dc|xmp)?:?(?:author|initials|lastModifiedBy|userId|providerId|date|dateUtc)="[^"]*"/g
+  /\s(?:[A-Za-z]\w{0,5}:)?(?:author|initials|lastModifiedBy|userId|providerId|date|dateUtc)="[^"]*"/g
 
 const anonymiseAttributes = (xml: string): string =>
   xml.replaceAll(IDENTITY_ATTRIBUTE, (match) => `${match.split('=')[0]}=""`)
