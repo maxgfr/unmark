@@ -275,11 +275,17 @@ export function isLoadBearing(text: string, index: number): boolean {
 
 const uPlus = (point: number) => `U+${point.toString(16).toUpperCase().padStart(4, '0')}`
 
-/** A short, renderable window around a finding, with the carrier itself removed. */
+/**
+ * A short, renderable window around a finding, with the carrier itself removed.
+ *
+ * Whitespace is flattened and the other invisibles are stripped, because this
+ * string is rendered inside a table row: a raw newline here would break the
+ * alignment of every row after it.
+ */
 function contextAround(text: string, index: number, width: number): string {
   const before = text.slice(Math.max(0, index - 12), index)
   const after = text.slice(index + width, index + width + 12)
-  return `${before}‸${after}`.replaceAll(/\p{Cf}/gu, '')
+  return `${before}‸${after}`.replaceAll(/\p{Cf}/gu, '').replaceAll(/\s+/g, ' ')
 }
 
 /**

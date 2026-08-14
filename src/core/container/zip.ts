@@ -9,6 +9,11 @@
 // Deliberately partial: no encryption, no ZIP64, no multi-disk. Those exist in
 // the wild but not in the office documents this handles, and a reader that
 // silently mishandles them would be worse than one that declines.
+//
+// Awaiting inside loops is the shape of this file, not an oversight: a stream
+// yields one chunk at a time, and every local header offset is the running
+// total of the entries written before it. Nothing here can be parallelised.
+// oxlint-disable no-await-in-loop
 
 import { ascii, concat, encode, readU32LE, type ContainerResult } from './types.ts'
 import { crc32 } from './crc32.ts'
@@ -34,6 +39,7 @@ const u32 = (value: number) =>
 async function collect(readable: ReadableStream): Promise<Uint8Array> {
   const chunks: Uint8Array[] = []
   const reader = readable.getReader()
+  // Sequential by nature: a stream is read one chunk at a time.
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
@@ -88,6 +94,8 @@ export async function readZip(bytes: Uint8Array): Promise<ZipEntry[]> {
   let offset = readU32LE(bytes, eocd + 16)
   const entries: ZipEntry[] = []
 
+  // Sequential on purpose: entries are inflated one at a time so a corrupt
+  // central directory stops the walk instead of racing ahead of it.
   for (let i = 0; i < count; i += 1) {
     if (readU32LE(bytes, offset) !== CENTRAL_HEADER) break
 
@@ -124,6 +132,8 @@ export async function writeZip(entries: readonly ZipEntry[]): Promise<Uint8Array
   const centrals: Uint8Array[] = []
   let offset = 0
 
+  // Sequential by necessity: each local header offset is the running total of
+  // every entry written before it.
   for (const entry of entries) {
     const name = encode(entry.name)
     const checksum = crc32(entry.data)

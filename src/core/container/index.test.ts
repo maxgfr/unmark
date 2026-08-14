@@ -1,3 +1,5 @@
+// oxlint-disable no-await-in-loop -- the round-trip loop is sequential so a
+// failure names the format that failed rather than reporting them as a batch.
 import { describe, expect, it } from 'vitest'
 import { cleanContainer, inspectContainer } from './index.ts'
 import { decodeUtf8, encode } from './types.ts'
@@ -128,6 +130,7 @@ describe('round trip', () => {
       ['Text', encode(`a${ZWSP}b`)],
     ]
 
+    // Sequential so a failure names the format that failed.
     for (const [label, bytes] of cases) {
       const cleaned = await cleanContainer(bytes)
       const again = await inspectContainer(cleaned.output)

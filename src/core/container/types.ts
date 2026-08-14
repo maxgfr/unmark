@@ -66,7 +66,12 @@ export const encode = (text: string): Uint8Array => new TextEncoder().encode(tex
 export const decodeUtf8 = (bytes: Uint8Array): string =>
   new TextDecoder('utf-8', { fatal: false }).decode(bytes)
 
-/** Trim a metadata value so a report line stays one line. */
+/**
+ * Trim a metadata value so a report line stays one line.
+ *
+ * Collapsing whitespace is not cosmetic: a raw newline inside a value would
+ * break the alignment of every row after it in a terminal table.
+ */
 export const snippet = (value: string, limit = 120): string => {
   const flat = value.replaceAll(/\s+/g, ' ').trim()
   return flat.length > limit ? `${flat.slice(0, limit)}…` : flat

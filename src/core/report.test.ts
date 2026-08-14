@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { byPosition, isRemovable, worstVerdict, type Finding } from './report.ts'
+import { byPosition, collapseRuns, isRemovable, worstVerdict, type Finding } from './report.ts'
 
 const finding = (over: Partial<Finding> = {}): Finding => ({
   kind: 'zwj_family',
@@ -69,5 +69,51 @@ describe('byPosition', () => {
       [5, 'bidi'],
       [5, 'space'],
     ])
+  })
+})
+
+describe('collapseRuns', () => {
+  const many = (count: number, kind: Finding['kind'] = 'zwj_family') =>
+    Array.from({ length: count }, (_, i) => finding({ kind, offset: i * 2, length: 1 }))
+
+  it('leaves a small number of findings listed individually', () => {
+    // Six carriers is a report you can read. Summarising it would hide detail
+    // for no gain.
+    expect(collapseRuns(many(6))).toHaveLength(6)
+  })
+
+  it('folds a crowd into one summary carrying the count and the span', () => {
+    const collapsed = collapseRuns(many(88))
+    expect(collapsed).toHaveLength(1)
+    expect(collapsed[0]?.label).toContain('88 ×')
+    expect(collapsed[0]?.offset).toBe(0)
+    expect(collapsed[0]?.length).toBe(87 * 2 + 1)
+  })
+
+  it('does not merge different kinds or different verdicts', () => {
+    const mixed = [
+      ...many(10, 'zwj_family'),
+      ...many(10, 'space').map((f) => finding({ ...f, verdict: 'probable' })),
+    ]
+    const collapsed = collapseRuns(mixed)
+    expect(collapsed).toHaveLength(2)
+    expect(new Set(collapsed.map((f) => f.kind))).toEqual(new Set(['zwj_family', 'space']))
+  })
+
+  it('never hides the decoded payload behind the carriers that spelled it', () => {
+    // The one line worth reading must survive the fold.
+    const payload = finding({ kind: 'stego_payload', offset: 0, evidence: 'leaker-7' })
+    const collapsed = collapseRuns([payload, ...many(88)])
+    expect(collapsed.some((f) => f.kind === 'stego_payload')).toBe(true)
+  })
+
+  it('returns findings in document order', () => {
+    const collapsed = collapseRuns([finding({ offset: 9, kind: 'bidi' }), ...many(9)])
+    const offsets = collapsed.map((f) => f.offset)
+    expect(offsets).toEqual(offsets.toSorted((a, b) => a - b))
+  })
+
+  it('is a no-op on an empty report', () => {
+    expect(collapseRuns([])).toEqual([])
   })
 })

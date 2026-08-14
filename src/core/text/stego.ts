@@ -30,7 +30,7 @@ export interface StegoDecoding {
 }
 
 // The five zero-width characters encoders actually use as a symbol alphabet.
-const ZERO_WIDTH = [0x200b, 0x200c, 0x200d, 0x2060, 0xfeff]
+const ZERO_WIDTH = new Set([0x200b, 0x200c, 0x200d, 0x2060, 0xfeff])
 const TAG_BASE = 0xe0000
 const isTagPayload = (point: number) => point >= 0xe0020 && point <= 0xe007e
 const isVariation = (point: number) =>
@@ -112,7 +112,7 @@ function permutations<T>(items: T[]): T[][] {
 }
 
 function decodeZeroWidth(text: string): StegoDecoding[] {
-  const carriers = carriersOf(text, (point) => ZERO_WIDTH.includes(point))
+  const carriers = carriersOf(text, (point) => ZERO_WIDTH.has(point))
   if (carriers.length < 8) return []
 
   const alphabet = [...new Set(carriers.map((c) => c.point))].sort((a, b) => a - b)
