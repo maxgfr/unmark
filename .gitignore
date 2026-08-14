@@ -1,0 +1,11 @@
+node_modules
+dist
+dev-dist
+coverage
+*.tsbuildinfo
+.DS_Store
+
+# Large binaries are fetched at build time against pinned checksums by
+# scripts/fetch-assets.mjs. Keeping them out of git keeps a clone small; the
+# deployed site still serves them from its own origin.
+public/vendor/

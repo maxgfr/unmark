@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Forensic report: a near-black ground, bone text, one amber signal reserved
+     for a confirmed finding. Nothing else in the palette competes with it. */
+  --color-ground: #0b0b0c;
+  --color-panel: #121214;
+  --color-rule: #26262a;
+  --color-bone: #e8e6e1;
+  --color-muted: #8b8a86;
+  --color-signal: #ffb020;
+  --color-clean: #6ee7a8;
+
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-ground);
+}
+
+body {
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-bone);
+  font-family: var(--font-mono);
+  /* Offsets and codepoint counts sit in columns; proportional digits would make
+     them jitter as findings stream in. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+}

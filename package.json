@@ -1,0 +1,57 @@
+{
+  "name": "unmark",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Strip watermarks and provenance marks in your browser. Nothing leaves your device.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "assets": "node scripts/fetch-assets.mjs",
+    "build:skill": "vite build --config vite.skill.config.ts",
+    "verify:skill": "node scripts/verify-skill-bundle.mjs",
+    "check:network": "node scripts/check-network.mjs dist",
+    "smoke": "node scripts/smoke.mjs",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build:skill && pnpm verify:skill && pnpm build && pnpm check:network"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@mlc-ai/web-llm": "^0.2.79",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "@vitest/coverage-v8": "^4.1.10",
+    "jsdom": "^30.0.1",
+    "onnxruntime-web": "^1.23.0",
+    "oxlint": "^1.75.0",
+    "playwright": "^1.62.1",
+    "prettier": "^3.9.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.1",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.10"
+  }
+}

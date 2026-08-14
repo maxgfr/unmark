@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <title>unmark — strip watermarks in your browser</title>
+    <meta
+      name="description"
+      content="Remove invisible Unicode watermarks from text, C2PA/EXIF/XMP provenance metadata from files, and visible watermarks from images. Everything runs in your browser — nothing is uploaded."
+    />
+
+    <link rel="icon" type="image/svg+xml" href="/unmark/favicon.svg" />
+    <link rel="apple-touch-icon" href="/unmark/apple-touch-icon-180x180.png" />
+    <meta name="theme-color" content="#0b0b0c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="referrer" content="no-referrer" />
+  </head>
+  <body>
+    <!--
+      THESIS: A watermark remover that shows its work. The category ships a single
+      "upload → magic → download" button and asks you to trust it; unmark inverts
+      that. Every mark is named, located, classified and shown to you before
+      anything is stripped, and what it cannot remove it says out loud.
+      OWN-WORLD: Forensic report. Monospace evidence tables over a near-black
+      ground, one amber signal for a confirmed finding, hairline rules, offsets in
+      tabular figures, zero decoration. It reads like a lab result, not a landing page.
+      STORY: Paste or drop → read the findings → strip what you chose → verify the
+      output is clean by re-inspecting it in place.
+      HONESTY: The residual-risk panel is not fine print. Robust pixel watermarks
+      survive this tool and the page says so on the same screen that removes the
+      rest.
+    -->
+    <div id="root"></div>
+    <noscript>
+      unmark runs entirely in your browser, so it needs JavaScript. That is also why nothing you
+      give it is ever uploaded: there is no server to upload it to.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+dist
+dev-dist
+coverage
+node_modules
+pnpm-lock.yaml
+public/vendor
+skills/unmark/scripts/unmark.mjs
+tests/fixtures
