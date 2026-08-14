@@ -11,9 +11,10 @@
 // emoji glue, because a decoder that cries wolf is one nobody reads.
 
 import type { Finding } from '../report.ts'
-import { isLoadBearing } from './unicode.ts'
+import { EXOTIC_SPACES, isLoadBearing } from './unicode.ts'
+import { CONFUSABLES } from './confusables.ts'
 
-export type StegoScheme = 'zero-width' | 'tag' | 'variation'
+export type StegoScheme = 'zero-width' | 'tag' | 'variation' | 'space' | 'trailing' | 'confusable'
 
 export interface StegoDecoding {
   scheme: StegoScheme
@@ -200,21 +201,259 @@ function decodeVariation(text: string): StegoDecoding[] {
   ]
 }
 
+const PLAIN_SPACE = 0x20
+
+/** Where every space in the text is, and which kind it is. */
+function spaceRun(text: string): { point: number; offset: number }[] {
+  const run: { point: number; offset: number }[] = []
+  for (let index = 0; index < text.length; index += 1) {
+    const point = text.codePointAt(index)
+    if (point === undefined) break
+    if (point === PLAIN_SPACE || EXOTIC_SPACES.has(point)) run.push({ point, offset: index })
+  }
+  return run
+}
+
+/**
+ * A payload spelled in the choice of space character.
+ *
+ * The homoglyph scheme: leave an ordinary U+0020 to mean one bit and substitute
+ * a three-per-em (U+2004) or an ideographic space (U+3000) to mean the other.
+ * No renderer shows a difference, and unlike the zero-width family the carriers
+ * are not extra characters — the text has exactly the spaces it should have, so
+ * a check that only counts invisible characters walks straight past it.
+ */
+function decodeSpaces(text: string): StegoDecoding[] {
+  const run = spaceRun(text)
+  if (run.length < 16) return []
+
+  const exotic = [...new Set(run.map((s) => s.point))].filter((point) => point !== PLAIN_SPACE)
+  // One substitute makes a binary alphabet. Several at once is not a scheme
+  // this knows how to read, and guessing at one would invent a payload.
+  if (exotic.length !== 1) return []
+
+  const marker = exotic[0] as number
+  if (!run.some((s) => s.point === PLAIN_SPACE)) return []
+
+  const first = run[0]
+  const last = run.at(-1)
+  if (!first || !last) return []
+
+  const results: StegoDecoding[] = []
+  for (const oneIsExotic of [true, false]) {
+    const bits = run.map((s) => ((s.point === marker) === oneIsExotic ? 1 : 0))
+    const decoded = bitsToText(bits)
+    if (!decoded) continue
+
+    const confidence = score(decoded.text)
+    if (confidence < 0.9 || decoded.text.length < 2) continue
+
+    results.push({
+      scheme: 'space',
+      payload: decoded.text,
+      confidence,
+      offset: first.offset,
+      length: last.offset - first.offset + 1,
+      detail: `${run.length} spaces, U+${marker.toString(16).toUpperCase().padStart(4, '0')} against U+0020, ${decoded.detail}`,
+    })
+  }
+  return results
+}
+
+/**
+ * Trailing runs that form a tab-and-space alphabet, and are therefore a carrier.
+ *
+ * Deliberately narrow. Trailing whitespace is everywhere and mostly means an
+ * editor was not configured to trim it — and in Markdown two trailing spaces
+ * are a hard line break, so removing them changes how the document renders.
+ * Only the mixed alphabet is a scheme, and only that is removed.
+ */
+export function trailingCarrierRuns(text: string): { index: number; length: number }[] {
+  const runs = [...text.matchAll(/[ \t]+(?=\n|$)/g)]
+  const symbols = runs.flatMap((run) => [...run[0]])
+  if (symbols.length < 16) return []
+
+  const distinct = new Set(symbols)
+  if (distinct.size !== 2 || !distinct.has('\t') || !distinct.has(' ')) return []
+
+  return runs.map((run) => ({ index: run.index, length: run[0].length }))
+}
+
+export interface SpaceCadence {
+  /** The substituted codepoint. */
+  point: number
+  /** How many spaces apart the substitutions fall. */
+  stride: number
+  /** How many substitutions were found. */
+  count: number
+}
+
+/**
+ * Substituted spaces falling at a regular interval.
+ *
+ * "Every third space is a three-per-em" is not something a keyboard produces.
+ * A single non-breaking space is ambiguous — French typography is full of them
+ * — but a periodic one is structural, and periodicity is the difference between
+ * reporting a curiosity and reporting a mark.
+ */
+export function detectSpaceCadence(text: string): SpaceCadence | undefined {
+  const run = spaceRun(text)
+  if (run.length < 12) return undefined
+
+  const exotic = [...new Set(run.map((s) => s.point))].filter((point) => point !== PLAIN_SPACE)
+  if (exotic.length !== 1) return undefined
+
+  const marker = exotic[0] as number
+  const positions = run.flatMap((s, i) => (s.point === marker ? [i] : []))
+  if (positions.length < 4) return undefined
+
+  const gaps: number[] = []
+  for (let i = 1; i < positions.length; i += 1) {
+    gaps.push((positions[i] as number) - (positions[i - 1] as number))
+  }
+
+  const stride = gaps[0] as number
+  // Every gap identical, and the substitution is not simply every space.
+  if (stride < 2 || !gaps.every((gap) => gap === stride)) return undefined
+
+  return { point: marker, stride, count: positions.length }
+}
+
+const TAB = 0x09
+
+/**
+ * A payload in the whitespace nobody looks at: the end of each line.
+ *
+ * The SNOW family, and Shiu's variant for social media. Trailing spaces and
+ * tabs are stripped by most editors and shown by none, so a run of them at the
+ * end of a line is both invisible and, unlike a zero-width character, made of
+ * entirely ordinary codepoints — nothing about a tab is suspicious until you
+ * notice it is at the end of a line and carrying bits.
+ */
+function decodeTrailing(text: string): StegoDecoding[] {
+  const runs = [...text.matchAll(/[ \t]+(?=\n|$)/g)]
+  if (runs.length === 0) return []
+
+  const symbols: number[] = []
+  for (const run of runs) {
+    for (const char of run[0]) symbols.push(char.codePointAt(0) ?? 0)
+  }
+  if (symbols.length < 16) return []
+
+  const distinct = new Set(symbols)
+  // A run of plain spaces is a sloppy editor. A mix of tab and space at the end
+  // of a line is an alphabet.
+  if (distinct.size !== 2 || !distinct.has(TAB) || !distinct.has(PLAIN_SPACE)) return []
+
+  const first = runs[0]
+  const last = runs.at(-1)
+  if (!first || !last) return []
+
+  const results: StegoDecoding[] = []
+  for (const oneIsTab of [true, false]) {
+    const bits = symbols.map((point) => ((point === TAB) === oneIsTab ? 1 : 0))
+    const decoded = bitsToText(bits)
+    if (!decoded) continue
+
+    const confidence = score(decoded.text)
+    if (confidence < 0.9 || decoded.text.length < 2) continue
+
+    results.push({
+      scheme: 'trailing',
+      payload: decoded.text,
+      confidence,
+      offset: first.index,
+      length: last.index + last[0].length - first.index,
+      detail: `${symbols.length} trailing tabs and spaces across ${runs.length} line ends, ${decoded.detail}`,
+    })
+  }
+  return results
+}
+
+// Which Latin letters have a lookalike, and which codepoints are those
+// lookalikes. Derived from the substitution table rather than restated, so the
+// two cannot drift apart.
+const LOOKALIKE_OF = (() => {
+  const byLatin = new Map<string, Set<number>>()
+  for (const [point, latin] of CONFUSABLES) {
+    const existing = byLatin.get(latin)
+    if (existing) existing.add(point)
+    else byLatin.set(latin, new Set([point]))
+  }
+  return byLatin
+})()
+
+/**
+ * A payload in which letters are Latin and which are lookalikes.
+ *
+ * The LookALikes and Rizzo schemes. Every position that *could* be substituted
+ * carries a bit: the real Latin letter is one value, its Cyrillic or Greek twin
+ * is the other. The text reads normally and contains no unusual characters at
+ * all — only unusual choices among ordinary ones.
+ */
+function decodeConfusables(text: string): StegoDecoding[] {
+  const slots: { bit: number; offset: number }[] = []
+
+  for (let index = 0; index < text.length; index += 1) {
+    const point = text.codePointAt(index)
+    if (point === undefined) break
+    const char = String.fromCodePoint(point)
+
+    if (LOOKALIKE_OF.has(char)) slots.push({ bit: 0, offset: index })
+    else if (CONFUSABLES.has(point)) slots.push({ bit: 1, offset: index })
+  }
+
+  if (slots.length < 16) return []
+  // All Latin means an ordinary sentence, which is most sentences.
+  if (!slots.some((slot) => slot.bit === 1)) return []
+
+  const first = slots[0]
+  const last = slots.at(-1)
+  if (!first || !last) return []
+
+  const results: StegoDecoding[] = []
+  for (const invert of [false, true]) {
+    const decoded = bitsToText(slots.map((slot) => (invert ? 1 - slot.bit : slot.bit)))
+    if (!decoded) continue
+
+    const confidence = score(decoded.text)
+    if (confidence < 0.9 || decoded.text.length < 2) continue
+
+    results.push({
+      scheme: 'confusable',
+      payload: decoded.text,
+      confidence,
+      offset: first.offset,
+      length: last.offset - first.offset + 1,
+      detail: `${slots.length} substitutable letters, lookalike against Latin, ${decoded.detail}`,
+    })
+  }
+  return results
+}
+
 /**
  * Every reading of the text that holds up, most plausible first.
  *
  * Returns an empty array far more often than not, which is the point.
  */
 export function decodeStego(text: string): StegoDecoding[] {
-  return [...decodeZeroWidth(text), ...decodeTag(text), ...decodeVariation(text)].sort(
-    (a, b) => b.confidence - a.confidence || a.offset - b.offset,
-  )
+  return [
+    ...decodeZeroWidth(text),
+    ...decodeTag(text),
+    ...decodeVariation(text),
+    ...decodeSpaces(text),
+    ...decodeTrailing(text),
+    ...decodeConfusables(text),
+  ].sort((a, b) => b.confidence - a.confidence || a.offset - b.offset)
 }
 
 const SCHEME_LABEL: Record<StegoScheme, string> = {
   'zero-width': 'zero-width characters',
   tag: 'Unicode tag characters',
   variation: 'variation selectors',
+  space: 'the choice of space character',
+  trailing: 'trailing tabs and spaces at line ends',
+  confusable: 'the choice between Latin letters and their lookalikes',
 }
 
 /** The best reading per scheme, as findings for the report. */
@@ -234,12 +473,34 @@ export function stegoFindings(text: string): Finding[] {
       evidence: decoding.payload,
     })
   }
+
+  // A periodic substitution is structural even when it decodes to nothing: the
+  // pattern may carry a flag rather than a message, and "every third space is a
+  // three-per-em" is not a thing a keyboard does.
+  const cadence = detectSpaceCadence(text)
+  if (cadence && !seen.has('space')) {
+    const name = `U+${cadence.point.toString(16).toUpperCase().padStart(4, '0')}`
+    findings.push({
+      kind: 'space',
+      verdict: 'confirmed',
+      offset: 0,
+      length: text.length,
+      label: `Every ${cadence.stride}${cadence.stride === 2 ? 'nd' : cadence.stride === 3 ? 'rd' : 'th'} space is ${name}`,
+      evidence: `${cadence.count} substitutions at a constant interval — a pattern, not typing`,
+    })
+  }
+
   return findings
 }
 
 interface EncodeOptions {
   /** Swap which symbol means 1. Encoders in the wild disagree about this. */
   invert?: boolean
+  /**
+   * For the `space` scheme: which space stands in for U+0020. Defaults to the
+   * three-per-em space, the substitution seen most often in the wild.
+   */
+  marker?: number
 }
 
 /**
@@ -264,7 +525,18 @@ export function encodeStego(payload: string, scheme: StegoScheme, options?: Enco
       .join('')
   }
 
-  const [zero, one] = options?.invert ? [0x200c, 0x200b] : [0x200b, 0x200c]
+  // These schemes spell their payload in ordinary characters rather than in
+  // extra ones, so what comes back is whitespace, meaningful only where the
+  // scheme puts it: between words for `space`, at a line end for `trailing`.
+  const alphabet =
+    scheme === 'space'
+      ? [PLAIN_SPACE, options?.marker ?? 0x2004]
+      : scheme === 'trailing'
+        ? [PLAIN_SPACE, TAB]
+        : [0x200b, 0x200c]
+
+  const [zero, one] = options?.invert ? [alphabet[1], alphabet[0]] : alphabet
+
   let out = ''
   for (const byte of bytes) {
     for (let bit = 7; bit >= 0; bit -= 1) {

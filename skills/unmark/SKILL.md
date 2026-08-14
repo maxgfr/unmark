@@ -19,9 +19,17 @@ node skills/unmark/scripts/unmark.mjs --help
 
 1. **`inspect`** first, always. It changes nothing and prints what is there, where it
    is, and how sure the engine is. Show the user the findings before removing them.
-2. **`decode`** when the report mentions a `stego_payload`. Invisible characters
-   frequently _encode_ something — a name, an ID, a URL. Deleting them without reading
-   them throws away the only evidence of who marked the text and with what.
+2. **`decode`** when the report mentions a `stego_payload`. Carriers frequently
+   _encode_ something — a name, an ID, a URL. Deleting them without reading them
+   throws away the only evidence of who marked the text and with what.
+
+   Six schemes are read: zero-width alphabets, tag characters, variation selectors,
+   the choice of space character (U+0020 against U+2004 or U+3000), trailing tabs and
+   spaces at line ends, and the choice between a Latin letter and its Cyrillic twin.
+   **The last three use no unusual characters at all** — the text contains only
+   ordinary ones, arranged unusually — so telling a user "no invisible characters
+   found" is not the same as telling them the text is unmarked.
+
 3. **`clean`** to strip. It removes what is removable and leaves what it cannot
    justify removing, listing both.
 

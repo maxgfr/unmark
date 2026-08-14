@@ -193,3 +193,47 @@ describe('cleanText', () => {
     expect(findings.map((f) => f.offset)).toEqual([2, 5])
   })
 })
+
+describe('trailing carriers', () => {
+  const TAB = cp(0x09)
+
+  /** A SNOW-style payload: a tab-and-space alphabet parked past each line end. */
+  const snow = (lines = 6) =>
+    Array.from({ length: lines }, (_, i) => `line ${i}${TAB} ${TAB}${TAB}  ${TAB}`).join('\n')
+
+  it('strips a tab-and-space alphabet from the line ends', () => {
+    const result = cleanText(snow())
+    expect(result.output).not.toMatch(/[ \t]+$/m)
+    expect(result.output).toContain('line 0')
+    expect(result.findings.some((f) => f.label.includes('trailing'))).toBe(true)
+  })
+
+  it('calls it confirmed, because a mixed alphabet is not an untrimmed file', () => {
+    const finding = cleanText(snow()).findings.find((f) => f.label.includes('trailing'))
+    expect(finding?.verdict).toBe('confirmed')
+  })
+
+  it('leaves an untidy file untidy', () => {
+    // Trailing spaces mean an editor was not configured to trim them. Removing
+    // them would be a diff nobody asked for.
+    const untidy = 'one   \ntwo    \nthree  \nfour     \nfive   \nsix    \n'
+    expect(cleanText(untidy).output).toBe(untidy)
+  })
+
+  it('leaves a Markdown hard line break alone', () => {
+    // Two trailing spaces are a hard break in Markdown. Stripping them changes
+    // how the document renders, which is not what a metadata clean is for.
+    const md = 'first line  \nsecond line  \nthird line  \nfourth line  \n'
+    expect(cleanText(md).output).toBe(md)
+  })
+
+  it('leaves indentation alone', () => {
+    const code = `${TAB}const a = 1\n${TAB}${TAB}return a\n`.repeat(6)
+    expect(cleanText(code).output).toBe(code)
+  })
+
+  it('is idempotent', () => {
+    const once = cleanText(snow())
+    expect(cleanText(once.output).output).toBe(once.output)
+  })
+})

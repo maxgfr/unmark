@@ -13,6 +13,7 @@
 
 import { byPosition, type CleanResult, type Finding, type FindingKind } from '../report.ts'
 import { CONFUSABLES } from './confusables.ts'
+import { trailingCarrierRuns } from './stego.ts'
 
 export interface TextOptions {
   /**
@@ -116,6 +117,18 @@ const CARRIERS = new Map<number, Carrier>([
   [0x3000, space('IDEOGRAPHIC SPACE')],
   [0x2800, space('BRAILLE PATTERN BLANK')],
 ])
+
+/**
+ * Every space that is not U+0020.
+ *
+ * Exported because these are a carrier alphabet in their own right, not only
+ * individual oddities: substituting a three-per-em or an ideographic space for
+ * an ordinary one is invisible in every renderer, and a run of them encodes
+ * bits exactly the way zero-width characters do.
+ */
+export const EXOTIC_SPACES: ReadonlySet<number> = new Set(
+  [...CARRIERS.entries()].filter(([, carrier]) => carrier.kind === 'space').map(([point]) => point),
+)
 
 const TAG_LANGUAGE = 0xe0001
 const TAG_START = 0xe0020
@@ -369,7 +382,40 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
     index += width
   }
 
-  return { output: out.join(''), findings, preserved }
+  // Trailing tabs and spaces last, and on the assembled output rather than
+  // inside the walk: they are ordinary characters, so they cannot live in the
+  // carrier table, and it takes the whole document to tell a SNOW-style
+  // alphabet from an editor that does not trim line ends.
+  const cleaned = stripTrailingCarriers(out.join(''))
+  findings.push(...cleaned.findings)
+
+  return { output: cleaned.output, findings, preserved }
+}
+
+function stripTrailingCarriers(text: string): { output: string; findings: Finding[] } {
+  const runs = trailingCarrierRuns(text)
+  if (runs.length === 0) return { output: text, findings: [] }
+
+  let output = text
+  for (const run of [...runs].reverse()) {
+    output = output.slice(0, run.index) + output.slice(run.index + run.length)
+  }
+
+  const total = runs.reduce((sum, run) => sum + run.length, 0)
+  const first = runs[0]
+  return {
+    output,
+    findings: [
+      {
+        kind: 'space',
+        verdict: 'confirmed',
+        offset: first?.index ?? 0,
+        length: total,
+        label: `${total} trailing tabs and spaces across ${runs.length} line ends`,
+        evidence: 'a two-symbol alphabet parked past the end of each line — the SNOW scheme',
+      },
+    ],
+  }
 }
 
 /** Report every mark without changing anything. */

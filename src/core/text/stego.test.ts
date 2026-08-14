@@ -1,7 +1,7 @@
 // Pure ASCII, like unicode.test.ts: every carrier is built from a codepoint.
 
 import { describe, expect, it } from 'vitest'
-import { decodeStego, encodeStego, stegoFindings } from './stego.ts'
+import { decodeStego, detectSpaceCadence, encodeStego, stegoFindings } from './stego.ts'
 
 const cp = (...points: number[]) => String.fromCodePoint(...points)
 const ZWJ = cp(0x200d)
@@ -98,5 +98,163 @@ describe('stegoFindings', () => {
 
   it('reports nothing for clean text', () => {
     expect(stegoFindings('Clean.')).toEqual([])
+  })
+})
+
+// The homoglyph-space family, from Sean Goedecke's survey of text watermarking:
+// leave an ordinary U+0020 for one bit and substitute a three-per-em (U+2004)
+// or an ideographic space (U+3000) for the other. Nothing renders differently,
+// and unlike the zero-width schemes the text has exactly the spaces it should —
+// so a check that counts invisible characters finds nothing at all.
+describe('homoglyph spaces', () => {
+  const THREE_PER_EM = 0x2004
+  const IDEOGRAPHIC = 0x3000
+
+  it('round-trips a payload spelled in the choice of space', () => {
+    const carriers = encodeStego('leak-882', 'space')
+    const [best] = decodeStego(`report${carriers}end`)
+    expect(best?.payload).toBe('leak-882')
+    expect(best?.scheme).toBe('space')
+  })
+
+  it('reads the inverted bit assignment', () => {
+    const carriers = encodeStego('leak-882', 'space', { invert: true })
+    expect(decodeStego(carriers)[0]?.payload).toBe('leak-882')
+  })
+
+  it('reads an ideographic space as the marker just as readily', () => {
+    const carriers = encodeStego('cjk-77', 'space', { marker: IDEOGRAPHIC })
+    const [best] = decodeStego(carriers)
+    expect(best?.payload).toBe('cjk-77')
+    expect(best?.detail).toContain('U+3000')
+  })
+
+  it('names which codepoint was standing in for a space', () => {
+    expect(decodeStego(encodeStego('x-1', 'space'))[0]?.detail).toContain('U+2004')
+  })
+
+  it('finds nothing in ordinary prose with ordinary spaces', () => {
+    const plain = 'The quick brown fox jumps over the lazy dog and then does it again today.'
+    expect(decodeStego(plain).filter((d) => d.scheme === 'space')).toEqual([])
+  })
+
+  it('refuses to guess when several substitutes are mixed', () => {
+    // Two different exotic spaces is not a binary alphabet. Picking one would
+    // be inventing a scheme the text does not use.
+    const mixed = `a${cp(THREE_PER_EM)}b${cp(IDEOGRAPHIC)}c d e f g h i j k l m n o p`
+    expect(decodeStego(mixed).filter((d) => d.scheme === 'space')).toEqual([])
+  })
+})
+
+describe('detectSpaceCadence', () => {
+  const THREE_PER_EM = 0x2004
+
+  /** "Every third space is a three-per-em" — the article's own example. */
+  const periodic = (stride: number, words: number) =>
+    Array.from({ length: words }, (_, i) => `w${i}`)
+      .map((word, i) => (i > 0 && i % stride === 0 ? cp(THREE_PER_EM) + word : ` ${word}`))
+      .join('')
+      .trim()
+
+  it('finds a substitution falling at a constant interval', () => {
+    const cadence = detectSpaceCadence(periodic(3, 40))
+    expect(cadence).toBeDefined()
+    expect(cadence?.stride).toBe(3)
+    expect(cadence?.point).toBe(THREE_PER_EM)
+    expect(cadence?.count).toBeGreaterThan(3)
+  })
+
+  it('finds nothing when the spaces are all ordinary', () => {
+    expect(
+      detectSpaceCadence('one two three four five six seven eight nine ten eleven twelve'),
+    ).toBeUndefined()
+  })
+
+  it('finds nothing when the substitutions are irregular', () => {
+    // A stray non-breaking space here and there is French typography, not a
+    // mark. Only the regularity makes it evidence.
+    const irregular = `a${cp(0x00a0)}b c d${cp(0x00a0)}e f g h i j k${cp(0x00a0)}l m n o p q r`
+    expect(detectSpaceCadence(irregular)).toBeUndefined()
+  })
+
+  it('needs enough spaces to call an interval an interval', () => {
+    expect(detectSpaceCadence(`a${cp(THREE_PER_EM)}b c`)).toBeUndefined()
+  })
+
+  it('reports a periodic substitution as confirmed', () => {
+    // The point of measuring periodicity: one exotic space is ambiguous, a
+    // periodic one is structural, and the verdict should say so.
+    const finding = stegoFindings(periodic(3, 40)).find((f) => f.kind === 'space')
+    expect(finding).toMatchObject({ verdict: 'confirmed' })
+    expect(finding?.label).toContain('U+2004')
+    expect(finding?.label).toContain('Every 3rd space')
+  })
+})
+
+// The remaining families from the Unicode-watermarking survey (arXiv 2512.13325):
+// SNOW and Shiu hide bits in trailing whitespace, LookALikes and Rizzo hide them
+// in the choice between a Latin letter and its Cyrillic or Greek twin. Neither
+// inserts an unusual character — the text contains only ordinary ones, in
+// unusual arrangements — so a check that hunts invisible codepoints sees nothing.
+describe('trailing whitespace', () => {
+  const TAB = '\t'
+
+  /** SNOW-style: the payload's bits parked past the end of each line. */
+  const withTrailing = (payload: string) => {
+    const bits = encodeStego(payload, 'trailing')
+    const perLine = 8
+    let out = ''
+    for (let i = 0; i < bits.length; i += perLine) {
+      out += `line ${i / perLine}${bits.slice(i, i + perLine)}\n`
+    }
+    return out
+  }
+
+  it('round-trips a payload parked past the end of the line', () => {
+    const [best] = decodeStego(withTrailing('snow-41'))
+    expect(best?.payload).toBe('snow-41')
+    expect(best?.scheme).toBe('trailing')
+  })
+
+  it('says how many line ends were carrying it', () => {
+    expect(decodeStego(withTrailing('snow-41'))[0]?.detail).toMatch(/across \d+ line ends/)
+  })
+
+  it('ignores a file that is merely sloppy about trailing spaces', () => {
+    // Trailing spaces are everywhere. Only a tab-and-space alphabet is a scheme.
+    const sloppy = 'one   \ntwo    \nthree  \nfour     \nfive   \nsix    \nseven   \neight  \n'
+    expect(decodeStego(sloppy).filter((d) => d.scheme === 'trailing')).toEqual([])
+  })
+
+  it('ignores tabs that are indentation rather than trailing', () => {
+    const indented = `${TAB}const a = 1\n${TAB}${TAB}return a\n`.repeat(8)
+    expect(decodeStego(indented).filter((d) => d.scheme === 'trailing')).toEqual([])
+  })
+})
+
+describe('confusable letters', () => {
+  /** LookALikes-style: bits spelled in Latin "a" against Cyrillic "а". */
+  const withConfusables = (payload: string) => {
+    const bytes = new TextEncoder().encode(payload)
+    const bits: number[] = []
+    for (const byte of bytes) for (let i = 7; i >= 0; i -= 1) bits.push((byte >> i) & 1)
+    // Each bit rides on one letter: Latin a for 0, Cyrillic а (U+0430) for 1.
+    return bits.map((bit) => (bit ? cp(0x0430) : 'a')).join('')
+  }
+
+  it('round-trips a payload spelled in lookalike letters', () => {
+    const [best] = decodeStego(withConfusables('rizzo-9'))
+    expect(best?.payload).toBe('rizzo-9')
+    expect(best?.scheme).toBe('confusable')
+  })
+
+  it('finds nothing in ordinary Latin prose', () => {
+    const plain = 'A perfectly ordinary sentence with no substitutions anywhere in it at all.'
+    expect(decodeStego(plain).filter((d) => d.scheme === 'confusable')).toEqual([])
+  })
+
+  it('finds nothing in text that is simply Cyrillic', () => {
+    const russian = cp(0x043f, 0x0430, 0x0440, 0x043e, 0x043b, 0x044c).repeat(6)
+    expect(decodeStego(russian).filter((d) => d.scheme === 'confusable')).toEqual([])
   })
 })

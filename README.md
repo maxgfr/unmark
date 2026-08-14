@@ -30,8 +30,24 @@ is removed before you have seen what it is.
 **Text.** Invisible Unicode carriers — zero-width characters, bidi overrides, tag
 characters, variation selectors, exotic spaces, homoglyphs — found, classified and
 stripped. And **decoded**: those carriers usually spell something, and deleting them
-without reading them throws away the only evidence of who marked the text. It reads
-zero-width binary, tag-character ASCII and variation-selector byte encodings.
+without reading them throws away the only evidence of who marked the text.
+
+Six encoding schemes are read, covering the families named in the [Unicode
+watermarking survey](https://arxiv.org/html/2512.13325):
+
+| Scheme                  | How it hides                                                 | Named methods                 |
+| ----------------------- | ------------------------------------------------------------ | ----------------------------- |
+| zero-width              | ZWSP/ZWNJ/ZWJ/WJ as a binary or base-4 alphabet              | AITSteg, CovertSYS, StegCloak |
+| tag characters          | U+E0020–E007F, one per ASCII character                       | —                             |
+| variation selectors     | VS1–VS256, one byte each                                     | VariantMark                   |
+| **space choice**        | U+0020 against U+2004 or U+3000 — no extra characters at all | Innamark, UniSpaCh, WhiteMark |
+| **trailing whitespace** | tabs and spaces parked past each line end                    | SNOW, Shiu                    |
+| **confusable letters**  | Latin `a` against Cyrillic `а`                               | LookALikes, Rizzo             |
+
+The last three carry their payload in entirely ordinary characters, so a check that
+hunts for invisible codepoints walks straight past them. unmark also measures
+**periodicity** — "every third space is a three-per-em" is a pattern, not typing,
+and a periodic substitution is reported `confirmed` where a lone one is not.
 
 A deterministic stylometry report flags the habits of generated prose — dash
 density, triples, negative parallelism, marker vocabulary, sentence-length variance

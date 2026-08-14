@@ -134,6 +134,87 @@ for (const shot of shots) {
   console.log(`  /tmp/unmark-${shot.name}.png`)
 }
 
+// The Files tab, driven for real. Until this existed the tab had only ever been
+// screenshotted empty: the drop handler, the findings render and the download
+// were all unexercised outside unit tests of the core underneath them.
+{
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  page.on('pageerror', (error) => problems.push(`files: ${error.message}`))
+  page.on('console', (message) => {
+    if (message.type() === 'error') problems.push(`files: console ${message.text()}`)
+  })
+
+  await page.goto(`http://localhost:${PORT}${BASE}#files`, { waitUntil: 'networkidle' })
+
+  // A PNG carrying a tEXt chunk and a C2PA manifest, built in the page.
+  const base64 = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 8
+    canvas.height = 8
+    canvas.getContext('2d').fillRect(0, 0, 8, 8)
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'))
+    const original = new Uint8Array(await blob.arrayBuffer())
+
+    // Splice a tEXt and a caBX chunk in just after IHDR.
+    const crcTable = Array.from({ length: 256 }, (_, n) => {
+      let c = n
+      for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+      return c >>> 0
+    })
+    const crc = (bytes) => {
+      let c = 0xffffffff
+      for (const b of bytes) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8)
+      return (c ^ 0xffffffff) >>> 0
+    }
+    const chunk = (type, text) => {
+      const body = new TextEncoder().encode(type + text)
+      const out = new Uint8Array(body.length + 8)
+      new DataView(out.buffer).setUint32(0, body.length - 4)
+      out.set(body, 4)
+      new DataView(out.buffer).setUint32(out.length - 4, crc(body))
+      return out
+    }
+
+    const marked = new Uint8Array([
+      ...original.subarray(0, 33),
+      ...chunk('tEXt', `Software\0ShootFixture 1.0`),
+      ...chunk('caBX', 'signed provenance manifest'),
+      ...original.subarray(33),
+    ])
+    return btoa(String.fromCharCode(...marked))
+  })
+
+  await page.setInputFiles('input[type=file]', {
+    name: 'marked.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(base64, 'base64'),
+  })
+
+  try {
+    await page.waitForSelector('text=C2PA provenance manifest', { timeout: 5000 })
+    await page.waitForSelector('text=ShootFixture 1.0', { timeout: 5000 })
+  } catch {
+    problems.push('files: the dropped PNG did not report its tEXt and C2PA chunks')
+  }
+
+  // The download path: a Blob URL and a synthetic click, never exercised before.
+  try {
+    const download = page.waitForEvent('download', { timeout: 8000 })
+    await page.getByRole('button', { name: 'Download cleaned' }).click()
+    const saved = await download
+    if (!saved.suggestedFilename().includes('unmarked')) {
+      problems.push(`files: download was named ${saved.suggestedFilename()}`)
+    }
+    console.log(`  files: downloaded ${saved.suggestedFilename()}`)
+  } catch (error) {
+    problems.push(`files: download never fired — ${String(error).split('\n')[0]}`)
+  }
+
+  await page.screenshot({ path: '/tmp/unmark-desktop-files-loaded.png', fullPage: true })
+  console.log('  /tmp/unmark-desktop-files-loaded.png')
+  await page.close()
+}
+
 // The Image tab, driven for real: load a picture with a known 45% white badge
 // composited into the corner, let the corner scan find it, and unblend.
 {
@@ -190,6 +271,26 @@ for (const shot of shots) {
     } catch {
       problems.push('image: MI-GAN never reported a completed fill')
     }
+
+    // Telea and the disruption pass: both were unit-tested as functions but
+    // their buttons had never been clicked.
+    const before = await page.evaluate(() => document.querySelector('canvas').toDataURL().length)
+
+    await page.getByRole('button', { name: 'Inpaint', exact: true }).click()
+    await page.waitForTimeout(400)
+
+    await page.getByLabel('Scrub the lowest bit').check()
+    await page.getByLabel('Resample round trip').check()
+    await page.getByRole('button', { name: 'Apply' }).click()
+    await page.waitForSelector('button:has-text("Apply"):not([disabled])', { timeout: 20_000 })
+    await page.waitForTimeout(400)
+
+    const after = await page.evaluate(() => document.querySelector('canvas').toDataURL().length)
+    if (before === after) problems.push('image: Inpaint and Apply left the canvas untouched')
+
+    // Undo has to walk it back.
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await page.waitForTimeout(300)
   }
 
   await page.screenshot({ path: '/tmp/unmark-desktop-image.png', fullPage: true })
