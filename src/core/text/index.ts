@@ -21,6 +21,9 @@ export {
   stylometryFindings,
 }
 export { MIN_SENTENCES, MIN_WORDS } from './stylometry.ts'
+export { humanise } from './humanise.ts'
+export { normaliseTypography } from './typography.ts'
+export { detectSpaceCadence } from './stego.ts'
 export type { StegoDecoding, StyleReport, TextOptions }
 export type { StyleMetric } from './stylometry.ts'
 export type { StegoScheme } from './stego.ts'

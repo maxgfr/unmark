@@ -14,6 +14,8 @@
 import { byPosition, type CleanResult, type Finding, type FindingKind } from '../report.ts'
 import { CONFUSABLES } from './confusables.ts'
 import { trailingCarrierRuns } from './stego.ts'
+import { humanise } from './humanise.ts'
+import { normaliseTypography } from './typography.ts'
 
 export interface TextOptions {
   /**
@@ -28,6 +30,18 @@ export interface TextOptions {
    * multilingual document it is wrong more often than right.
    */
   confusables?: boolean
+  /**
+   * Flatten typographic punctuation to ASCII: em dashes, curly quotes, ellipsis.
+   *
+   * Not watermark removal, and never sold as it. An em dash is a style, and
+   * this rewrites the author's punctuation — which is why it is opt-in.
+   */
+  typography?: boolean
+  /**
+   * Remove generated-prose boilerplate that has one unambiguous shorter form:
+   * filler phrases, stacked hedges, chat pleasantries, signposting.
+   */
+  humanise?: boolean
 }
 
 interface Carrier {
@@ -388,8 +402,34 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
   // alphabet from an editor that does not trim line ends.
   const cleaned = stripTrailingCarriers(out.join(''))
   findings.push(...cleaned.findings)
+  let output = cleaned.output
 
-  return { output: cleaned.output, findings, preserved }
+  // The two style passes always *run*, and only apply when asked.
+  //
+  // Reporting them unconditionally is the same rule the rest of the tool
+  // follows: say what is there before touching it. An inspect that stayed
+  // silent about a page of chat pleasantries until you had already guessed to
+  // turn the option on would be answering a question you could not know to ask.
+  //
+  // Neither removes a mark. Punctuation and boilerplate are how the prose
+  // reads, not what is hidden inside it.
+  for (const pass of [
+    { on: options?.humanise ?? false, run: humanise },
+    { on: options?.typography ?? false, run: normaliseTypography },
+  ]) {
+    const result = pass.run(output)
+    if (pass.on) {
+      output = result.output
+      findings.push(...result.findings)
+    } else {
+      for (const finding of result.findings) {
+        finding.available = 'style, not a mark — enable the option to apply it'
+        preserved.push(finding)
+      }
+    }
+  }
+
+  return { output, findings, preserved }
 }
 
 function stripTrailingCarriers(text: string): { output: string; findings: Finding[] } {

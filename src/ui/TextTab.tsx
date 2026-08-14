@@ -21,13 +21,20 @@ export function TextTab() {
   const [input, setInput] = useState('')
   const [paranoid, setParanoid] = useState(false)
   const [confusables, setConfusables] = useState(false)
+  const [typography, setTypography] = useState(false)
+  const [humaniseText, setHumanise] = useState(false)
 
   // The report lags the keystroke rather than the textarea: typing must never
   // wait on a full re-scan of a long document.
   const deferred = useDeferredValue(input)
 
   const report = useMemo(() => {
-    const options = { ...(paranoid ? { paranoid } : {}), ...(confusables ? { confusables } : {}) }
+    const options = {
+      ...(paranoid ? { paranoid } : {}),
+      ...(confusables ? { confusables } : {}),
+      ...(typography ? { typography } : {}),
+      ...(humaniseText ? { humanise: humaniseText } : {}),
+    }
     const cleaned = cleanText(deferred, options)
     return {
       cleaned,
@@ -40,7 +47,7 @@ export function TextTab() {
         ...stylometryFindings(deferred),
       ].sort(byPosition),
     }
-  }, [deferred, paranoid, confusables])
+  }, [deferred, paranoid, confusables, typography, humaniseText])
 
   const removed = report.cleaned.findings.length
   const tells = report.style.metrics.filter((metric) => metric.triggered)
@@ -96,6 +103,32 @@ export function TextTab() {
             >
               Paranoid mode
             </Toggle>
+
+            {/* The two style passes. Separated by a rule and a caption because
+                they are a different kind of operation: they change how the
+                prose reads, and neither removes a mark. */}
+            <div className="mt-2 border-t border-[var(--color-rule)] pt-3">
+              <p className="mb-2.5 text-xs text-[var(--color-muted)]">
+                Below this line: style, not marks. Neither removes a watermark — they change how the
+                writing reads.
+              </p>
+              <div className="flex flex-col gap-2.5">
+                <Toggle
+                  checked={typography}
+                  onChange={setTypography}
+                  hint="Em and en dashes, curly quotes, ellipses → ASCII. French guillemets are left alone."
+                >
+                  Flatten typography
+                </Toggle>
+                <Toggle
+                  checked={humaniseText}
+                  onChange={setHumanise}
+                  hint="Filler phrases, stacked hedges, chat pleasantries, signposting, decorative emoji. Only phrases with one unambiguous shorter form."
+                >
+                  Remove generated-prose boilerplate
+                </Toggle>
+              </div>
+            </div>
           </div>
         </Section>
 

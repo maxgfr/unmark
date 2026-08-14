@@ -35,6 +35,8 @@ OPTIONS
   --in-place          write the cleaned result back to the file (clean only)
   --paranoid          also strip emoji glue and script joiners; CORRUPTS real text
   --confusables       map Cyrillic/Greek lookalikes back to Latin
+  --typography        flatten em dashes, curly quotes and ellipses to ASCII
+  --humanise          remove filler, chat pleasantries and signposting
   --version, -V       print the version
   --help, -h          print this
 
@@ -67,6 +69,7 @@ const colourVerdict = (verdict: Verdict) => paint(VERDICT_COLOR[verdict], verdic
 const OUTCOME_COLOR: Record<Outcome, string> = {
   removed: '31',
   kept: '32',
+  available: '36',
   reported: '2',
 }
 
@@ -108,12 +111,13 @@ function renderFindings(all: readonly Finding[], out: string[]): void {
 }
 
 function summarise(findings: readonly Finding[], out: string[]): void {
-  const counts = { removed: 0, kept: 0, reported: 0 }
+  const counts: Record<Outcome, number> = { removed: 0, kept: 0, available: 0, reported: 0 }
   for (const finding of findings) counts[outcomeOf(finding)] += 1
 
   const parts = [
     counts.removed > 0 ? `${counts.removed} removed` : '',
     counts.kept > 0 ? `${counts.kept} kept as legitimate` : '',
+    counts.available > 0 ? `${counts.available} available behind an option` : '',
     counts.reported > 0 ? `${counts.reported} reported only` : '',
   ].filter(Boolean)
 
@@ -151,11 +155,15 @@ interface Options {
   inPlace: boolean
   paranoid: boolean
   confusables: boolean
+  typography: boolean
+  humanise: boolean
 }
 
 const textOptions = (options: Options) => ({
   ...(options.paranoid ? { paranoid: true } : {}),
   ...(options.confusables ? { confusables: true } : {}),
+  ...(options.typography ? { typography: true } : {}),
+  ...(options.humanise ? { humanise: true } : {}),
 })
 
 async function commandInspect(target: string, options: Options): Promise<number> {
@@ -328,6 +336,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     inPlace: flags.has('--in-place'),
     paranoid: flags.has('--paranoid'),
     confusables: flags.has('--confusables'),
+    typography: flags.has('--typography'),
+    humanise: flags.has('--humanise'),
   }
 
   const [command, target = '-'] = positional

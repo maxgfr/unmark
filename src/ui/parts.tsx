@@ -57,6 +57,8 @@ const VERDICT_LABEL: Record<Verdict, string> = {
 const OUTCOME_STYLE: Record<Outcome, string> = {
   removed: 'border-[var(--color-rule-bright)] text-[var(--color-muted)]',
   kept: 'border-[var(--color-clean)]/40 text-[var(--color-clean)]',
+  // Waiting on a toggle, which is a different state from deliberately kept.
+  available: 'border-[var(--color-rule-bright)] text-[var(--color-bone)]',
   reported: 'border-[var(--color-rule)] text-[var(--color-muted)]',
 }
 
@@ -102,8 +104,10 @@ export function FindingsTable({ findings }: { findings: readonly Finding[] }) {
                   {finding.evidence}
                 </p>
               ) : undefined}
-              {finding.preserved ? (
-                <p className="mt-1 text-xs text-[var(--color-muted)] italic">{finding.preserved}</p>
+              {(finding.preserved ?? finding.available) ? (
+                <p className="mt-1 text-xs text-[var(--color-muted)] italic">
+                  {finding.preserved ?? finding.available}
+                </p>
               ) : undefined}
             </div>
 

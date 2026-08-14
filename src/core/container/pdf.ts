@@ -97,7 +97,27 @@ export function cleanPdf(bytes: Uint8Array): ContainerResult {
     })
   }
 
-  // 3. Say what could not be reached, rather than implying the file is clean.
+  // 3. Incremental saves. Each one appends to the file instead of rewriting it,
+  //    so every earlier version is still in there — including, notoriously, the
+  //    text under a black rectangle somebody drew and called a redaction.
+  //    Removing them means rebuilding the document, which a byte-level pass
+  //    cannot do; saying so is the honest alternative to staying quiet.
+  const eofs = [...text.matchAll(/%%EOF/g)]
+  if (eofs.length > 1) {
+    findings.push({
+      kind: 'doc_property',
+      verdict: 'confirmed',
+      offset: eofs[0]?.index ?? 0,
+      length: 0,
+      label: `${eofs.length - 1} earlier version(s) of this document are still in the file`,
+      evidence:
+        'PDF saves incrementally: each edit appends rather than rewrites, so previous drafts — ' +
+        'including anything covered over rather than deleted — remain recoverable. Re-saving ' +
+        'the file from a PDF editor with "save as" rather than "save" collapses the history.',
+    })
+  }
+
+  // 4. Say what could not be reached, rather than implying the file is clean.
   //    PDF 1.5 can pack the information dictionary into a compressed object
   //    stream, where it is deflated and invisible to a byte scan.
   if (/\/Type\s*\/ObjStm/.test(text)) {
