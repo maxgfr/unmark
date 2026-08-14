@@ -258,3 +258,40 @@ describe('confusable letters', () => {
     expect(decodeStego(russian).filter((d) => d.scheme === 'confusable')).toEqual([])
   })
 })
+
+describe('payloads embedded in real sentences', () => {
+  // The case that matters and that the first draft got wrong: a payload sitting
+  // inside prose rather than alone. One ordinary space in the sentence before
+  // the carriers shifts every bit by one and the whole thing decodes to noise.
+  it('reads a space-scheme payload surrounded by ordinary prose', () => {
+    const carriers = encodeStego('spaced-77', 'space')
+    const [best] = decodeStego(`Internal memo. Do not forward.${carriers}Regards, the desk.`)
+    expect(best?.payload).toBe('spaced-77')
+  })
+
+  it('reads a confusable payload surrounded by ordinary prose', () => {
+    const bytes = new TextEncoder().encode('rizzo-9')
+    const bits: number[] = []
+    for (const byte of bytes) for (let i = 7; i >= 0; i -= 1) bits.push((byte >> i) & 1)
+    const carriers = bits.map((bit) => (bit ? cp(0x0430) : 'a')).join('')
+
+    // "attached" and "a" both contribute substitutable letters before the run.
+    const [best] = decodeStego(`a memo attached${carriers} and nothing else`)
+    expect(best?.payload).toBe('rizzo-9')
+  })
+
+  it('still reads a payload substituted one-for-one across a whole document', () => {
+    // The other real shape: Innamark replaces every space in the document, so
+    // the whole sequence is the message and there is no contiguous run at all.
+    const bytes = new TextEncoder().encode('doc-5')
+    const bits: number[] = []
+    for (const byte of bytes) for (let i = 7; i >= 0; i -= 1) bits.push((byte >> i) & 1)
+    // One more word than there are bits: N gaps need N+1 words.
+    const words = Array.from({ length: bits.length + 1 }, (_, i) => `w${i}`)
+    const text = words
+      .map((word, i) => (i === 0 ? word : `${cp(bits[i - 1] ? 0x2004 : 0x20)}${word}`))
+      .join('')
+
+    expect(decodeStego(text)[0]?.payload).toBe('doc-5')
+  })
+})

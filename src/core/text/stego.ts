@@ -215,6 +215,37 @@ function spaceRun(text: string): { point: number; offset: number }[] {
 }
 
 /**
+ * The sequences worth trying to decode from a set of carrier positions.
+ *
+ * Two shapes exist in the wild and they need different treatment. Innamark and
+ * its relatives substitute one-for-one *throughout* a document, so every space
+ * in it is a bit and the whole sequence is the message. Block encoders instead
+ * park a contiguous run of carriers somewhere in the text.
+ *
+ * Reading only the whole sequence breaks the block case badly: a single
+ * ordinary space in the sentence before the run shifts every bit by one and the
+ * payload decodes to noise. That is not a corner case — it is what happens the
+ * moment a payload sits inside a real sentence rather than alone in a fixture.
+ */
+function candidateSequences<T extends { offset: number }>(slots: T[]): T[][] {
+  if (slots.length < 16) return []
+  const candidates: T[][] = [slots]
+
+  // The longest run of carriers with nothing between them.
+  let best: T[] = []
+  let current: T[] = []
+  for (const [index, slot] of slots.entries()) {
+    const previous = slots[index - 1]
+    if (previous && slot.offset === previous.offset + 1) current.push(slot)
+    else current = [slot]
+    if (current.length > best.length) best = [...current]
+  }
+
+  if (best.length >= 16 && best.length < slots.length) candidates.push(best)
+  return candidates
+}
+
+/**
  * A payload spelled in the choice of space character.
  *
  * The homoglyph scheme: leave an ordinary U+0020 to mean one bit and substitute
@@ -235,27 +266,29 @@ function decodeSpaces(text: string): StegoDecoding[] {
   const marker = exotic[0] as number
   if (!run.some((s) => s.point === PLAIN_SPACE)) return []
 
-  const first = run[0]
-  const last = run.at(-1)
-  if (!first || !last) return []
-
   const results: StegoDecoding[] = []
-  for (const oneIsExotic of [true, false]) {
-    const bits = run.map((s) => ((s.point === marker) === oneIsExotic ? 1 : 0))
-    const decoded = bitsToText(bits)
-    if (!decoded) continue
+  for (const sequence of candidateSequences(run)) {
+    const first = sequence[0]
+    const last = sequence.at(-1)
+    if (!first || !last) continue
 
-    const confidence = score(decoded.text)
-    if (confidence < 0.9 || decoded.text.length < 2) continue
+    for (const oneIsExotic of [true, false]) {
+      const bits = sequence.map((s) => ((s.point === marker) === oneIsExotic ? 1 : 0))
+      const decoded = bitsToText(bits)
+      if (!decoded) continue
 
-    results.push({
-      scheme: 'space',
-      payload: decoded.text,
-      confidence,
-      offset: first.offset,
-      length: last.offset - first.offset + 1,
-      detail: `${run.length} spaces, U+${marker.toString(16).toUpperCase().padStart(4, '0')} against U+0020, ${decoded.detail}`,
-    })
+      const confidence = score(decoded.text)
+      if (confidence < 0.9 || decoded.text.length < 2) continue
+
+      results.push({
+        scheme: 'space',
+        payload: decoded.text,
+        confidence,
+        offset: first.offset,
+        length: last.offset - first.offset + 1,
+        detail: `${sequence.length} spaces, U+${marker.toString(16).toUpperCase().padStart(4, '0')} against U+0020, ${decoded.detail}`,
+      })
+    }
   }
   return results
 }
@@ -370,19 +403,6 @@ function decodeTrailing(text: string): StegoDecoding[] {
   return results
 }
 
-// Which Latin letters have a lookalike, and which codepoints are those
-// lookalikes. Derived from the substitution table rather than restated, so the
-// two cannot drift apart.
-const LOOKALIKE_OF = (() => {
-  const byLatin = new Map<string, Set<number>>()
-  for (const [point, latin] of CONFUSABLES) {
-    const existing = byLatin.get(latin)
-    if (existing) existing.add(point)
-    else byLatin.set(latin, new Set([point]))
-  }
-  return byLatin
-})()
-
 /**
  * A payload in which letters are Latin and which are lookalikes.
  *
@@ -392,41 +412,59 @@ const LOOKALIKE_OF = (() => {
  * all — only unusual choices among ordinary ones.
  */
 function decodeConfusables(text: string): StegoDecoding[] {
+  // Narrow the alphabet to the lookalikes this text actually uses, then take
+  // only their Latin counterparts as the other symbol.
+  //
+  // Treating every substitutable letter as a slot is far too broad: the table
+  // includes the fullwidth forms, which cover all of a-z, A-Z and 0-9, so every
+  // letter in the document would carry a bit. A payload sitting inside a
+  // sentence would then be read starting from the prose in front of it, and
+  // decode to noise.
+  const markers = new Set<number>()
+  for (let index = 0; index < text.length; index += 1) {
+    const point = text.codePointAt(index)
+    if (point === undefined) break
+    if (CONFUSABLES.has(point)) markers.add(point)
+  }
+  if (markers.size === 0) return []
+
+  const latin = new Set([...markers].map((point) => CONFUSABLES.get(point) as string))
   const slots: { bit: number; offset: number }[] = []
 
   for (let index = 0; index < text.length; index += 1) {
     const point = text.codePointAt(index)
     if (point === undefined) break
-    const char = String.fromCodePoint(point)
 
-    if (LOOKALIKE_OF.has(char)) slots.push({ bit: 0, offset: index })
-    else if (CONFUSABLES.has(point)) slots.push({ bit: 1, offset: index })
+    if (markers.has(point)) slots.push({ bit: 1, offset: index })
+    else if (latin.has(String.fromCodePoint(point))) slots.push({ bit: 0, offset: index })
   }
 
   if (slots.length < 16) return []
   // All Latin means an ordinary sentence, which is most sentences.
   if (!slots.some((slot) => slot.bit === 1)) return []
 
-  const first = slots[0]
-  const last = slots.at(-1)
-  if (!first || !last) return []
-
   const results: StegoDecoding[] = []
-  for (const invert of [false, true]) {
-    const decoded = bitsToText(slots.map((slot) => (invert ? 1 - slot.bit : slot.bit)))
-    if (!decoded) continue
+  for (const sequence of candidateSequences(slots)) {
+    const first = sequence[0]
+    const last = sequence.at(-1)
+    if (!first || !last) continue
 
-    const confidence = score(decoded.text)
-    if (confidence < 0.9 || decoded.text.length < 2) continue
+    for (const invert of [false, true]) {
+      const decoded = bitsToText(sequence.map((slot) => (invert ? 1 - slot.bit : slot.bit)))
+      if (!decoded) continue
 
-    results.push({
-      scheme: 'confusable',
-      payload: decoded.text,
-      confidence,
-      offset: first.offset,
-      length: last.offset - first.offset + 1,
-      detail: `${slots.length} substitutable letters, lookalike against Latin, ${decoded.detail}`,
-    })
+      const confidence = score(decoded.text)
+      if (confidence < 0.9 || decoded.text.length < 2) continue
+
+      results.push({
+        scheme: 'confusable',
+        payload: decoded.text,
+        confidence,
+        offset: first.offset,
+        length: last.offset - first.offset + 1,
+        detail: `${sequence.length} substitutable letters, lookalike against Latin, ${decoded.detail}`,
+      })
+    }
   }
   return results
 }
