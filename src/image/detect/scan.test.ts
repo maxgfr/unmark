@@ -227,6 +227,25 @@ describe('mergeCandidates', () => {
     const strong = fake({ x: 0, y: 302, width: 512, height: 60 }, 0.95)
     expect(mergeCandidates([weak, strong])).toEqual([strong])
   })
+
+  it('keeps the exactly-invertible description when two models describe one region', () => {
+    // Score does not decide this one, and must not. A flat candidate is the
+    // case whose inverse is exact; a shaped one is the median-based fallback
+    // that coverage.ts records cannot tell a badge from a road sign. Ranking
+    // the two together by confidence * alpha lets the second win a region the
+    // first already describes — and then `findOverlays` emitted both, so one
+    // set of pixels appeared twice under two different opacities and ticking
+    // both handed `disjoint` a pair it silently halved.
+    const flat = { ...fake({ x: 0, y: 300, width: 512, height: 64 }, 0.7), alpha: 0.4 }
+    const shaped = {
+      ...fake({ x: 4, y: 302, width: 500, height: 60 }, 0.99),
+      alpha: 0.9,
+      kind: 'shaped' as const,
+    }
+
+    expect(shaped.confidence * shaped.alpha).toBeGreaterThan(flat.confidence * flat.alpha)
+    expect(mergeCandidates([shaped, flat])).toEqual([flat])
+  })
 })
 
 describe('findOverlays', () => {
@@ -252,6 +271,27 @@ describe('findOverlays', () => {
     expect(wide[0]?.rect).toEqual(band)
     expect(wide[0]?.alpha).toBeCloseTo(0.38, 1)
     expect(wide[0]?.source).toBe('band')
+  })
+
+  it('covers the whole width when the proxy factor does not divide it', () => {
+    // The coarse pass searches a shrunken copy and `shrink` floors: 2201 at
+    // factor 2 is a 1100-wide proxy, and multiplying back gives 2200. A band
+    // proposes its own full width and `axes: 'vertical'` freezes that extent on
+    // purpose, so refineRect never recovers the difference — the last column of
+    // a full-width scrim came back still marked. One white column down the side
+    // of a photograph is as visible as anything this removes.
+    //
+    // Large on purpose: the shortfall only exists once the picture is big
+    // enough to be searched on a proxy at all, which is 1100px on the long edge.
+    const width = 2201
+    const band: Rect = { x: 0, y: 904, width, height: 96 }
+    const marked = blend(photograph(width, 1200, 5), band, 0.4, [255, 255, 255])
+
+    const found = findOverlays(marked, { wide: true, shaped: false }).find(
+      (candidate) => candidate.source === 'band',
+    )
+    expect(found).toBeDefined()
+    expect(found?.rect).toEqual(band)
   })
 
   it('finds a mark in the middle of the picture', () => {

@@ -180,6 +180,26 @@ describe('findCornerOverlays', () => {
     expect(findCornerOverlays(noisyPicture(400, 400, 21))).toEqual([])
   })
 
+  it('describes the rectangle it reports, not the one it probed', () => {
+    // The snap is allowed to move a lot, and when it moves onto something the
+    // estimator will not measure, the fallback used to graft the *probe's*
+    // alpha, colour and confidence onto the *snapped* rectangle. On this
+    // fixture that offered a 12x26 region carrying numbers read off a 48x48
+    // one — a twentieth of the badge, described by a measurement of something
+    // else, and unblending it leaves the rest of the badge exactly where it was.
+    //
+    // The comment above the fallback already said the alpha reported has to be
+    // the alpha of the region reported. This is that sentence as an assertion.
+    const badge: Rect = { x: 342, y: 342, width: 50, height: 50 }
+    const marked = blend(noisyPicture(400, 400, 1), badge, 0.2, [255, 255, 255])
+
+    for (const found of findCornerOverlays(marked)) {
+      const again = estimateOverlay(marked, found.rect)
+      expect(again).toBeDefined()
+      expect(again?.alpha).toBeCloseTo(found.alpha, 5)
+    }
+  })
+
   it('finds nothing in a flat picture', () => {
     expect(findCornerOverlays(flatPicture(400, 400))).toEqual([])
   })
@@ -215,6 +235,34 @@ describe('refineRect', () => {
   it('leaves a proposal alone when there is no edge to find', () => {
     const rect: Rect = { x: 100, y: 100, width: 50, height: 50 }
     expect(refineRect(noisyPicture(320, 320), rect)).toEqual(rect)
+  })
+
+  it('reaches a band that runs off the bottom of the picture', () => {
+    // The walk used to stop one line short of every side, so a scrim flush
+    // against an edge — the shape the wide scan exists for — came back one row
+    // narrow, and unblending it left that row still tinted. A line of white
+    // along the bottom of a photograph is exactly as visible as the mark was.
+    const band: Rect = { x: 0, y: 260, width: 320, height: 60 }
+    const marked = blend(noisyPicture(320, 320), band, 0.4, [255, 255, 255])
+
+    const snapped = refineRect(marked, { x: 0, y: 270, width: 320, height: 30 }, 'vertical')
+    expect(snapped.y + snapped.height).toBe(320)
+  })
+
+  it('reaches a band that runs off the top of the picture', () => {
+    const band: Rect = { x: 0, y: 0, width: 320, height: 60 }
+    const marked = blend(noisyPicture(320, 320), band, 0.4, [255, 255, 255])
+
+    const snapped = refineRect(marked, { x: 0, y: 15, width: 320, height: 30 }, 'vertical')
+    expect(snapped.y).toBe(0)
+  })
+
+  it('reaches a column flush against the left edge', () => {
+    const bar: Rect = { x: 0, y: 0, width: 60, height: 320 }
+    const marked = blend(noisyPicture(320, 320), bar, 0.4, [255, 255, 255])
+
+    const snapped = refineRect(marked, { x: 15, y: 0, width: 30, height: 320 }, 'horizontal')
+    expect(snapped.x).toBe(0)
   })
 
   it('recovers the picture once the region is snapped', () => {

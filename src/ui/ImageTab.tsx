@@ -21,7 +21,7 @@ import {
 import { estimateOverlay, type OverlayCandidate, type Rect } from '../image/detect/overlay.ts'
 import { estimateShaped } from '../image/detect/coverage.ts'
 import { disjoint, removeAll, removeOverlay } from '../image/detect/remove.ts'
-import { findOverlays, scanCorners } from '../image/detect/scan.ts'
+import { findOverlays } from '../image/detect/scan.ts'
 import { inpaint, rectMask, rectsMask } from '../image/inpaint/telea.ts'
 import { inpaintWithMigan, MODEL_BYTES, RUNTIME_BYTES } from '../image/inpaint/migan.ts'
 import { ImageWorker, workerAvailable } from '../image/offload.ts'
@@ -77,6 +77,33 @@ const MEASURE_SETTLE_MS = 250
 /** A candidate's identity, which is its rectangle. Two scans agree on this. */
 const keyOf = (candidate: OverlayCandidate) =>
   `${candidate.rect.x},${candidate.rect.y},${candidate.rect.width},${candidate.rect.height}`
+
+/**
+ * A scan, and the exact pixels it was measured on.
+ *
+ * The raster is part of the result rather than beside it, and that is the whole
+ * point. A candidate says "this rectangle is 38% opaque"; that is a statement
+ * about one picture, and it stops being true the moment a pixel moves. The list
+ * used to be free-floating state written only when a file was opened or the
+ * wide scan was run, so every other path — unblend, inpaint, disruption, undo —
+ * left it on screen describing an image that no longer existed. The boxes
+ * stayed drawn over regions already removed, the rows quoted the old opacity,
+ * and the tick survived: one more click and the same pixels were inverted
+ * twice, which `remove.ts` measures at a hundred levels of damage — worse than
+ * the mark was.
+ *
+ * Freshness is object identity, which costs nothing and is exact: every
+ * operation returns a new Raster and `undo` puts the previous object back, so
+ * undoing an edit makes its scan current again rather than merely plausible.
+ */
+interface Scan {
+  raster: Raster
+  candidates: OverlayCandidate[]
+  mode: 'corners' | 'whole'
+}
+
+/** One array, so a stale scan does not hand the render a new [] every time. */
+const NOTHING: OverlayCandidate[] = []
 
 /**
  * Where a region sits, in words.
@@ -208,12 +235,11 @@ export function ImageTab() {
   // several hundred milliseconds per frame, and the figures would be flickering
   // through values nobody asked about anyway.
   const [committed, setCommitted] = useState<Rect | undefined>()
-  const [candidates, setCandidates] = useState<OverlayCandidate[]>([])
+  const [scan, setScan] = useState<Scan | undefined>()
   // Which candidates a batch action would touch, keyed by rectangle. An index
   // would point at a different region the moment a wider scan reorders the list.
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set())
   const [hovered, setHovered] = useState<string | undefined>()
-  const [scanned, setScanned] = useState<'corners' | 'whole'>('corners')
   const [batchNote, setBatchNote] = useState('')
   const [history, setHistory] = useState<Raster[]>([])
   const [busy, setBusy] = useState('')
@@ -244,11 +270,79 @@ export function ImageTab() {
   const picker = useRef<HTMLInputElement>(null)
   const dragStart = useRef<{ x: number; y: number } | undefined>(undefined)
   const worker = useRef<ImageWorker | undefined>(undefined)
+  /**
+   * Which scan the visitor is still waiting for.
+   *
+   * `cancel()` resolves an abandoned job with undefined, which covers a second
+   * file dropped mid-scan. It does not cover a job that had already finished
+   * and was sitting in the microtask queue: that reply would land against a
+   * picture the visitor has moved on from and be filed as a scan of it.
+   */
+  const scanJob = useRef(0)
 
   const offload = useCallback(() => {
     worker.current ??= new ImageWorker()
     return worker.current
   }, [])
+
+  // A scan describes the pixels it was measured on, and only those. When they
+  // have moved on, the list is not shown at all — a region list next to a
+  // picture it no longer describes is worse than no list, because every number
+  // on it still reads as a measurement.
+  const fresh = scan !== undefined && scan.raster === raster
+  const candidates = fresh ? scan.candidates : NOTHING
+  const stale = scan !== undefined && scan.raster !== raster
+  const scanned = scan?.mode ?? 'corners'
+
+  /**
+   * Look for overlays and file the result against the picture it was read from.
+   *
+   * The corner pass belongs here as much as the wide one does. It runs on every
+   * file that is opened and costs a couple of hundred milliseconds on a
+   * twelve-megapixel photo, which it used to spend frozen inside the drop
+   * handler — offload.ts has said so since the worker existed, and the call
+   * site had gone on doing it synchronously anyway.
+   */
+  const runScan = useCallback(
+    async (source: Raster, mode: 'corners' | 'whole') => {
+      const options =
+        mode === 'whole' ? { wide: true, shaped: true } : { wide: false, shaped: false }
+      const job = scanJob.current + 1
+      scanJob.current = job
+
+      setError('')
+      setBatchNote('')
+      if (mode === 'whole') {
+        setBusy('scanning the whole image')
+        setProgress(0)
+      }
+      try {
+        const found = workerAvailable()
+          ? await offload().scan(source, options, (fraction) => setProgress(fraction))
+          : { candidates: findOverlays(source, options) }
+
+        // undefined is a cancel, and a stale job is a picture the visitor has
+        // already replaced. Neither is a result, and neither is a failure.
+        if (!found || job !== scanJob.current) return
+        setScan({ raster: source, candidates: found.candidates, mode })
+        // Nothing is ticked by anything but a hand. The wide pass used to arm
+        // every flat candidate, and scan.test.ts records that a patch of smooth
+        // sky reads as one at least as confidently as a real mark does — so the
+        // panel's own "a report, not a verdict" sat beside a loaded button.
+        setTicked(new Set())
+      } catch (cause) {
+        if (job === scanJob.current) {
+          setError(cause instanceof Error ? cause.message : 'the scan failed')
+        }
+      } finally {
+        if (mode === 'whole' && job === scanJob.current) {
+          setBusy('')
+          setProgress(0)
+        }
+      }
+    },
+    [offload],
+  )
 
   useEffect(() => {
     if (canvas.current && raster) paint(canvas.current, raster)
@@ -258,49 +352,67 @@ export function ImageTab() {
   // holding a 28 MB model.
   useEffect(() => () => worker.current?.dispose(), [])
 
-  const accept = useCallback(async (file: File) => {
-    setError('')
-    setBusy('reading')
-    // A scan still running belongs to the file being replaced. The id map keeps
-    // its reply from being mistaken for another job's, but not from being
-    // applied to a picture the visitor has already moved on from.
-    worker.current?.cancel()
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      // Metadata first, always: it is the part that can be removed losslessly.
-      const stripped = await cleanContainer(bytes, file.name)
-      const decoded = await rasterFromBlob(new Blob([bytes as BlobPart]))
+  const accept = useCallback(
+    async (file: File) => {
+      setError('')
+      setBusy('reading')
+      // A scan still running belongs to the file being replaced. The id map keeps
+      // its reply from being mistaken for another job's, but not from being
+      // applied to a picture the visitor has already moved on from.
+      worker.current?.cancel()
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        // Metadata first, always: it is the part that can be removed losslessly.
+        const stripped = await cleanContainer(bytes, file.name)
+        const decoded = await rasterFromBlob(new Blob([bytes as BlobPart]))
 
-      setLoaded({
-        name: file.name,
-        raster: decoded,
-        metadata: [...stripped.findings, ...stripped.preserved],
-        bytes: bytes.length,
-        output: stripped.output,
-        container: stripped.format,
-      })
-      setRaster(decoded)
-      setHistory([])
-      setSelection(undefined)
-      setCommitted(undefined)
-      setCandidates(scanCorners(decoded))
-      setTicked(new Set())
-      setScanned('corners')
-      // Do not change the kind of file someone brought you: a photograph
-      // arrives lossy and leaves lossy, and a screenshot stays a PNG.
-      setFormat(defaultFormat(stripped.format))
-      setQuality(DEFAULT_QUALITY)
-      setKeepOriginal(true)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'that file could not be decoded')
-    } finally {
-      setBusy('')
-    }
-  }, [])
+        setLoaded({
+          name: file.name,
+          raster: decoded,
+          metadata: [...stripped.findings, ...stripped.preserved],
+          bytes: bytes.length,
+          output: stripped.output,
+          container: stripped.format,
+        })
+        setRaster(decoded)
+        setHistory([])
+        setSelection(undefined)
+        setCommitted(undefined)
+        setScan(undefined)
+        setTicked(new Set())
+        // Everything a previous file left on the screen. `batchNote` in
+        // particular is a sentence about regions in another picture entirely.
+        setBatchNote('')
+        setHovered(undefined)
+        setHeavyPrompt('')
+        setAiNote('')
+        // Do not change the kind of file someone brought you: a photograph
+        // arrives lossy and leaves lossy, and a screenshot stays a PNG.
+        setFormat(defaultFormat(stripped.format))
+        setQuality(DEFAULT_QUALITY)
+        setKeepOriginal(true)
+        setBusy('')
+        await runScan(decoded, 'corners')
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'that file could not be decoded')
+      } finally {
+        setBusy('')
+      }
+    },
+    [runScan],
+  )
 
   const apply = useCallback((next: Raster, current: Raster) => {
     setHistory((past) => [...past, current].slice(-UNDO_DEPTH))
     setRaster(next)
+    // A crop moves the origin and a resample moves everything, so a rectangle
+    // drawn against the old picture points somewhere else in the new one. The
+    // candidate list is covered by the scan's own raster; the hand-drawn
+    // selection is not, and it is the one thing here the user placed.
+    if (next.width !== current.width || next.height !== current.height) {
+      setSelection(undefined)
+      setCommitted(undefined)
+    }
   }, [])
 
   /**
@@ -313,13 +425,34 @@ export function ImageTab() {
    * sibling that survives that, and its alpha is the badge's opacity where it
    * is solid rather than an average over mostly-background.
    */
+  const selectedPixels = committed ? committed.width * committed.height : 0
+
   const flat = useMemo(
     () => (raster && committed ? estimateOverlay(raster, committed) : undefined),
     [raster, committed],
   )
+
+  /**
+   * Past this many pixels the shaped model is not run at all.
+   *
+   * The flat estimator walks the rectangle and a ring around it and allocates
+   * nothing; the shaped one is a different order of thing. It holds two
+   * Float64Arrays over the region and four more over its samples — about eighty
+   * bytes a pixel — and re-measures every pixel through a 5x5 window. On a
+   * selection dragged across a twelve-megapixel photograph that is close to a
+   * gigabyte and several seconds, and it happens *during render*, so there is
+   * no indicator, no cancel and no repaint: the tab simply stops.
+   *
+   * The same number the Telea prompt uses, because it is the same judgement —
+   * past here an operation is a wait worth naming rather than starting — and
+   * two thresholds for "this region is large" would be one too many.
+   */
+  const measurable = selectedPixels > 0 && selectedPixels <= HEAVY_SELECTION
+
   const shaped = useMemo(
-    () => (raster && committed && !flat ? estimateShaped(raster, committed) : undefined),
-    [raster, committed, flat],
+    () =>
+      raster && committed && !flat && measurable ? estimateShaped(raster, committed) : undefined,
+    [raster, committed, flat, measurable],
   )
   const estimate = flat ?? shaped
 
@@ -465,32 +598,14 @@ export function ImageTab() {
    * list worth offering to someone who asked for it and worth refusing to
    * volunteer.
    */
-  const runWideScan = useCallback(async () => {
-    if (!raster) return
-    setError('')
-    setBusy('scanning the whole image')
-    setProgress(0)
-    try {
-      const found = workerAvailable()
-        ? await offload().scan(raster, { wide: true, shaped: true }, (fraction) =>
-            setProgress(fraction),
-          )
-        : { candidates: findOverlays(raster, { wide: true, shaped: true }) }
+  const runWideScan = useCallback(() => {
+    if (raster) void runScan(raster, 'whole')
+  }, [raster, runScan])
 
-      if (!found) return
-      setCandidates(found.candidates)
-      // Flat candidates start ticked, shaped ones do not. The difference is
-      // measured, not stylistic: coverage.test.ts records a shaped estimate
-      // that cannot tell a badge from a road sign.
-      setTicked(new Set(found.candidates.filter((c) => c.kind === 'flat').map((c) => keyOf(c))))
-      setScanned('whole')
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'the scan failed')
-    } finally {
-      setBusy('')
-      setProgress(0)
-    }
-  }, [raster, offload])
+  /** Measure again, against the picture as it is now. */
+  const rescan = useCallback(() => {
+    if (raster) void runScan(raster, scanned)
+  }, [raster, scanned, runScan])
 
   const chosen = useMemo(
     () => candidates.filter((candidate) => ticked.has(keyOf(candidate))),
@@ -518,10 +633,14 @@ export function ImageTab() {
 
       if (!outcome) return
       apply(outcome.raster, raster)
+      // The list is withdrawn the moment the pixels change, so without this
+      // there is nothing left on screen saying what just happened. The worker
+      // counts what it actually wrote; the longer sentence is only owed when
+      // that is fewer than the number ticked.
       setBatchNote(
         safe.length < chosen.length
           ? `Removed ${safe.length} of ${chosen.length}. The rest overlapped a region already undone, and inverting a pixel twice damages it more than the mark did.`
-          : '',
+          : outcome.note,
       )
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'the removal failed')
@@ -635,20 +754,40 @@ export function ImageTab() {
     setProgress(0)
   }, [])
 
-  const runUnblend = useCallback(() => {
+  /**
+   * Undo the overlay over the hand-drawn selection.
+   *
+   * Through the batch job rather than through `removeOverlay` directly, and for
+   * one reason: `planRemoval` builds a coverage map for anything the flat model
+   * is not confident about, and a coverage map over a large region is the same
+   * eighty-bytes-a-pixel arithmetic the estimate above is capped for. Run on
+   * the main thread it froze the tab; run here it costs one raster copy and
+   * arrives with a progress bar and a Cancel, like every other operation in the
+   * panel. One region is a batch of one — no second code path.
+   */
+  const runUnblend = useCallback(async () => {
     if (!raster || !estimate) return
-    // The routing lives in remove.ts now, shared with the batch. It used to be
-    // written out here, which was fine while removal was one region at a time
-    // and became a second copy of the same decision the moment it was not.
-    apply(
-      removeOverlay(raster, {
-        ...estimate,
-        kind: flat ? 'flat' : 'shaped',
-        source: 'selection',
-      }),
-      raster,
-    )
-  }, [raster, estimate, flat, apply])
+    const candidate: OverlayCandidate = {
+      ...estimate,
+      kind: flat ? 'flat' : 'shaped',
+      source: 'selection',
+    }
+
+    setError('')
+    setBusy('removing one region')
+    setProgress(0)
+    try {
+      const outcome = workerAvailable()
+        ? await offload().removeAll(raster, [candidate], (fraction) => setProgress(fraction))
+        : { raster: removeOverlay(raster, candidate), note: '' }
+      if (outcome) apply(outcome.raster, raster)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'the removal failed')
+    } finally {
+      setBusy('')
+      setProgress(0)
+    }
+  }, [raster, estimate, flat, apply, offload])
 
   const undo = useCallback(() => {
     const previous = history.at(-1)
@@ -660,7 +799,6 @@ export function ImageTab() {
   const anyDisruption = lowBits || resampleRound || crop || jpeg || noise
   const downloadSize = Math.round((MODEL_BYTES + RUNTIME_BYTES) / 1024 / 1024)
   const working = busy !== ''
-  const selectedPixels = committed ? committed.width * committed.height : 0
 
   const current = measured.get(measureKey(format, quality))
   const asPng = measured.get('png')
@@ -682,13 +820,22 @@ export function ImageTab() {
           }
         >
           {raster ? (
-            <div className="relative">
+            // The frame is on the wrapper, not on the canvas. Tailwind's
+            // preflight makes every box `border-box`, so a 1px border on the
+            // canvas shrinks the drawn picture inside the element while the
+            // boxes below — positioned as percentages of this wrapper — go on
+            // measuring the outer edge. `pointerRect` divides by the same outer
+            // width. The error is nothing at the centre and one CSS pixel at the
+            // rim, which on a 4000px photograph shown at 800 is five raster
+            // pixels of drift at exactly the edge where badges and bands live.
+            // Moving the border out makes the two boxes the same box.
+            <div className="relative overflow-hidden rounded-md border border-[var(--color-rule)]">
               <canvas
                 ref={canvas}
                 // touch-none is load-bearing. Without it the browser claims the
                 // first drag for page scroll and fires pointercancel, and the
                 // feature simply does not exist on a phone.
-                className="w-full touch-none cursor-crosshair rounded-md border border-[var(--color-rule)] bg-[var(--color-panel)]"
+                className="block w-full touch-none cursor-crosshair bg-[var(--color-panel)]"
                 onPointerDown={(event) => {
                   dragStart.current = pointerRect(event, raster)
                   setSelection(undefined)
@@ -988,9 +1135,13 @@ export function ImageTab() {
             aside={
               <span className="tnum font-mono">
                 {scanned === 'whole' ? 'whole image' : '4 corners'} ·{' '}
-                {candidates.length === 0
-                  ? 'nothing'
-                  : `${candidates.length} ${candidates.length === 1 ? 'region' : 'regions'}`}
+                {scan === undefined
+                  ? 'looking'
+                  : stale
+                    ? 'out of date'
+                    : candidates.length === 0
+                      ? 'nothing'
+                      : `${candidates.length} ${candidates.length === 1 ? 'region' : 'regions'}`}
               </span>
             }
           >
@@ -1002,168 +1153,233 @@ export function ImageTab() {
               This lists the regions that measure that way. Nothing here has been changed yet.
             </p>
 
-            {candidates.length > 0 ? (
-              <ul className="divide-y divide-[var(--color-rule)] border-y border-[var(--color-rule)]">
-                {candidates.map((candidate, index) => {
-                  const key = keyOf(candidate)
-                  const previous = candidates[index - 1]
-                  const opensShaped = candidate.kind === 'shaped' && previous?.kind !== 'shaped'
+            {/* Nothing below this line until the automatic pass has come back.
+                It is a worker job now, so it lands a beat after the canvas does
+                — and everything it produces is rendered *above* the wide-scan
+                button, which therefore used to slide down the page under the
+                reader's cursor a moment after appearing. Rendering the panel's
+                body in one commit means the button is in its final place the
+                first time it exists. Measured in Firefox and WebKit, where a
+                click aimed at it landed on the paragraph that had taken its
+                place. */}
+            {scan === undefined ? (
+              <p className="text-xs text-[var(--color-muted)]">
+                Looking in the four corners&hellip;
+              </p>
+            ) : (
+              <>
+                {/* A measurement describes one picture. Once the pixels have moved
+                  the list is withdrawn rather than left on screen greyed out: an
+                  opacity and a rectangle read as facts whatever they are styled
+                  like, and the one action still offered here — unblending the
+                  same region twice — is the one that does the most damage. */}
+                {stale ? (
+                  <div className="border-y border-[var(--color-rule)] py-3">
+                    <p className="text-sm text-[var(--color-bone)]">
+                      These regions were measured before the last edit.
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                      An overlay estimate is a statement about the pixels it was read from, so it is
+                      not shown against pixels it does not describe. Unblending a region a second
+                      time is not a repeat — it inverts what was already recovered, which at 40%
+                      opacity is a hundred levels of damage, worse than the mark was.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={working}
+                      onClick={rescan}
+                      className="mt-3 rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)] disabled:cursor-not-allowed disabled:border-[var(--color-rule)] disabled:text-[var(--color-muted)]"
+                    >
+                      Scan again
+                    </button>
+                  </div>
+                ) : undefined}
 
-                  return (
-                    <li key={key}>
-                      {opensShaped ? (
-                        <p className="pt-3 pb-1 text-xs text-[var(--color-signal)]">
-                          Shaped marks — a glyph rather than a rectangle. Left unticked on purpose:
-                          the same measurement reads a road sign, a page or a lit window exactly as
-                          confidently. Check each against the picture before removing it.
-                        </p>
-                      ) : undefined}
-                      <div
-                        className="flex items-start gap-2.5 py-2.5"
-                        onPointerEnter={() => setHovered(key)}
-                        onPointerLeave={() => setHovered(undefined)}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={ticked.has(key)}
-                          disabled={working}
-                          aria-label={`Include the ${placeOf(candidate.rect, raster)} region`}
-                          onChange={(event) =>
-                            setTicked((current) => {
-                              const next = new Set(current)
-                              if (event.target.checked) next.add(key)
-                              else next.delete(key)
-                              return next
-                            })
-                          }
-                          className="mt-1 h-3.5 w-3.5 shrink-0 appearance-none rounded-sm border border-[var(--color-rule-bright)] transition-colors duration-150 checked:border-[var(--color-signal)] checked:bg-[var(--color-signal)] disabled:opacity-40"
-                        />
+                {candidates.length > 0 ? (
+                  <ul className="divide-y divide-[var(--color-rule)] border-y border-[var(--color-rule)]">
+                    {candidates.map((candidate, index) => {
+                      const key = keyOf(candidate)
+                      const previous = candidates[index - 1]
+                      const opensShaped = candidate.kind === 'shaped' && previous?.kind !== 'shaped'
+
+                      return (
+                        <li key={key}>
+                          {opensShaped ? (
+                            <p className="pt-3 pb-1 text-xs text-[var(--color-signal)]">
+                              Shaped marks — a glyph rather than a rectangle. Left unticked on
+                              purpose: the same measurement reads a road sign, a page or a lit
+                              window exactly as confidently. Check each against the picture before
+                              removing it.
+                            </p>
+                          ) : undefined}
+                          <div
+                            className="flex items-start gap-2.5 py-2.5"
+                            onPointerEnter={() => setHovered(key)}
+                            onPointerLeave={() => setHovered(undefined)}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={ticked.has(key)}
+                              disabled={working}
+                              aria-label={`Include the ${placeOf(candidate.rect, raster)} region`}
+                              onChange={(event) =>
+                                setTicked((current) => {
+                                  const next = new Set(current)
+                                  if (event.target.checked) next.add(key)
+                                  else next.delete(key)
+                                  return next
+                                })
+                              }
+                              className="mt-1 h-3.5 w-3.5 shrink-0 appearance-none rounded-sm border border-[var(--color-rule-bright)] transition-colors duration-150 checked:border-[var(--color-signal)] checked:bg-[var(--color-signal)] disabled:opacity-40"
+                            />
+                            <button
+                              type="button"
+                              disabled={working}
+                              onFocus={() => setHovered(key)}
+                              onBlur={() => setHovered(undefined)}
+                              onClick={() => {
+                                setSelection(candidate.rect)
+                                setCommitted(candidate.rect)
+                              }}
+                              className="min-w-0 flex-1 text-left transition-colors duration-150 hover:text-[var(--color-signal)] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                                <span>{placeOf(candidate.rect, raster)}</span>
+                                <span className="font-mono text-xs text-[var(--color-muted)]">
+                                  {candidate.kind === 'shaped' ? 'shaped' : 'flat'} ·{' '}
+                                  {percent(candidate.alpha)} opaque
+                                </span>
+                              </span>
+                              <span className="tnum mt-0.5 block font-mono text-xs text-[var(--color-muted)]">
+                                {candidate.rect.width}×{candidate.rect.height} at {candidate.rect.x}
+                                ,{candidate.rect.y} · {hex(candidate.color)} ·{' '}
+                                {percent(candidate.confidence)} sure
+                              </span>
+                            </button>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : undefined}
+
+                {/* The two destructive buttons appear once something is ticked, and
+                  not before. Nothing arrives ticked any more, so a permanently
+                  disabled control reading "Unblend all 0 ticked" was the default
+                  state of every picture opened — a label that describes nothing
+                  and an action that cannot be taken. */}
+                {candidates.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {chosen.length > 0 ? (
+                      <>
                         <button
                           type="button"
                           disabled={working}
-                          onFocus={() => setHovered(key)}
-                          onBlur={() => setHovered(undefined)}
-                          onClick={() => {
-                            setSelection(candidate.rect)
-                            setCommitted(candidate.rect)
-                          }}
-                          className="min-w-0 flex-1 text-left transition-colors duration-150 hover:text-[var(--color-signal)] disabled:cursor-not-allowed disabled:opacity-40"
+                          onClick={() => void runRemoveAll()}
+                          className="rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)] disabled:cursor-not-allowed disabled:border-[var(--color-rule)] disabled:text-[var(--color-muted)]"
                         >
-                          <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                            <span>{placeOf(candidate.rect, raster)}</span>
-                            <span className="font-mono text-xs text-[var(--color-muted)]">
-                              {candidate.kind === 'shaped' ? 'shaped' : 'flat'} ·{' '}
-                              {percent(candidate.alpha)} opaque
-                            </span>
-                          </span>
-                          <span className="tnum mt-0.5 block font-mono text-xs text-[var(--color-muted)]">
-                            {candidate.rect.width}×{candidate.rect.height} at {candidate.rect.x},
-                            {candidate.rect.y} · {hex(candidate.color)} ·{' '}
-                            {percent(candidate.confidence)} sure
-                          </span>
+                          Unblend{' '}
+                          {chosen.length === 1
+                            ? 'the ticked region'
+                            : `all ${chosen.length} ticked`}
                         </button>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : undefined}
+                        <button
+                          type="button"
+                          disabled={working}
+                          onClick={() =>
+                            chosenPixels > HEAVY_SELECTION
+                              ? setHeavyPrompt('batch')
+                              : void runInpaintAll()
+                          }
+                          className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Inpaint them instead
+                        </button>
+                      </>
+                    ) : undefined}
+                    <button
+                      type="button"
+                      disabled={working}
+                      onClick={() =>
+                        setTicked(
+                          ticked.size === candidates.length
+                            ? new Set()
+                            : new Set(candidates.map((candidate) => keyOf(candidate))),
+                        )
+                      }
+                      className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors duration-150 hover:text-[var(--color-bone)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {ticked.size === candidates.length ? 'Untick all' : 'Tick all'}
+                    </button>
+                  </div>
+                ) : undefined}
 
-            {candidates.length > 0 ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={working || chosen.length === 0}
-                  onClick={() => void runRemoveAll()}
-                  className="rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)] disabled:cursor-not-allowed disabled:border-[var(--color-rule)] disabled:text-[var(--color-muted)]"
-                >
-                  Unblend{' '}
-                  {chosen.length === 1 ? 'the ticked region' : `all ${chosen.length} ticked`}
-                </button>
-                <button
-                  type="button"
-                  disabled={working || chosen.length === 0}
-                  onClick={() =>
-                    chosenPixels > HEAVY_SELECTION ? setHeavyPrompt('batch') : void runInpaintAll()
-                  }
-                  className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Inpaint them instead
-                </button>
-                <button
-                  type="button"
-                  disabled={working}
-                  onClick={() =>
-                    setTicked(
-                      ticked.size === candidates.length
-                        ? new Set()
-                        : new Set(candidates.map((candidate) => keyOf(candidate))),
-                    )
-                  }
-                  className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors duration-150 hover:text-[var(--color-bone)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {ticked.size === candidates.length ? 'Untick all' : 'Tick all'}
-                </button>
-              </div>
-            ) : undefined}
+                {heavyPrompt === 'batch' ? (
+                  <HeavyPrompt
+                    pixels={chosenPixels}
+                    onRun={() => void runInpaintAll()}
+                    onCancel={() => setHeavyPrompt('')}
+                  />
+                ) : undefined}
 
-            {heavyPrompt === 'batch' ? (
-              <HeavyPrompt
-                pixels={chosenPixels}
-                onRun={() => void runInpaintAll()}
-                onCancel={() => setHeavyPrompt('')}
-              />
-            ) : undefined}
+                {batchNote ? (
+                  <p className="mt-2 text-xs text-[var(--color-signal)]">{batchNote}</p>
+                ) : undefined}
 
-            {batchNote ? (
-              <p className="mt-2 text-xs text-[var(--color-signal)]">{batchNote}</p>
-            ) : undefined}
+                {candidates.length > 0 ? (
+                  <p className="mt-3 text-xs text-[var(--color-muted)]">
+                    Nothing is ticked to begin with. Click a row to select that region on the
+                    picture and adjust its edges by dragging — the estimate is recomputed on
+                    whatever you settle on. Hovering a row outlines it.
+                  </p>
+                ) : undefined}
 
-            <p className="mt-3 text-xs text-[var(--color-muted)]">
-              Click a row to select that region on the picture and adjust its edges by dragging —
-              the estimate is recomputed on whatever you settle on. Hovering a row outlines it.
-            </p>
+                {scanned === 'corners' ? (
+                  <>
+                    <p className="mt-3 text-xs text-[var(--color-muted)]">
+                      The automatic pass looks in the four corners only, for{' '}
+                      <span className="text-[var(--color-bone)]">flat</span> overlays. That is where
+                      generator badges are, and searching only there is what lets it find nothing at
+                      all in a photograph that carries nothing.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={working}
+                      onClick={runWideScan}
+                      className="mt-3 rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Scan the whole image
+                    </button>
+                    <p className="mt-2 text-xs text-[var(--color-muted)]">
+                      Bands across the frame, marks in the middle, and shaped glyphs as well as flat
+                      rectangles. It takes a few seconds and it is much less precise — read the note
+                      it leaves before removing anything.
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-3 text-xs text-[var(--color-signal)]">
+                    A whole-image scan is a report, not a verdict. Over the full frame this
+                    measurement cannot tell an overlay from a genuinely smooth part of the picture:
+                    a patch of sky, a wall, an out-of-focus background reads as a strongly opaque
+                    region — measurably more confidently than some real marks do. Nothing it
+                    proposes is ticked, everything is a place to look, and the ones that are wrong
+                    look exactly like the ones that are right.
+                  </p>
+                )}
 
-            {scanned === 'corners' ? (
-              <>
-                <p className="mt-3 text-xs text-[var(--color-muted)]">
-                  The automatic pass looks in the four corners only, for{' '}
-                  <span className="text-[var(--color-bone)]">flat</span> overlays. That is where
-                  generator badges are, and searching only there is what lets it find nothing at all
-                  in a photograph that carries nothing.
-                </p>
-                <button
-                  type="button"
-                  disabled={working}
-                  onClick={() => void runWideScan()}
-                  className="mt-3 rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Scan the whole image
-                </button>
-                <p className="mt-2 text-xs text-[var(--color-muted)]">
-                  Bands across the frame, marks in the middle, and shaped glyphs as well as flat
-                  rectangles. It takes a few seconds and it is much less precise — read the note it
-                  leaves before removing anything.
-                </p>
+                {/* Only when a scan of *these* pixels came back empty. Printing it
+                  while the list is merely out of date would answer a question
+                  nobody has asked yet. */}
+                {fresh && candidates.length === 0 ? (
+                  <p className="mt-3 text-xs text-[var(--color-muted)]">
+                    Nothing measured as a flat overlay. That is not the same as &ldquo;this image is
+                    clean&rdquo;: a mark that is a shaped glyph, one that covers the whole picture
+                    evenly, or one encoded in the pixel values rather than drawn on top would all
+                    leave this empty. Drag a box around anything you can see.
+                  </p>
+                ) : undefined}
               </>
-            ) : (
-              <p className="mt-3 text-xs text-[var(--color-signal)]">
-                A whole-image scan is a report, not a verdict. Over the full frame this measurement
-                cannot tell an overlay from a genuinely smooth part of the picture: a patch of sky,
-                a wall, an out-of-focus background reads as a strongly opaque region — measurably
-                more confidently than some real marks do. Everything above is a place to look, and
-                the ones that are wrong look exactly like the ones that are right.
-              </p>
             )}
-
-            {candidates.length === 0 ? (
-              <p className="mt-3 text-xs text-[var(--color-muted)]">
-                Nothing measured as a flat overlay. That is not the same as &ldquo;this image is
-                clean&rdquo;: a mark that is a shaped glyph, one that covers the whole picture
-                evenly, or one encoded in the pixel values rather than drawn on top would all leave
-                this empty. Drag a box around anything you can see.
-              </p>
-            ) : undefined}
           </Section>
         ) : undefined}
 
@@ -1193,10 +1409,18 @@ export function ImageTab() {
                     : 'This reads as a shaped mark rather than a flat rectangle: a glyph with an antialiased edge, and picture in between. The opacity above is where it is solid. Unblending measures the coverage per pixel and inverts each one by its own alpha, so the parts the mark never touched are left alone.'}
                 </p>
               </div>
-            ) : (
+            ) : measurable ? (
               <p className="mb-4 text-xs text-[var(--color-muted)]">
                 No overlay detected here. Either there is none, or it is not one colour at one
                 opacity — inpainting is the option then, and it invents what it fills.
+              </p>
+            ) : (
+              <p className="mb-4 text-xs text-[var(--color-muted)]">
+                This region is {selectedPixels.toLocaleString()} pixels, and the flat model found no
+                overlay in it. The per-pixel model that would run next holds about eighty bytes for
+                every pixel and re-measures each one through its neighbours, which over a region
+                this size is a wait with nothing to show for it — the alpha it would report is an
+                average over mostly picture. Select the mark rather than the frame, or inpaint.
               </p>
             )}
 
@@ -1204,7 +1428,7 @@ export function ImageTab() {
               <button
                 type="button"
                 disabled={!estimate || working}
-                onClick={runUnblend}
+                onClick={() => void runUnblend()}
                 className="rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)] disabled:cursor-not-allowed disabled:border-[var(--color-rule)] disabled:text-[var(--color-muted)]"
               >
                 Unblend

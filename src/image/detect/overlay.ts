@@ -346,7 +346,15 @@ export function refineRect(
 
     for (let n = 1; n <= span; n += 1) {
       const line = start + step * n
-      if (line < 1 || line >= (vertical ? raster.width : raster.height) - 1) break
+      // The picture's own edge is a legitimate answer, and it used to be
+      // excluded: the walk stopped before column 0 and before `width - 1`, so
+      // an overlay flush against a side came back one line short and unblending
+      // left that line still tinted. A caption scrim across the bottom of a
+      // frame is precisely the shape the wide scan was added to find, and
+      // precisely the shape this cost a row of. `lineDetail` reads at 0 and at
+      // `dim - 1` without going out of bounds — it stops on its own when the
+      // pair it needs would.
+      if (line < 0 || line >= (vertical ? raster.width : raster.height)) break
 
       // Sample the line across a window centred on the region, not its whole
       // length: the far end of a long line has already left the overlay.
@@ -457,8 +465,16 @@ export function findCornerOverlays(raster: Raster): OverlayEstimate[] {
     // flat is around here"; the refined rectangle is what the user is offered
     // and what unblending will actually be applied to, so the alpha reported
     // has to be the alpha of that region.
+    //
+    // Which is why a refusal keeps the probe, rectangle and all. The fallback
+    // used to be `{ ...probe, rect: snapped }` — the probe's alpha, colour and
+    // confidence grafted onto a rectangle nothing had measured, which is the
+    // one thing the paragraph above forbids. Measured on a 400px picture with a
+    // 50px badge in the corner: a 48x48 probe snapped to 12x26, and the panel
+    // was offered that twentieth of the mark carrying the whole probe's
+    // numbers. Unblending it leaves the badge where it was.
     const snapped = refineRect(raster, rect)
-    const estimate = estimateOverlay(raster, snapped) ?? { ...probe, rect: snapped }
+    const estimate = estimateOverlay(raster, snapped) ?? probe
     if (estimate.alpha >= 0.12) found.push(estimate)
   }
 

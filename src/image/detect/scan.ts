@@ -97,8 +97,12 @@ const KEEP_ALPHA = 0.12
 /**
  * How many proposals survive the coarse pass into full-resolution measurement.
  *
- * A cap, and it is reported rather than applied silently: a scan that quietly
- * dropped the 25th region would read as "there were 24".
+ * A cap on where to look, not on what was found: roughly a hundred probes are
+ * proposed over a frame and the strongest two dozen are measured properly. It
+ * is worth being clear that this is not reported anywhere, because it does not
+ * bound the result — a region dropped here was ranked below twenty-four others
+ * on the same picture, and saying "24 of 110 places were measured" would be a
+ * number about the search rather than about the image.
  */
 const SHORTLIST = 24
 
@@ -172,6 +176,28 @@ export const proxyFactor = (raster: Raster): number =>
   Math.max(1, Math.floor(Math.max(raster.width, raster.height) / PROXY_EDGE))
 
 /**
+ * A rectangle measured on the proxy, back in the full picture's coordinates.
+ *
+ * Multiplying by the factor is not enough, because `shrink` floors: a 2201-wide
+ * picture at factor 2 has a 1100-wide proxy, and 1100 x 2 is 2200. A probe that
+ * ran to the proxy's own edge therefore comes back one pixel short of the real
+ * one — and a band freezes exactly that extent when it is refined, so nothing
+ * downstream recovers it. The last column of a full-width scrim stayed marked.
+ *
+ * So an edge on the proxy is carried across as an edge: a probe that reached
+ * the proxy's boundary reaches the raster's.
+ */
+function enlarge(rect: Rect, factor: number, proxy: Raster, raster: Raster): Rect {
+  const left = rect.x === 0 ? 0 : rect.x * factor
+  const top = rect.y === 0 ? 0 : rect.y * factor
+  const right = rect.x + rect.width >= proxy.width ? raster.width : (rect.x + rect.width) * factor
+  const bottom =
+    rect.y + rect.height >= proxy.height ? raster.height : (rect.y + rect.height) * factor
+
+  return clampRect({ x: left, y: top, width: right - left, height: bottom - top }, raster)
+}
+
+/**
  * Everywhere outside the corners that is worth a look.
  *
  * Three families, each for a shape the corner scan cannot express: bands that
@@ -242,15 +268,33 @@ export function wideCandidates(raster: Raster): Probe[] {
  * Suppress candidates that describe the same region, keeping the strongest.
  *
  * Ranked by `confidence * alpha`, the same score `bestPerCorner` uses, so one
- * notion of "strongest" exists in this codebase rather than two.
+ * notion of "strongest" exists in this codebase rather than two — but *within a
+ * kind*. Across the two models the ranking is not a score at all: a flat
+ * candidate is the case whose inverse is exact, and a shaped one is the
+ * median-based fallback that coverage.ts records cannot tell a badge from a
+ * road sign. A region the flat model can describe does not need describing
+ * again, less exactly, however confident the fallback is about it.
+ *
+ * That is why this sorts flat first. It used to sort by score alone, and
+ * `findOverlays` merged twice to compensate — once over the flat tier, then
+ * over flat-plus-shaped keeping only the shaped. A shaped candidate that
+ * outscored a flat one it overlapped suppressed the flat one *inside that
+ * second call* and survived the filter, while the first call's flat list was
+ * emitted anyway: both came back, one set of pixels described twice at two
+ * different opacities, and ticking both handed `disjoint` a pair it dropped
+ * half of with a note the reader had no way to explain.
  *
  * Two predicates, because one is not enough. Containment is what folds a scale
  * pyramid: probing one band at four sizes leaves fragments wholly inside the
  * largest whose IoU against it is under 0.25. IoU is what keeps two same-sized
  * neighbours — the tiles of a repeating watermark — from being merged into one.
  */
+const RANK: Record<OverlayCandidate['kind'], number> = { flat: 0, shaped: 1 }
+
 export function mergeCandidates(candidates: readonly OverlayCandidate[]): OverlayCandidate[] {
-  const ranked = [...candidates].sort((a, b) => b.confidence * b.alpha - a.confidence * a.alpha)
+  const ranked = [...candidates].sort(
+    (a, b) => RANK[a.kind] - RANK[b.kind] || b.confidence * b.alpha - a.confidence * a.alpha,
+  )
   const kept: OverlayCandidate[] = []
 
   for (const candidate of ranked) {
@@ -300,15 +344,7 @@ export function scanCorners(raster: Raster): OverlayCandidate[] {
   return found
 }
 
-/**
- * Everything the scan can propose, strongest first, flat before shaped.
- *
- * Ordering is not cosmetic. The flat tier is a model that finds nothing in an
- * unmarked photograph; the shaped tier is a model that cannot tell a badge from
- * a road sign — coverage.test.ts holds both numbers. Interleaving them by score
- * would put a proposal of the second kind above one of the first and hide the
- * only distinction that matters.
- */
+/** Strongest first, by the one score this file uses. Kind is ordered outside. */
 const sortByStrength = (candidates: readonly OverlayCandidate[]) =>
   [...candidates].sort((a, b) => b.confidence * b.alpha - a.confidence * a.alpha)
 
@@ -329,18 +365,7 @@ function shortlistWide(raster: Raster, hooks: ScanHooks): Probe[] {
     const estimate = estimateOverlay(proxy, probe.rect)
     if (estimate && estimate.confidence >= COARSE_CONFIDENCE && estimate.alpha >= COARSE_ALPHA) {
       promising.push({
-        probe: {
-          ...probe,
-          rect: clampRect(
-            {
-              x: probe.rect.x * factor,
-              y: probe.rect.y * factor,
-              width: probe.rect.width * factor,
-              height: probe.rect.height * factor,
-            },
-            raster,
-          ),
-        },
+        probe: { ...probe, rect: enlarge(probe.rect, factor, proxy, raster) },
         score: estimate.confidence * estimate.alpha,
       })
     }
@@ -383,13 +408,13 @@ export function findOverlays(
     hooks.onProgress?.(0.5 + ((index + 1) / Math.max(1, probes.length)) * 0.5)
   })
 
-  const flat = mergeCandidates(found.filter((candidate) => candidate.kind === 'flat'))
-  // Shaped candidates are merged against the flat ones as well: a region
-  // already described exactly does not need describing again, less exactly.
-  const shaped = mergeCandidates([
-    ...flat,
-    ...found.filter((candidate) => candidate.kind === 'shaped'),
-  ]).filter((candidate) => candidate.kind === 'shaped')
+  // One merge over both tiers, not one per tier and then a second across them.
+  // `mergeCandidates` ranks flat ahead of shaped, so a region the flat model
+  // already describes exactly is not described again, less exactly — which is
+  // what the two-call version was reaching for and did not achieve.
+  const merged = mergeCandidates(found)
+  const flat = merged.filter((candidate) => candidate.kind === 'flat')
+  const shaped = merged.filter((candidate) => candidate.kind === 'shaped')
 
   // Unconditionally, and at the end. The coarse pass can shortlist nothing at
   // all — which is the right answer on a clean picture — and the loop that

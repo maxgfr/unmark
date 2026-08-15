@@ -128,11 +128,29 @@ test.describe('the overlay scan', () => {
     await expect(page.locator('canvas')).toBeVisible()
   }
 
+  const overlayPanel = (page: import('@playwright/test').Page) =>
+    page.locator('section', { has: page.getByRole('heading', { name: 'Overlay scan' }) })
+
+  /**
+   * Run the wide scan and wait for it to have actually landed.
+   *
+   * Not `toContainText('whole image')`: the button that starts the scan is
+   * labelled "Scan the whole image", so that assertion is satisfied before the
+   * click has done anything and a test can go on to count rows that are not
+   * there yet. The button itself is only rendered while the panel is still in
+   * corner mode, so its disappearance is the honest signal.
+   */
+  const wideScan = async (page: import('@playwright/test').Page) => {
+    const panel = overlayPanel(page)
+    const button = panel.getByRole('button', { name: 'Scan the whole image' })
+    await button.click()
+    await expect(button).toHaveCount(0, { timeout: 60_000 })
+    return panel
+  }
+
   test('says what it looked at, and says an empty result is not a clean bill', async ({ page }) => {
     await loadBanded(page)
-    const panel = page.locator('section', {
-      has: page.getByRole('heading', { name: 'Overlay scan' }),
-    })
+    const panel = overlayPanel(page)
 
     // The aside used to read "nothing flat in the corners", which a reader takes
     // as "no watermark here".
@@ -142,12 +160,7 @@ test.describe('the overlay scan', () => {
 
   test('finds a full-width band once the whole image is scanned', async ({ page }) => {
     await loadBanded(page)
-    const panel = page.locator('section', {
-      has: page.getByRole('heading', { name: 'Overlay scan' }),
-    })
-
-    await panel.getByRole('button', { name: 'Scan the whole image' }).click()
-    await expect(panel).toContainText('whole image', { timeout: 60_000 })
+    const panel = await wideScan(page)
 
     // Named by where it is, not only by its coordinates — the change that makes
     // the list mean something next to the picture.
@@ -158,11 +171,7 @@ test.describe('the overlay scan', () => {
 
   test('draws every proposed region on the picture', async ({ page }) => {
     await loadBanded(page)
-    const panel = page.locator('section', {
-      has: page.getByRole('heading', { name: 'Overlay scan' }),
-    })
-    await panel.getByRole('button', { name: 'Scan the whole image' }).click()
-    await expect(panel).toContainText('whole image', { timeout: 60_000 })
+    const panel = await wideScan(page)
 
     // One outline per row. Without these the list is coordinates with nothing
     // to point at.
@@ -171,22 +180,79 @@ test.describe('the overlay scan', () => {
     expect(await page.locator('canvas ~ div[aria-hidden]').count()).toBe(rows)
   })
 
+  test('proposes nothing already ticked', async ({ page }) => {
+    await loadBanded(page)
+    const panel = await wideScan(page)
+
+    // The wide pass used to arrive with every flat candidate ticked, and
+    // scan.test.ts records that a patch of smooth sky reads as one at least as
+    // confidently as a real mark. So the panel's own "a report, not a verdict"
+    // sat beside a loaded button. Removal is a decision now, taken by hand.
+    const boxes = panel.locator('input[type=checkbox]')
+    expect(await boxes.count()).toBeGreaterThan(0)
+    for (const box of await boxes.all()) await expect(box).not.toBeChecked()
+    await expect(panel.getByRole('button', { name: /^Unblend/ })).toHaveCount(0)
+  })
+
   test('removes every ticked region in one action and one undo', async ({ page }) => {
     await loadBanded(page)
-    const panel = page.locator('section', {
-      has: page.getByRole('heading', { name: 'Overlay scan' }),
-    })
-    await panel.getByRole('button', { name: 'Scan the whole image' }).click()
-    await expect(panel).toContainText('whole image', { timeout: 60_000 })
+    const panel = await wideScan(page)
 
     const undo = page.getByRole('button', { name: 'Undo' })
     await expect(undo).toBeDisabled()
 
+    await panel.getByRole('button', { name: 'Tick all' }).click()
     await panel.getByRole('button', { name: /^Unblend/ }).click()
     // One undo step for the whole batch, not one per region.
     await expect(undo).toBeEnabled({ timeout: 60_000 })
     await undo.click()
     await expect(undo).toBeDisabled()
+  })
+
+  test('withdraws the list once the pixels have changed, and offers to measure again', async ({
+    page,
+  }) => {
+    // The defect this whole panel was rebuilt around. The region list was free
+    // state, written when a file was opened and when the wide scan ran, and by
+    // nothing else — so after an unblend the boxes stayed drawn over pixels
+    // that had already been recovered, the rows went on quoting the opacity of
+    // an image that no longer existed, and the tick survived. One more click
+    // inverted the same pixels a second time, which remove.ts puts at a hundred
+    // levels of damage: worse than the mark was.
+    await loadBanded(page)
+    const panel = await wideScan(page)
+
+    await panel.getByRole('button', { name: 'Tick all' }).click()
+    await panel.getByRole('button', { name: /^Unblend/ }).click()
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 60_000 })
+
+    // No rows, no outlines, and nothing left to press twice.
+    await expect(panel).toContainText('measured before the last edit')
+    await expect(panel.locator('input[type=checkbox]')).toHaveCount(0)
+    await expect(page.locator('canvas ~ div[aria-hidden]')).toHaveCount(0)
+    await expect(panel.getByRole('button', { name: /^Unblend/ })).toHaveCount(0)
+
+    // And a way back: measure these pixels, rather than trust the old numbers.
+    await panel.getByRole('button', { name: 'Scan again' }).click()
+    await expect(panel).not.toContainText('measured before the last edit', { timeout: 60_000 })
+  })
+
+  test('undo makes the scan current again rather than merely plausible', async ({ page }) => {
+    await loadBanded(page)
+    const panel = await wideScan(page)
+
+    const rows = await panel.locator('input[type=checkbox]').count()
+    await panel.getByRole('button', { name: 'Tick all' }).click()
+    await panel.getByRole('button', { name: /^Unblend/ }).click()
+
+    const undo = page.getByRole('button', { name: 'Undo' })
+    await expect(undo).toBeEnabled({ timeout: 60_000 })
+    await undo.click()
+
+    // Freshness is object identity, so undoing the edit restores the exact
+    // pixels the scan was read from — the list is valid again with no rescan.
+    await expect(panel).not.toContainText('measured before the last edit')
+    await expect(panel.locator('input[type=checkbox]')).toHaveCount(rows)
   })
 })
 

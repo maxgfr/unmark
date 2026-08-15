@@ -242,7 +242,14 @@ for (const shot of shots) {
   })
   await page.waitForSelector('canvas', { timeout: 5000 })
 
-  const candidates = page.locator('button', { hasText: /α \d+%/ })
+  // The corner scan is a worker job now, so the list arrives a beat after the
+  // canvas does rather than with it.
+  const candidates = page.locator('button', { hasText: /\d+% opaque/ })
+  try {
+    await candidates.first().waitFor({ timeout: 10_000 })
+  } catch {
+    /* Reported as a problem below, with the count. */
+  }
   const found = await candidates.count()
   if (found === 0) problems.push('image: the corner scan found no overlay in a marked picture')
 
