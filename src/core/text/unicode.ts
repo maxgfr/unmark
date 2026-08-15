@@ -17,6 +17,7 @@ import { trailingCarrierRuns } from './stego.ts'
 import { humanise } from './humanise.ts'
 import { normaliseTypography } from './typography.ts'
 import { cleanProvenance } from './provenance.ts'
+import { rebase, splice, through, type Splice } from './frame.ts'
 
 export interface TextOptions {
   /**
@@ -344,7 +345,11 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
 
   const findings: Finding[] = []
   const preserved: Finding[] = []
-  const out: string[] = []
+  // What the walk changes, rather than the string it produces. Recording the
+  // edits instead of accumulating one array element per character is both
+  // cheaper and the thing the frame is built from, so the text and the map of
+  // where it came from cannot be assembled by two loops that disagree.
+  const walk: Splice[] = []
 
   let index = 0
   while (index < text.length) {
@@ -364,14 +369,18 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
         label: `${uPlus(point)} ${carrier.name}`,
         evidence: contextAround(text, index, width),
         ...(reason ? { preserved: reason } : {}),
+        // Only the carrier that is actually coming off gets a replacement. An
+        // emoji joiner holding a family together is kept because removing it
+        // would be wrong, and a field saying what to write in its place would
+        // invite an interface to offer exactly that.
+        ...(reason ? {} : { replacement: carrier.replacement }),
       }
 
       if (reason) {
         preserved.push(finding)
-        out.push(text.slice(index, index + width))
       } else {
         findings.push(finding)
-        out.push(carrier.replacement)
+        walk.push({ start: index, end: index + width, to: carrier.replacement })
       }
 
       index += width
@@ -387,23 +396,36 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
         length: width,
         label: `${uPlus(point)} looks like "${latin}" but is not`,
         evidence: contextAround(text, index, width),
+        replacement: latin,
       })
-      out.push(latin)
+      walk.push({ start: index, end: index + width, to: latin })
       index += width
       continue
     }
 
-    out.push(text.slice(index, index + width))
     index += width
   }
 
-  // Trailing tabs and spaces last, and on the assembled output rather than
-  // inside the walk: they are ordinary characters, so they cannot live in the
-  // carrier table, and it takes the whole document to tell a SNOW-style
-  // alphabet from an editor that does not trim line ends.
-  const cleaned = stripTrailingCarriers(out.join(''))
-  findings.push(...cleaned.findings)
-  let output = cleaned.output
+  // Every pass reports offsets into the string it was handed, and this is the
+  // only place that hands one pass another's output. So this is the only place
+  // that has to put them back into one frame, and `rebase` is how: each pass's
+  // findings are read back through the frame that was standing when it was
+  // called, before that frame moves on.
+  //
+  // It used to be a documented compromise — later passes' offsets addressed an
+  // intermediate string and everything was sorted together as though they
+  // shared a frame. Being eighty-eight characters out is invisible in a printed
+  // column of numbers and is not invisible when an offset has to select a span
+  // in a textarea.
+  let stage = splice(text, walk)
+
+  // Trailing tabs and spaces on the assembled output rather than inside the
+  // walk: they are ordinary characters, so they cannot live in the carrier
+  // table, and it takes the whole document to tell a SNOW-style alphabet from
+  // an editor that does not trim line ends.
+  const trailing = trailingRuns(stage.text)
+  findings.push(...trailing.findings.map((finding) => rebase(stage.frame, finding)))
+  stage = splice(stage.text, trailing.splices, stage.frame)
 
   // Chat-window residue: tracking parameters on cited links, citation glyphs.
   // Unlike the two passes below, this is not a style choice and is not opt-in.
@@ -411,21 +433,10 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
   // the destination site when the link is followed, which puts it in the same
   // category as an EXIF author field rather than in the same category as an
   // em dash.
-  const provenance = cleanProvenance(output)
-  output = provenance.output
-  findings.push(...provenance.findings)
+  const provenance = cleanProvenance(stage.text)
+  findings.push(...provenance.findings.map((finding) => rebase(stage.frame, finding)))
+  stage = splice(stage.text, provenance.splices, stage.frame)
 
-  // A note on the offsets from here down, because it is a real compromise and
-  // not an oversight. Everything above indexes the document as it arrived. The
-  // two passes below run on the output of those edits, so their offsets address
-  // an intermediate string — and all of them are then sorted together by
-  // position as though they shared one frame. They differ only by whatever the
-  // carrier and provenance passes removed, which is usually a handful of
-  // characters, and the alternative is re-running both passes on the original
-  // and mapping every edit back through a shift table for a report that is read
-  // by eye. The same trade is made and documented between the markup and text
-  // passes in container/index.ts.
-  //
   // The two style passes always *run*, and only apply when asked.
   //
   // Reporting them unconditionally is the same rule the rest of the tool
@@ -435,48 +446,58 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
   //
   // Neither removes a mark. Punctuation and boilerplate are how the prose
   // reads, not what is hidden inside it.
-  for (const pass of [
-    { on: options?.humanise ?? false, run: humanise },
-    { on: options?.typography ?? false, run: normaliseTypography },
-  ]) {
-    const result = pass.run(output)
-    if (pass.on) {
-      output = result.output
-      findings.push(...result.findings)
-    } else {
-      for (const finding of result.findings) {
+  //
+  // Unrolled rather than looped over the pair, because which string typography
+  // is handed depends on whether humanise applied, and a loop variable hid that.
+  const collect = (found: readonly Finding[], applied: boolean) => {
+    for (const finding of found.map((f) => rebase(stage.frame, f))) {
+      if (applied) findings.push(finding)
+      else {
         finding.available = 'style, not a mark — enable the option to apply it'
         preserved.push(finding)
       }
     }
   }
 
+  const boilerplate = humanise(stage.text)
+  collect(boilerplate.findings, options?.humanise ?? false)
+  if (options?.humanise) {
+    stage = { text: boilerplate.output, frame: through(stage.frame, boilerplate.frame) }
+  }
+
+  const punctuation = normaliseTypography(stage.text)
+  collect(punctuation.findings, options?.typography ?? false)
+  // No frame composed here: nothing runs after typography, so nothing would
+  // read it. The day something does, this is the line that has to change.
+  const output = options?.typography ? punctuation.output : stage.text
+
   return { output, findings, preserved }
 }
 
-function stripTrailingCarriers(text: string): { output: string; findings: Finding[] } {
+/**
+ * One finding per run, not one for the lot of them.
+ *
+ * This used to fold the runs into a single finding whose `offset` was the first
+ * run's and whose `length` was the sum of all of them — a span that delimits
+ * nothing, since the runs sit on different lines with the text of those lines
+ * in between. It read fine as a sentence and selected the wrong forty-eight
+ * characters the moment anything tried to use it. `collapseRuns` folds these
+ * back into one row for display, which is what it is for.
+ */
+function trailingRuns(text: string): { findings: Finding[]; splices: Splice[] } {
   const runs = trailingCarrierRuns(text)
-  if (runs.length === 0) return { output: text, findings: [] }
 
-  let output = text
-  for (const run of [...runs].reverse()) {
-    output = output.slice(0, run.index) + output.slice(run.index + run.length)
-  }
-
-  const total = runs.reduce((sum, run) => sum + run.length, 0)
-  const first = runs[0]
   return {
-    output,
-    findings: [
-      {
-        kind: 'space',
-        verdict: 'confirmed',
-        offset: first?.index ?? 0,
-        length: total,
-        label: `${total} trailing tabs and spaces across ${runs.length} line ends`,
-        evidence: 'a two-symbol alphabet parked past the end of each line — the SNOW scheme',
-      },
-    ],
+    findings: runs.map((run) => ({
+      kind: 'space',
+      verdict: 'confirmed',
+      offset: run.index,
+      length: run.length,
+      label: `A run of trailing tabs and spaces at a line end`,
+      evidence: 'a two-symbol alphabet parked past the end of each line — the SNOW scheme',
+      replacement: '',
+    })),
+    splices: runs.map((run) => ({ start: run.index, end: run.index + run.length, to: '' })),
   }
 }
 

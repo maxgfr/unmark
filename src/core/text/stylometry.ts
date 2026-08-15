@@ -627,6 +627,11 @@ export function stylometryFindings(text: string): Finding[] {
     verdict,
     offset: 0,
     length: text.length,
+    // Said in the type rather than only in the comment above. The two numbers
+    // read exactly like a position, and a reader who clicks one would have the
+    // whole document selected as though every character of it were the tell.
+    scope: 'document' as const,
+    noFix: 'needs the sentences rewritten — no substitution is the right one',
     label: `${metric.label}: ${round(metric.value)} (${metric.detail})`,
     evidence:
       signals >= 3

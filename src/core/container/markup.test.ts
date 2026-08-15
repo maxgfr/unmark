@@ -84,7 +84,7 @@ describe('cleanHtml', () => {
 describe('cleanMarkdown', () => {
   it('does nothing to a document with no frontmatter', () => {
     const md = '# Title\n\nSome prose.\n'
-    expect(cleanMarkdown(md)).toEqual({ output: md, findings: [] })
+    expect(cleanMarkdown(md)).toEqual({ output: md, findings: [], splices: [] })
   })
 
   it('removes AI provenance keys and keeps the rest of the frontmatter', () => {
@@ -107,7 +107,7 @@ describe('cleanMarkdown', () => {
 
   it('leaves frontmatter that has nothing to do with provenance', () => {
     const md = '---\ntitle: x\ntags: [a, b]\n---\n\nBody.'
-    expect(cleanMarkdown(md)).toEqual({ output: md, findings: [] })
+    expect(cleanMarkdown(md)).toEqual({ output: md, findings: [], splices: [] })
   })
 
   it('does not touch a "model:" line in the body', () => {

@@ -36,6 +36,7 @@
 
 import type { Finding } from '../report.ts'
 import { blocksOf, isSealed, protectedMask } from './regions.ts'
+import { identity, splice, type Frame } from './frame.ts'
 
 export interface Rule {
   pattern: RegExp
@@ -556,6 +557,17 @@ const PREDICATE_COMPOUNDS = new RegExp(
 export interface HumaniseResult {
   output: string
   findings: Finding[]
+  /**
+   * Where each character of `output` came from in `text`.
+   *
+   * This pass is the only one that edits more than it reports: after applying
+   * its own edits it tidies the seams, closing a doubled space and recapitalising
+   * a word that lost its sentence head. None of that appears in a finding, so a
+   * caller reconstructing the map from `offset` and `replacement` would be
+   * silently off by those characters — and this is the last pass in the pipe,
+   * so it is the one whose offsets travel furthest.
+   */
+  frame: Frame
 }
 
 /** Restore the original's leading case, so a sentence still starts with a capital. */
@@ -599,32 +611,33 @@ const overlaps = (edits: readonly Edit[], start: number, end: number): boolean =
  * damage was invisible in the diff of a prose paragraph and total in a
  * technical document. This only ever looks at the join.
  */
-function tidySeam(text: string, at: number): { text: string; shift: number } {
-  let output = text
+export function tidySeam(text: string, frame: Frame, at: number): { text: string; frame: Frame } {
+  // Each of the four repairs below is a splice, and each goes through the same
+  // splicer the rest of the pipeline uses so the frame travels with the string
+  // rather than beside it. The conditions still read the current text exactly
+  // as they did, so there is no logic change here and nowhere for one to hide.
+  let stage = { text, frame }
   let index = at
-  let shift = 0
 
   // Two horizontal spaces where a phrase used to be.
   while (
     index > 0 &&
-    index < output.length &&
-    /[^\S\n]/.test(output[index - 1] as string) &&
-    /[^\S\n]/.test(output[index] as string)
+    index < stage.text.length &&
+    /[^\S\n]/.test(stage.text[index - 1] as string) &&
+    /[^\S\n]/.test(stage.text[index] as string)
   ) {
-    output = output.slice(0, index) + output.slice(index + 1)
-    shift -= 1
+    stage = splice(stage.text, [{ start: index, end: index + 1, to: '' }], stage.frame)
   }
 
   // A space left stranded before the punctuation that followed the deletion.
   if (
     index > 0 &&
-    index < output.length &&
-    /[^\S\n]/.test(output[index - 1] as string) &&
-    /[,.;:!?]/.test(output[index] as string)
+    index < stage.text.length &&
+    /[^\S\n]/.test(stage.text[index - 1] as string) &&
+    /[,.;:!?]/.test(stage.text[index] as string)
   ) {
-    output = output.slice(0, index - 1) + output.slice(index)
+    stage = splice(stage.text, [{ start: index - 1, end: index, to: '' }], stage.frame)
     index -= 1
-    shift -= 1
   }
 
   // A deletion that took the head of a sentence leaves the next word in lower
@@ -632,30 +645,28 @@ function tidySeam(text: string, at: number): { text: string; shift: number } {
   // sound." — grammatically wrong in a pass whose whole claim is that it only
   // makes changes with one right answer.
   let before = index - 1
-  while (before >= 0 && /[^\S\n]/.test(output[before] as string)) before -= 1
-  const opensSentence = before < 0 || /[.!?\n]/.test(output[before] as string)
-  if (opensSentence && index < output.length && /[a-z]/.test(output[index] as string)) {
-    output =
-      output.slice(0, index) + (output[index] as string).toUpperCase() + output.slice(index + 1)
+  while (before >= 0 && /[^\S\n]/.test(stage.text[before] as string)) before -= 1
+  const opensSentence = before < 0 || /[.!?\n]/.test(stage.text[before] as string)
+  if (opensSentence && index < stage.text.length && /[a-z]/.test(stage.text[index] as string)) {
+    const upper = (stage.text[index] as string).toUpperCase()
+    stage = splice(stage.text, [{ start: index, end: index + 1, to: upper }], stage.frame)
   }
 
   // A whole paragraph removed leaves a stack of blank lines, which reads as a
   // formatting mistake rather than as a deletion.
   let runStart = index
-  while (runStart > 0 && /[\n\r\t ]/.test(output[runStart - 1] as string)) runStart -= 1
+  while (runStart > 0 && /[\n\r\t ]/.test(stage.text[runStart - 1] as string)) runStart -= 1
   let runEnd = index
-  while (runEnd < output.length && /[\n\r\t ]/.test(output[runEnd] as string)) runEnd += 1
-  const run = output.slice(runStart, runEnd)
-  if ((run.match(/\n/g)?.length ?? 0) >= 3) {
-    output = output.slice(0, runStart) + '\n\n' + output.slice(runEnd)
-    shift += 2 - (runEnd - runStart)
+  while (runEnd < stage.text.length && /[\n\r\t ]/.test(stage.text[runEnd] as string)) runEnd += 1
+  if ((stage.text.slice(runStart, runEnd).match(/\n/g)?.length ?? 0) >= 3) {
+    stage = splice(stage.text, [{ start: runStart, end: runEnd, to: '\n\n' }], stage.frame)
   }
 
-  return { text: output, shift }
+  return stage
 }
 
 export function humanise(text: string): HumaniseResult {
-  if (text.length === 0) return { output: text, findings: [] }
+  if (text.length === 0) return { output: text, findings: [], frame: identity(0) }
 
   const mask = protectedMask(text)
   const edits: Edit[] = []
@@ -762,54 +773,60 @@ export function humanise(text: string): HumaniseResult {
     if (!overlaps(edits, edit.start, edit.end)) edits.push(edit)
   }
 
-  if (edits.length === 0) return { output: text, findings: [] }
+  if (edits.length === 0) return { output: text, findings: [], frame: identity(text.length) }
   edits.sort((a, b) => a.start - b.start)
 
-  // Apply left to right, tracking where each join lands in the output so the
-  // seam tidy can be local instead of global.
+  // One finding per edit, not one per rule with a count on it.
+  //
+  // The count version threw away the three things it already had — where the
+  // phrase is, how long it is, and what it becomes — and reported `offset: 0,
+  // length: text.length` instead. That is fine for a line of terminal output
+  // and useless to anything that wants to show the reader the phrase or replace
+  // that one. `collapseRuns` puts the count back for display, keyed on the
+  // label, so the report still reads `8 × filler` above six of them.
   const findings: Finding[] = []
-  const counts = new Map<string, number>()
-  let output = ''
-  let read = 0
+  // Where each deletion's join lands in the output, so the seam tidy can be
+  // local instead of global. Tracked as a drift rather than by assembling the
+  // string here: the string itself is spliced in one call below.
   const seams: number[] = []
+  let drift = 0
 
   for (const edit of edits) {
-    output += text.slice(read, edit.start) + edit.to
-    read = edit.end
-    if (edit.to.length === 0) seams.push(output.length)
+    const at = edit.start - drift + edit.to.length
+    drift += edit.end - edit.start - edit.to.length
+    if (edit.to.length === 0) seams.push(at)
 
-    if (edit.sentence !== undefined) {
-      findings.push({
-        kind: 'ai_phrase',
-        verdict: 'probable',
-        offset: edit.start,
-        length: edit.end - edit.start,
-        label: `A sentence of ${edit.what}`,
-        evidence: edit.sentence,
-      })
-    } else {
-      counts.set(edit.what, (counts.get(edit.what) ?? 0) + 1)
-    }
+    findings.push(
+      edit.sentence === undefined
+        ? {
+            kind: 'ai_phrase',
+            verdict: 'informational',
+            offset: edit.start,
+            length: edit.end - edit.start,
+            label: edit.what,
+            evidence: `${JSON.stringify(text.slice(edit.start, edit.end))} → ${JSON.stringify(edit.to)}`,
+            replacement: edit.to,
+          }
+        : {
+            kind: 'ai_phrase',
+            verdict: 'probable',
+            offset: edit.start,
+            length: edit.end - edit.start,
+            label: `A sentence of ${edit.what}`,
+            evidence: edit.sentence,
+            replacement: edit.to,
+          },
+    )
   }
-  output += text.slice(read)
 
+  let stage = splice(
+    text,
+    edits.map(({ start, end, to }) => ({ start, end, to })),
+  )
   for (let index = seams.length - 1; index >= 0; index -= 1) {
-    const tidied = tidySeam(output, seams[index] as number)
-    output = tidied.text
+    stage = tidySeam(stage.text, stage.frame, seams[index] as number)
   }
-
-  for (const [what, count] of counts) {
-    findings.push({
-      kind: 'ai_phrase',
-      verdict: 'informational',
-      offset: 0,
-      length: text.length,
-      label: `${count} × ${what}`,
-      evidence: 'a phrase with one shorter form, replaced in place',
-    })
-  }
-
-  return { output, findings }
+  return { output: stage.text, findings, frame: stage.frame }
 }
 
 const TITLE_CASE_SMALL = new Set([

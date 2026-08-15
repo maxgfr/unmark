@@ -79,17 +79,17 @@ describe('cleanZipDocument', () => {
 
   it('quotes what it found so the user sees what was in there', async () => {
     const result = await cleanZipDocument(docx())
-    const core = result.findings.find((f) => f.label.startsWith('docProps/core.xml'))
+    const core = result.findings.find((f) => f.where === 'docProps/core.xml')
     expect(core?.evidence).toContain('Jane Doe')
 
-    const app = result.findings.find((f) => f.label.startsWith('docProps/app.xml'))
+    const app = result.findings.find((f) => f.where === 'docProps/app.xml')
     expect(app?.evidence).toContain('ACME')
   })
 
   it('empties a customXml tracking part', async () => {
     const result = await cleanZipDocument(docx())
     expect(await partOf(result.output, 'customXml/item1.xml')).not.toContain('4417')
-    expect(result.findings.some((f) => f.label.includes('customXml'))).toBe(true)
+    expect(result.findings.some((f) => f.where?.includes('customXml'))).toBe(true)
   })
 
   it('strips ODF metadata and keeps the mimetype entry stored and first', async () => {
@@ -378,13 +378,13 @@ describe('pictures pasted into a document', () => {
 
     const cleaned = (await readZip(result.output)).find((e) => e.name === 'word/media/image1.jpeg')
     expect(decodeUtf8(cleaned!.data)).not.toContain('GPSLatitude')
-    expect(result.findings.some((f) => f.label.includes('word/media/image1.jpeg'))).toBe(true)
+    expect(result.findings.some((f) => f.where === 'word/media/image1.jpeg')).toBe(true)
   })
 
   it('names the entry it cleaned, so the report is not a silent success', async () => {
     const photo = jpeg([{ marker: 0xe1, data: exifSegment('Make=Canon') }])
     const result = await cleanContainer(withPhoto(photo))
-    const finding = result.findings.find((f) => f.label.startsWith('word/media/image1.jpeg →'))
+    const finding = result.findings.find((f) => f.where === 'word/media/image1.jpeg')
     expect(finding).toBeDefined()
   })
 

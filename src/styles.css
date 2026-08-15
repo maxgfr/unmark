@@ -127,8 +127,38 @@ input {
   animation-delay: calc(var(--row) * 12ms);
 }
 
+/* The selected mark in the source view. A ring rather than a fill, because a
+   fill would cover the characters the reader clicked in order to see. */
+.mark-selected {
+  outline: 1px solid var(--color-bone);
+  outline-offset: 1px;
+  border-radius: 2px;
+  animation: mark-found 900ms var(--ease-out-expo);
+}
+
+@keyframes mark-found {
+  from {
+    background: var(--color-rule-bright);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+/* A row that can be clicked says so on hover. The rule is the only structural
+   divider on this page, so the affordance is a ground change and not a border. */
+.finding-row-clickable:hover {
+  background: var(--color-panel);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .finding-row {
+    animation: none;
+  }
+
+  /* The outline stays: it is what says which row is selected, and losing it
+     would leave a click with no visible result at all. Only the flash goes. */
+  .mark-selected {
     animation: none;
   }
 

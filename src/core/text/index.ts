@@ -9,6 +9,8 @@ import { byPosition, type CleanResult, type Finding } from '../report.ts'
 import { cleanText, inspectText, isLoadBearing, type TextOptions } from './unicode.ts'
 import { decodeStego, encodeStego, stegoFindings, type StegoDecoding } from './stego.ts'
 import { analyzeStyle, stylometryFindings, type StyleReport } from './stylometry.ts'
+import { identity, splice } from './frame.ts'
+import { tidySeam } from './humanise.ts'
 
 export {
   analyzeStyle,
@@ -51,6 +53,60 @@ export interface TextReport {
   /** Payloads recovered from the carriers, most plausible first. */
   stego: StegoDecoding[]
   style: StyleReport
+}
+
+/**
+ * Rewrite exactly these spans of `text`, and nothing else.
+ *
+ * The counterpart to the options on `cleanText`: those say "every em dash in
+ * this document", and this says "that one". It takes the document as it
+ * arrived, because that is the frame every text finding is now in — the caller
+ * passes the string it showed the reader, never the cleaned one.
+ *
+ * Applying all of one pass's findings gives that pass's own output, and there
+ * is a test holding the two together. That equality is the point: an interface
+ * offering both a toggle and a per-finding button must not have them disagree
+ * about the same character.
+ *
+ * A finding with no `replacement` is skipped rather than throwing. Nothing
+ * should be offering to apply one, but a core function that explodes on a
+ * report-only finding is a trap laid for the next caller.
+ */
+export function applyFindings(text: string, findings: readonly Finding[]): string {
+  const editable = findings.filter((f) => f.replacement !== undefined && f.scope !== 'document')
+  if (editable.length === 0) return text
+
+  const ordered = [...editable].sort(byPosition)
+  let stage = splice(
+    text,
+    ordered.map((f) => ({
+      start: f.offset,
+      end: f.offset + f.length,
+      to: f.replacement as string,
+    })),
+    identity(text.length),
+  )
+
+  // Only a deleted phrase gets its seam tidied, and the kind is what says so.
+  // `humanise` closes the gap a removed phrase leaves — a doubled space, a
+  // stranded comma, a sentence now opening in lower case — and applying one of
+  // its findings has to do the same or the button and the toggle produce two
+  // different documents. A deleted zero-width carrier gets none of it: the
+  // spaces either side of it were already the author's.
+  const seams: number[] = []
+  let drift = 0
+  for (const finding of ordered) {
+    const replacement = finding.replacement as string
+    const at = finding.offset - drift + replacement.length
+    drift += finding.length - replacement.length
+    if (finding.kind === 'ai_phrase' && replacement.length === 0) seams.push(at)
+  }
+
+  for (let index = seams.length - 1; index >= 0; index -= 1) {
+    stage = tidySeam(stage.text, stage.frame, seams[index] as number)
+  }
+
+  return stage.text
 }
 
 /** Read a document without changing it. */

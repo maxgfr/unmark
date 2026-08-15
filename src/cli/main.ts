@@ -111,7 +111,9 @@ function renderFindings(all: readonly Finding[], out: string[]): void {
   // identical rows, so crowds are folded into one summary each.
   const findings = collapseRuns(all)
 
-  const outcomeWidth = 8
+  // Nine, not eight: `available` is the longest of the four and an eight-wide
+  // column pushed every row carrying it one character right of the rest.
+  const outcomeWidth = 9
   const positionWidth = 6
   const verdictWidth = Math.max(...findings.map((f) => f.verdict.length))
   const kindWidth = Math.max(...findings.map((f) => KIND_LABEL[f.kind].length))
@@ -121,15 +123,21 @@ function renderFindings(all: readonly Finding[], out: string[]): void {
 
   for (const finding of findings) {
     const outcome = outcomeOf(finding)
-    const position = finding.length > 0 ? String(finding.offset) : '-'
+    // A byte offset into a zip is the same number for every part in it, so the
+    // formats built on one say which part instead. `-` stays for the findings
+    // that describe the whole document and have no position to give.
+    const position =
+      finding.scope === 'document' || finding.length === 0 ? '-' : String(finding.offset)
 
     out.push(
       `  ${pad(colourOutcome(outcome), outcomeWidth + (tty ? 9 : 0))} ` +
         `${pad(colourVerdict(finding.verdict), verdictWidth + (tty ? 9 : 0))} ` +
-        `${pad(KIND_LABEL[finding.kind], kindWidth)} ${dim(pad(position, positionWidth))} ${dim(finding.label)}`,
+        `${pad(KIND_LABEL[finding.kind], kindWidth)} ${dim(pad(position, positionWidth))} ` +
+        `${finding.where ? `${dim(finding.where)} ` : ''}${dim(finding.label)}`,
     )
     if (finding.evidence) out.push(`  ${indent}${dim('└')} ${finding.evidence}`)
     if (finding.preserved) out.push(`  ${indent}${dim(finding.preserved)}`)
+    if (finding.noFix) out.push(`  ${indent}${dim(finding.noFix)}`)
   }
 }
 

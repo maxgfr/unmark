@@ -79,11 +79,16 @@ describe('inspect', () => {
     expect(await readFile(path, 'utf8')).toBe(MARKED)
   })
 
-  it('folds a crowd of carriers into one line', async () => {
+  it('folds a crowd of carriers into a line per codepoint', async () => {
     // The payload above is 88 carriers. A report that prints all of them buries
     // the one line worth reading.
+    //
+    // A line per codepoint rather than one for the lot: the fold keys on the
+    // label, so a binary alphabet comes back as its two symbols. That is the
+    // scheme rather than a detail — "88 zero-width characters" does not say
+    // whether they are one symbol or four.
     await main(['inspect', await file('marked.txt', MARKED)])
-    expect(stdout().split('\n').length).toBeLessThan(12)
+    expect(stdout().split('\n').length).toBeLessThan(14)
     expect(stdout()).toMatch(/\d+ × zero-width character/)
   })
 

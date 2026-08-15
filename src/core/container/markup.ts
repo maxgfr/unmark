@@ -12,10 +12,16 @@
 
 import type { Finding, FindingKind, Verdict } from '../report.ts'
 import { snippet } from './types.ts'
+import { splice, type Splice } from '../text/frame.ts'
 
 export interface TextCleanResult {
   output: string
   findings: Finding[]
+  /**
+   * What this pass removed, so the invisible-character pass that runs on its
+   * output can have its offsets read back into the file as it arrived.
+   */
+  splices: Splice[]
 }
 
 interface Rule {
@@ -34,10 +40,8 @@ interface Rule {
 }
 
 /**
- * Apply rules right-to-left so earlier offsets stay valid as text is removed.
- *
- * Findings still report offsets into the *original* document, which is what a
- * UI highlighting the input needs.
+ * Findings report offsets into the *original* document, which is what an
+ * interface showing the reader where a mark is needs.
  */
 function applyRules(text: string, rules: readonly Rule[]): TextCleanResult {
   const hits: { start: number; end: number; finding: Finding }[] = []
@@ -77,12 +81,12 @@ function applyRules(text: string, rules: readonly Rule[]): TextCleanResult {
     reach = hit.end
   }
 
-  let output = text
-  for (const hit of [...chosen].reverse()) {
-    output = output.slice(0, hit.start) + output.slice(hit.end)
+  const splices = chosen.map((hit) => ({ start: hit.start, end: hit.end, to: '' }))
+  return {
+    output: splice(text, splices).text,
+    findings: chosen.map((hit) => hit.finding),
+    splices,
   }
-
-  return { output, findings: chosen.map((hit) => hit.finding) }
 }
 
 const GENERATOR_COMMENT =
@@ -189,12 +193,13 @@ const AI_FRONTMATTER_KEY =
  */
 export function cleanMarkdown(text: string): TextCleanResult {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(text)
-  if (!match?.[1]) return { output: text, findings: [] }
+  if (!match?.[1]) return { output: text, findings: [], splices: [] }
 
   const findings: Finding[] = []
-  const blockStart = 4 // past the opening '---\n'
+  const splices: Splice[] = []
+  // Past the opening delimiter, which is `---\n` or `---\r\n`.
+  const blockStart = text.startsWith('---\r\n') ? 5 : 4
   const lines = match[1].split('\n')
-  const kept: string[] = []
 
   let cursor = blockStart
   for (const line of lines) {
@@ -206,15 +211,18 @@ export function cleanMarkdown(text: string): TextCleanResult {
         length: line.length,
         label: 'AI provenance key in frontmatter',
         evidence: snippet(line),
+        replacement: '',
       })
-    } else {
-      kept.push(line)
+      // The line and the newline that ends it. Cut as spans rather than by
+      // rebuilding the block from the lines that survived: the rebuild wrote
+      // `---\n` back whatever had been there, so a CRLF document came out with
+      // its frontmatter delimiters silently converted and every other line
+      // still CRLF. It also left nothing to build a frame from.
+      splices.push({ start: cursor, end: cursor + line.length + 1, to: '' })
     }
     cursor += line.length + 1
   }
 
-  if (findings.length === 0) return { output: text, findings: [] }
-
-  const rebuilt = `---\n${kept.join('\n')}\n---${match[2] ?? ''}`
-  return { output: rebuilt + text.slice(match[0].length), findings }
+  if (findings.length === 0) return { output: text, findings: [], splices: [] }
+  return { output: splice(text, splices).text, findings, splices }
 }

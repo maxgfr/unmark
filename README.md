@@ -5,7 +5,9 @@ remove watermarks and provenance marks, in your browser or from your terminal.
 
 Invisible characters in text. Metadata in files. Watermarks drawn into images.
 Every mark is named, located and graded before anything is stripped, and what
-cannot be removed is stated on the screen that does the removing.
+cannot be removed is stated on the screen that does the removing. Located
+literally: click a finding and the cursor lands on the character it found, in a
+view that draws the invisible ones so there is something to look at.
 
 ```bash
 npx skills add maxgfr/unmark    # the same engine, as a Claude skill and a CLI
@@ -243,6 +245,12 @@ nothing was found.
 | `probable`              | Consistent with a mark, but a human could have produced it                   |
 | `informational`         | Present, not evidence of anything — EXIF from a camera                       |
 | `likely_false_positive` | Matched, but context says it is legitimate; kept by default                  |
+
+And a finding says what it proposes as well as how sure it is — `becomes "-"`,
+`delete it`, with a button that rewrites that one span and nothing else. Where
+there is no correct substitution it says so instead: there is no right word to
+put in place of _delve_, and a tool that offered one would be guessing in the
+one place it has always refused to.
 
 ## Develop
 

@@ -147,7 +147,8 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
         verdict: rule?.verdict ?? 'probable',
         offset: 0,
         length: entry.data.length,
-        label: `${entry.name} — ${rule?.what ?? (isCustomXml ? 'custom XML part' : 'writer-specific properties')}`,
+        where: entry.name,
+        label: `${rule?.what ?? (isCustomXml ? 'custom XML part' : 'writer-specific properties')}`,
         ...(evidence ? { evidence } : {}),
       })
 
@@ -170,7 +171,8 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
         verdict: 'confirmed',
         offset: 0,
         length: entry.data.length,
-        label: `${entry.name} — an image of the document's first page`,
+        where: entry.name,
+        label: "An image of the document's first page",
         evidence: `${entry.data.length} bytes, replaced with a blank 1×1`,
       })
       rebuilt.push({ name: entry.name, data: BLANK_THUMBNAIL })
@@ -193,7 +195,8 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
           verdict: 'probable',
           offset: 0,
           length: entry.data.length,
-          label: `${entry.name} — author names, timestamps and revision ids`,
+          where: entry.name,
+          label: 'Author names, timestamps and revision ids',
           evidence: snippet([...new Set(names)].join(' · ')) || 'revision save identifiers',
         })
         rebuilt.push({
@@ -217,7 +220,8 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
           verdict: 'informational',
           offset: 0,
           length: entry.data.length,
-          label: `${entry.name} — package metadata (creator, contributor, identifier)`,
+          where: entry.name,
+          label: 'Package metadata (creator, contributor, identifier)',
           evidence: describe(before) || snippet(before.replaceAll(/<[^>]*>/g, ' ')),
         })
         rebuilt.push({
@@ -239,7 +243,7 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
       const cleaned = await cleanEmbeddedImage(entry.data)
       if (cleaned && cleaned.findings.length > 0) {
         for (const finding of cleaned.findings) {
-          findings.push({ ...finding, label: `${entry.name} → ${finding.label}` })
+          findings.push({ ...finding, where: entry.name })
         }
         rebuilt.push({
           name: entry.name,

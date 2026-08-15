@@ -192,6 +192,41 @@ describe('cleanText', () => {
     const findings = cleanText(`aa${ZWSP}bb${ZWSP}cc`).findings
     expect(findings.map((f) => f.offset)).toEqual([2, 5])
   })
+
+  it('every positional finding slices its own evidence out of the input', () => {
+    // The assertion the frame exists for, and the reason it is a loop over
+    // everything rather than a list of the three cases known today: four passes
+    // run here and each is handed the output of the one before it, so a fifth
+    // added later could quietly reintroduce a second set of coordinates. This
+    // fails the moment it does.
+    //
+    // Every pass is represented on purpose. The carriers shorten the document
+    // before the link is found, the link shortens it again before the dash is
+    // counted, and the filler phrase is measured last of all.
+    const source =
+      `In order to proceed${ZWSP.repeat(88)}, see ` +
+      `https://example.com/report?utm_source=chatgpt.com — attached.`
+    const { findings, preserved } = cleanText(source, { typography: true, humanise: true })
+
+    const positional = [...findings, ...preserved].filter((f) => f.scope !== 'document')
+    expect(positional.length).toBeGreaterThan(90)
+
+    for (const finding of positional) {
+      const at = source.slice(finding.offset, finding.offset + finding.length)
+      if (finding.kind === 'zwj_family') expect(at).toBe(ZWSP)
+      if (finding.kind === 'typography') expect(at).toBe('—')
+      if (finding.kind === 'generator_tag') expect(at).toContain('utm_source=chatgpt.com')
+      if (finding.kind === 'ai_phrase') expect(at.toLowerCase()).toBe('in order to')
+    }
+  })
+
+  it('reports a style tell as describing the document rather than a place in it', () => {
+    // `offset: 0, length: text.length` reads exactly like a position. Saying so
+    // in the type is what stops an interface selecting the whole document as
+    // though every character of it were the tell.
+    const tells = cleanText(`a — b — c`, { typography: true }).findings
+    expect(tells.every((f) => f.scope === undefined)).toBe(true)
+  })
 })
 
 describe('trailing carriers', () => {

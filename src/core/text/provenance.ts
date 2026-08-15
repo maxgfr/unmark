@@ -19,6 +19,7 @@
 // confirmed too.
 
 import type { Finding } from '../report.ts'
+import { splice, type Splice } from './frame.ts'
 
 /**
  * Query parameters whose value names the tool that produced the text.
@@ -53,12 +54,14 @@ const CITATION_TOKENS: { pattern: RegExp; label: string }[] = [
 export interface ProvenanceResult {
   output: string
   findings: Finding[]
+  /**
+   * What this pass rewrote, so a caller piping passes together can read a later
+   * offset back into the document it started from.
+   */
+  splices: Splice[]
 }
 
-interface Edit {
-  start: number
-  end: number
-  to: string
+interface Edit extends Splice {
   finding: Finding
 }
 
@@ -115,6 +118,7 @@ export function cleanProvenance(text: string): ProvenanceResult {
         length: raw.length,
         label: `Tracking parameter naming the tool that wrote this: ${removed.join(', ')}`,
         evidence: raw,
+        replacement: cleaned,
       },
     })
   }
@@ -142,21 +146,22 @@ export function cleanProvenance(text: string): ProvenanceResult {
           length: end - start,
           label: `Chat citation furniture: ${label}`,
           evidence: JSON.stringify(match[0]),
+          replacement: '',
         },
       })
     }
   }
 
-  if (edits.length === 0) return { output: text, findings: [] }
+  if (edits.length === 0) return { output: text, findings: [], splices: [] }
   edits.sort((a, b) => a.start - b.start)
 
-  let output = ''
-  let read = 0
-  for (const edit of edits) {
-    output += text.slice(read, edit.start) + edit.to
-    read = edit.end
+  // The same splicer the pipeline uses. A second hand-rolled loop here would be
+  // a second answer to "what did this pass change", and the frame is built from
+  // the one that is written down.
+  const splices = edits.map(({ start, end, to }) => ({ start, end, to }))
+  return {
+    output: splice(text, splices).text,
+    findings: edits.map((edit) => edit.finding),
+    splices,
   }
-  output += text.slice(read)
-
-  return { output, findings: edits.map((edit) => edit.finding) }
 }

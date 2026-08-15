@@ -73,7 +73,7 @@ const uPlus = (point: number) => `U+${point.toString(16).toUpperCase().padStart(
  */
 export function normaliseTypography(text: string, options?: TypographyOptions): TypographyResult {
   const tellsOnly = options?.tellsOnly ?? false
-  const counts = new Map<number, number>()
+  const findings: Finding[] = []
   // The narrow seal, not the wide one. A curly quote inside a JSON string in a
   // fenced block must survive; a curly quote inside a quotation is still the
   // author's own punctuation and is exactly what this pass exists to flatten.
@@ -90,29 +90,32 @@ export function normaliseTypography(text: string, options?: TypographyOptions): 
       continue
     }
 
-    counts.set(point, (counts.get(point) ?? 0) + 1)
+    // One finding per occurrence rather than one per codepoint with a count.
+    // The count version reported `offset: 0, length: text.length`, which reads
+    // exactly like a position and is not one — there was nothing here to point
+    // at, and the loop already had the index in hand. `collapseRuns` folds them
+    // back into `23 × U+2014 EM DASH → -` for display, keyed on the label, so
+    // the report says what it always said and every dash is now findable.
+    //
+    // `length: 1` holds because every entry in SUBSTITUTIONS is inside the BMP.
+    // A table that grew an astral entry would need `widthOf` here.
+    findings.push({
+      kind: 'typography',
+      // Never more than informational: punctuation is a style, and style is
+      // not evidence of anything.
+      verdict: 'informational',
+      offset: index,
+      length: 1,
+      label: `${uPlus(point)} ${substitution.name} → ${substitution.to || 'removed'}`,
+      evidence: substitution.tell
+        ? 'counted by the writing-style report as a generated-prose tell'
+        : 'typographic tidying, not a tell on its own',
+      replacement: substitution.to,
+    })
     out += substitution.to
   }
 
   // "word—word" keeps its hyphen tight; "word — word" keeps its spaces. Neither
   // gains or loses a space it did not have.
-  const findings: Finding[] = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([point, count]) => {
-      const substitution = BY_POINT.get(point) as Substitution
-      return {
-        kind: 'typography' as const,
-        // Never more than informational: punctuation is a style, and style is
-        // not evidence of anything.
-        verdict: 'informational' as const,
-        offset: 0,
-        length: text.length,
-        label: `${count} × ${uPlus(point)} ${substitution.name} → ${substitution.to || 'removed'}`,
-        evidence: substitution.tell
-          ? 'counted by the writing-style report as a generated-prose tell'
-          : 'typographic tidying, not a tell on its own',
-      }
-    })
-
   return { output: out, findings }
 }

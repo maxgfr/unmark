@@ -1,5 +1,6 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react'
 import {
+  applyFindings,
   cleanText,
   distinctSignals,
   encodeStego,
@@ -9,7 +10,8 @@ import {
   type StyleLayer,
 } from '../core/text/index.ts'
 import { CopyButton, FindingsTable, Limits, Section, Toggle } from './parts.tsx'
-import { summariseOutcomes } from '../core/report.ts'
+import { editsOf, summariseOutcomes, type Finding, type Row } from '../core/report.ts'
+import { SourceView } from './SourceView.tsx'
 
 const LAYER_NOTE: Record<StyleLayer, string> = {
   phrase: 'vocabulary — the cheapest tell to spot and the cheapest to edit away',
@@ -24,6 +26,18 @@ const EXAMPLE = `Quarterly results are attached. Please keep this internal.${enc
 
 export function TextTab() {
   const [input, setInput] = useState('')
+  /** Where the reader last asked to look, as an offset into `input`. */
+  const [selected, setSelected] = useState<number | undefined>(undefined)
+  /**
+   * Every state of the text before an Apply, most recent last.
+   *
+   * Applying edits the reader's own paragraph, and this tool does not change
+   * text without offering the way back. A full stack rather than one step,
+   * because applying three findings in a row is the normal way to use it and a
+   * single undo would strand the first two.
+   */
+  const [history, setHistory] = useState<string[]>([])
+  const field = useRef<HTMLTextAreaElement>(null)
   const [paranoid, setParanoid] = useState(false)
   const [confusables, setConfusables] = useState(false)
   const [typography, setTypography] = useState(false)
@@ -51,6 +65,61 @@ export function TextTab() {
   const signals = distinctSignals(report.style.metrics)
   const plain = typography && humaniseText
 
+  // Everything with a place in the document, in one list the viewer and the
+  // table both index. `preserved` belongs here too: an emoji joiner that was
+  // kept is exactly the kind of thing a reader wants to go and look at.
+  const located = useMemo(
+    () =>
+      [...report.findings, ...report.preserved]
+        .filter((finding) => finding.scope !== 'document' && finding.length > 0)
+        .sort((a, b) => a.offset - b.offset),
+    [report],
+  )
+
+  const locate = useCallback((row: Row) => {
+    // A folded row goes to its first member, never to its own span. That span
+    // is a hull: findings are folded by what they are, not by sitting next to
+    // each other, so selecting it on a document with thirty scattered em dashes
+    // would select everything between the first and the last.
+    const target = row.folded?.[0] ?? row
+    setSelected(target.offset)
+
+    // The literal request: put the cursor there. A textarea holds a selection
+    // while unfocused but does not show one, so the focus has to come first.
+    const area = field.current
+    if (!area) return
+    area.focus()
+    area.setSelectionRange(target.offset, target.offset + target.length)
+  }, [])
+
+  const apply = useCallback(
+    (row: Row) => {
+      const edits = editsOf(row)
+      if (edits.length === 0) return
+      setHistory((current) => [...current, input])
+      setInput(applyFindings(input, edits))
+      // The report is rebuilt from the new text, so every other offset has
+      // moved. Keeping the selection would point it at whatever now sits there.
+      setSelected(undefined)
+    },
+    [input],
+  )
+
+  // The viewer indexes its own list; the table and the textarea speak offsets.
+  // Translating here rather than storing an index keeps the selection valid
+  // across a keystroke, which rebuilds the list under it.
+  const locatedIndex = located.findIndex((finding) => finding.offset === selected)
+  const marked = locatedIndex === -1 ? undefined : locatedIndex
+
+  const undo = useCallback(() => {
+    setHistory((current) => {
+      const previous = current.at(-1)
+      if (previous !== undefined) setInput(previous)
+      return current.slice(0, -1)
+    })
+    setSelected(undefined)
+  }, [])
+
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-12">
       {/* Input first when stacked. Putting the report first buried the textarea
@@ -59,28 +128,43 @@ export function TextTab() {
         <Section
           title="Paste the text"
           aside={
-            input.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setInput('')}
-                className="transition-colors duration-150 hover:text-[var(--color-bone)]"
-              >
-                Clear
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setInput(EXAMPLE)}
-                className="transition-colors duration-150 hover:text-[var(--color-bone)]"
-              >
-                Load a marked example
-              </button>
-            )
+            <span className="flex items-center gap-3">
+              {history.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={undo}
+                  className="transition-colors duration-150 hover:text-[var(--color-bone)]"
+                >
+                  Undo
+                </button>
+              ) : undefined}
+              {input.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setInput('')}
+                  className="transition-colors duration-150 hover:text-[var(--color-bone)]"
+                >
+                  Clear
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setInput(EXAMPLE)}
+                  className="transition-colors duration-150 hover:text-[var(--color-bone)]"
+                >
+                  Load a marked example
+                </button>
+              )}
+            </span>
           }
         >
           <textarea
+            ref={field}
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => {
+              setInput(event.target.value)
+              setSelected(undefined)
+            }}
             spellCheck={false}
             placeholder="Anything you paste stays in this tab. There is no server to send it to."
             aria-label="Text to inspect"
@@ -155,6 +239,23 @@ export function TextTab() {
           </div>
         </Section>
 
+        {/* Only once there is something to mark. An empty panel on a first
+            visit is the mistake DESIGN.md records under Structure — the report
+            went above the textarea and buried it. */}
+        {located.length > 0 ? (
+          // The aside is a hint, not a count. Touching carriers are drawn as one
+          // chip, so `113 marked` beside a panel showing one box would ask the
+          // reader to reconcile two numbers that are both right.
+          <Section title="Source" aside="click a mark to put the cursor on it">
+            <SourceView
+              text={input}
+              findings={located}
+              selected={marked}
+              onSelect={(index) => locate(located[index] as Finding)}
+            />
+          </Section>
+        ) : undefined}
+
         <Section title="Cleaned text" aside={<CopyButton value={report.cleaned.output} />}>
           <output className="block h-40 w-full overflow-auto rounded-md border border-[var(--color-rule)] bg-[var(--color-panel)] p-3 font-mono text-sm leading-relaxed whitespace-pre-wrap">
             {report.cleaned.output || (
@@ -195,7 +296,12 @@ export function TextTab() {
               Paste something to inspect it. Everything runs in this tab.
             </p>
           ) : (
-            <FindingsTable findings={report.findings} />
+            <FindingsTable
+              findings={report.findings}
+              selectedOffset={selected}
+              onLocate={locate}
+              onApply={apply}
+            />
           )}
         </Section>
 

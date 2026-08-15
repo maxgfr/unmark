@@ -40,13 +40,24 @@ describe('normaliseTypography', () => {
     expect(result.output).toContain(CURLY_OPEN)
   })
 
-  it('counts each substitution and never calls it more than informational', () => {
+  it('reports each substitution where it is, and never above informational', () => {
     // Punctuation is a style. It is not evidence of anything, and a verdict
     // above informational would say otherwise.
-    const result = normaliseTypography(`a ${EM_DASH} b ${EM_DASH} c`)
-    expect(result.findings[0]?.label).toContain('2 ×')
+    //
+    // One finding per dash rather than one row counting both. The count is
+    // restored for display by `collapseRuns`; what cannot be restored later is
+    // a position, so it is reported here.
+    const source = `a ${EM_DASH} b ${EM_DASH} c`
+    const result = normaliseTypography(source)
+
+    expect(result.findings).toHaveLength(2)
     expect(result.findings.every((f) => f.verdict === 'informational')).toBe(true)
     expect(result.findings.every((f) => f.kind === 'typography')).toBe(true)
+    expect(result.findings.every((f) => f.replacement === '-')).toBe(true)
+
+    for (const finding of result.findings) {
+      expect(source.slice(finding.offset, finding.offset + finding.length)).toBe(EM_DASH)
+    }
   })
 
   it('does nothing to text that is already plain', () => {

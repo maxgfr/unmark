@@ -509,6 +509,10 @@ export function stegoFindings(text: string): Finding[] {
       length: decoding.length,
       label: `Hidden payload encoded in ${SCHEME_LABEL[decoding.scheme]}`,
       evidence: decoding.payload,
+      // A real span — it covers the carriers — but nothing to write in its
+      // place. Deleting the run is the carriers' own findings' job, and doing
+      // it from here would erase the only record of what was hidden.
+      noFix: 'the carriers spelling it are what comes off',
     })
   }
 
@@ -525,6 +529,11 @@ export function stegoFindings(text: string): Finding[] {
       length: text.length,
       label: `Every ${cadence.stride}${cadence.stride === 2 ? 'nd' : cadence.stride === 3 ? 'rd' : 'th'} space is ${name}`,
       evidence: `${cadence.count} substitutions at a constant interval — a pattern, not typing`,
+      // The cadence is the finding, so it has no one place to point at. Each
+      // substituted space is reported separately by the walk, and those are the
+      // ones with a position and a replacement.
+      scope: 'document' as const,
+      noFix: 'the pattern is the finding — each substituted space is reported on its own',
     })
   }
 

@@ -78,3 +78,69 @@ test('says nothing about style until there is enough text to measure', async ({ 
   await page.getByLabel('Text to inspect').fill('A short line — with one dash in it.')
   await expect(page.getByText(/needs 120 words to measure/)).toBeVisible()
 })
+
+/**
+ * A paragraph carrying one of everything, so the offsets have to survive the
+ * whole pipeline.
+ *
+ * The em dash sits after 112 carriers on purpose: it is the case where an
+ * offset taken from a later pass used to be 112 characters out, which is
+ * invisible in a printed report and lands on the wrong word in a selection.
+ */
+const LAYERED = `Quarterly results are attached.${marked.slice(marked.indexOf('​'), marked.lastIndexOf('​') + 1)} Please keep this — internal, in order to avoid confusion.`
+
+test('clicking a finding selects exactly that span in the textarea', async ({ page }) => {
+  const input = page.getByLabel('Text to inspect')
+  await input.fill(LAYERED)
+
+  const row = page.locator('li.finding-row').filter({ hasText: 'Typography' }).first()
+  await row.locator('div[role="button"]').click()
+
+  const selected = await input.evaluate((element) => {
+    const area = element as HTMLTextAreaElement
+    return area.value.slice(area.selectionStart, area.selectionEnd)
+  })
+  expect(selected).toBe('—')
+})
+
+test('the source view draws the carriers the textarea cannot show', async ({ page }) => {
+  await page.getByLabel('Text to inspect').fill(LAYERED)
+
+  await expect(page.getByRole('heading', { name: 'Source' })).toBeVisible()
+  // The chip names the codepoint. A highlight around a zero-width character
+  // would be a zero-pixel-wide box, which is the whole reason this view exists.
+  await expect(page.getByRole('button', { name: 'U+200B ZERO WIDTH SPACE' }).first()).toBeVisible()
+})
+
+test('applying one finding changes that one and nothing else, and undoes', async ({ page }) => {
+  const input = page.getByLabel('Text to inspect')
+  await input.fill(LAYERED)
+
+  const row = page.locator('li.finding-row').filter({ hasText: 'Typography' }).first()
+  await row.getByRole('button', { name: /^Apply/ }).click()
+
+  const applied = await input.inputValue()
+  expect(applied).not.toContain('—')
+  expect(applied).toContain('-')
+  // The carriers are a different finding and were not asked about. A per-row
+  // apply that also ran the carrier pass would be the document-wide toggle
+  // wearing a smaller button.
+  expect(applied).toContain('​')
+  expect(applied).toContain('in order to')
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  expect(await input.inputValue()).toBe(LAYERED)
+})
+
+test('a style tell says it describes the document rather than a place in it', async ({ page }) => {
+  // `offset: 0, length: everything` reads exactly like a position. Offering to
+  // select it would highlight the whole document as though every character of
+  // it were the tell.
+  await page
+    .getByLabel('Text to inspect')
+    .fill(`${'A sentence with an em dash — right here. '.repeat(40)}`)
+
+  const style = page.locator('li.finding-row').filter({ hasText: 'Writing style' }).first()
+  await expect(style).toContainText('whole document')
+  await expect(style.getByRole('button', { name: /^Apply/ })).toHaveCount(0)
+})

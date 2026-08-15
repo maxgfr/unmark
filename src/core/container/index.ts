@@ -8,6 +8,7 @@
 import { byPosition, type Finding } from '../report.ts'
 import { cleanText, type TextOptions } from '../text/unicode.ts'
 import { stegoFindings } from '../text/stego.ts'
+import { rebase, splice } from '../text/frame.ts'
 import { cleanPng, sniffPng } from './png.ts'
 import { cleanJpeg, sniffJpeg } from './jpeg.ts'
 import { cleanWebp, sniffWebp } from './webp.ts'
@@ -141,9 +142,11 @@ async function sniffBinary(bytes: Uint8Array): Promise<ContainerFormat | undefin
  * and metadata blocks, then the invisible-character pass — an HTML page can
  * carry a zero-width watermark in its prose just as easily as a .txt can.
  *
- * A note on offsets in the report: markup findings are positions in the file as
- * given, and invisible-character findings are positions in the text after the
- * markup pass. The two differ only by whatever the markup pass removed.
+ * Every finding in the report addresses the file as it arrived. The markup pass
+ * reports there natively; the invisible-character pass runs on the markup pass's
+ * output and is read back through the frame that pass returns. Before that,
+ * the two sets of offsets differed by whatever the markup pass had removed and
+ * were sorted together as though they did not.
  */
 export async function cleanContainer(
   bytes: Uint8Array,
@@ -167,13 +170,18 @@ export async function cleanContainer(
   const format = sniffText(text, name)
   const markup = MARKUP[format]
 
-  const stage1 = markup ? markup(text) : { output: text, findings: [] as Finding[] }
+  const stage1 = markup ? markup(text) : { output: text, findings: [] as Finding[], splices: [] }
   const stage2 = cleanText(stage1.output, options)
+  const frame = splice(text, stage1.splices).frame
 
   return {
     output: encode(stage2.output),
-    findings: [...stage1.findings, ...stage2.findings, ...stegoFindings(text)].sort(byPosition),
-    preserved: stage2.preserved,
+    findings: [
+      ...stage1.findings,
+      ...stage2.findings.map((finding) => rebase(frame, finding)),
+      ...stegoFindings(text),
+    ].sort(byPosition),
+    preserved: stage2.preserved.map((finding) => rebase(frame, finding)),
     format,
     textual: true,
   }

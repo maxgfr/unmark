@@ -72,6 +72,28 @@ silhouette — with one line under each heading saying what that layer reads. A
 flat list of eighteen numbers is a wall; the grouping is what makes the report
 answer "which kind of tell" rather than only "how many".
 
+The **source view** sits under the textarea and draws the document with its
+marks in it. Carriers become chips carrying their codepoint, because a
+highlight around a zero-width character is a zero-pixel-wide box; visible marks
+are drawn as themselves and underlined; a decoded payload gets a band under the
+run that spelled it. Clicking either a mark or a findings row selects that exact
+span in the textarea.
+
+Two rules on it, both learned by breaking them:
+
+- **No amber on a mark, whatever its verdict.** An eleven-character payload is a
+  hundred and twelve confirmed carriers, and colouring each one turns the panel
+  into a wall of amber and spends the page's only scanning affordance. The band
+  under a payload is the one amber this view draws, and it is drawn once.
+- **Touching chips of one kind merge into one.** A hundred and twelve identical
+  boxes is the same failure `collapseRuns` exists to prevent in the table,
+  reproduced in the view whose job is to make the document readable. One chip
+  reading `U+200B/U+200C ×112` says more, and clicking it selects the whole run.
+
+A row also states what it proposes — `becomes "-"`, `delete it` — or why it has
+none. `delve` has no correct substitution, and a button offering one would be
+the tool guessing where it has always refused to.
+
 ## Touch
 
 The image canvas sets `touch-action: none`. Without it the browser claims the
