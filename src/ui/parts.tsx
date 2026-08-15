@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   collapseRuns,
   editsOf,
@@ -221,13 +221,28 @@ export function FindingsTable({
 }
 
 export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false)
+  /** '' idle, 'done' after a copy, 'failed' when the clipboard refused. */
+  const [state, setState] = useState<'' | 'done' | 'failed'>('')
+  const clear = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  // The timer outlives the component otherwise, and fires setState into
+  // nothing. Cheap to hold, and this is the one control here with a timer.
+  useEffect(() => () => clearTimeout(clear.current), [])
 
   const copy = useCallback(() => {
-    void navigator.clipboard.writeText(value).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
-    })
+    const flash = (next: 'done' | 'failed') => {
+      setState(next)
+      clearTimeout(clear.current)
+      clear.current = setTimeout(() => setState(''), 1600)
+    }
+    // `writeText` rejects on an insecure origin and when the permission is
+    // refused. This had no catch at all, so the promise rejected into nothing:
+    // an unhandled rejection in the console and a button that did not respond,
+    // which reads as "the click missed" rather than "the browser said no".
+    void navigator.clipboard.writeText(value).then(
+      () => flash('done'),
+      () => flash('failed'),
+    )
   }, [value])
 
   return (
@@ -235,10 +250,15 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
       type="button"
       onClick={copy}
       disabled={value.length === 0}
-      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-rule)] px-2.5 py-1 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] hover:bg-[var(--color-panel)] disabled:cursor-not-allowed disabled:opacity-40"
+      title={state === 'failed' ? 'This browser would not give the page the clipboard' : undefined}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
+        state === 'failed'
+          ? 'border-[var(--color-signal)] text-[var(--color-signal)]'
+          : 'border-[var(--color-rule)] text-[var(--color-bone)] hover:border-[var(--color-rule-bright)] hover:bg-[var(--color-panel)]'
+      }`}
     >
-      {copied ? <IconCheck className="text-[var(--color-clean)]" /> : <IconCopy />}
-      {copied ? 'Copied' : label}
+      {state === 'done' ? <IconCheck className="text-[var(--color-clean)]" /> : <IconCopy />}
+      {state === 'done' ? 'Copied' : state === 'failed' ? 'Copy blocked' : label}
     </button>
   )
 }

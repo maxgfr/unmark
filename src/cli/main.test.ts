@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   chmod,
   lstat,
+  mkdir,
   mkdtemp,
   readdir,
   readFile,
@@ -218,6 +219,44 @@ describe('audit', () => {
     await file('a.txt', 'Nothing.')
     expect(await main(['audit', dir])).toBe(0)
   })
+
+  it('follows a symlinked file instead of silently skipping it', async () => {
+    // `Dirent.isFile()` is false for a symlink, so a linked file or directory
+    // was dropped with no note at all. In a repo where docs/ is a link,
+    // `unmark audit .` answered "nothing marked" and exit 0.
+    const hidden = join(dir, 'elsewhere')
+    await mkdir(hidden)
+    await writeFile(join(hidden, 'marked.txt'), MARKED)
+    await symlink(join(hidden, 'marked.txt'), join(dir, 'link.txt'))
+
+    expect(await main(['audit', dir])).toBe(1)
+    expect(stdout()).toContain('link.txt')
+  })
+
+  it('does not walk a symlink loop forever', async () => {
+    await symlink(dir, join(dir, 'self'))
+    await file('a.txt', 'Nothing.')
+    expect(await main(['audit', dir])).toBe(0)
+  })
+
+  it('keeps going when one directory cannot be read, and says which', async () => {
+    // `readdir` threw out of the generator, past the per-file catch, into
+    // main's handler: exit 2, no partial results, and nothing said about which
+    // directory. A folder you cannot read is ordinary in a home directory.
+    await file('marked.txt', MARKED)
+    const shut = join(dir, 'shut')
+    await mkdir(shut)
+    await writeFile(join(shut, 'inner.txt'), 'Nothing.')
+    await chmod(shut, 0o000)
+
+    try {
+      expect(await main(['audit', dir])).toBe(1)
+      expect(stdout()).toContain('marked.txt')
+      expect(stderr()).toContain('skipped')
+    } finally {
+      await chmod(shut, 0o755)
+    }
+  })
 })
 
 describe('the rewrite loop', () => {
@@ -313,6 +352,19 @@ describe('argument parsing', () => {
     const code = await main(['verify', path, '--against', path])
     expect(code).toBe(1)
     expect(stdout()).toContain('same.md against')
+  })
+
+  it('refuses an --attempts that is not a count, rather than using three', async () => {
+    // `Number('abc')` is NaN and `--attempts 0` is 0; both are falsy, both were
+    // dropped by the spread that built the options, and both came out as the
+    // default of 3. Someone writing `--attempts 0` to mean "check, spend
+    // nothing" got three paid calls.
+    await file('draft.md', 'Some prose here.')
+    for (const bad of ['abc', '0', '-2']) {
+      // oxlint-disable-next-line no-await-in-loop
+      expect(await main(['rewrite', join(dir, 'draft.md'), '--attempts', bad])).toBe(2)
+      expect(stderr()).toContain('--attempts')
+    }
   })
 
   it('reads the file named after a --model, not the model', async () => {

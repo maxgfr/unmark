@@ -40,7 +40,8 @@ USAGE
 
 OPTIONS
   --json              machine-readable output
-  --in-place          write the cleaned result back to the file (clean only)
+  --in-place          write the result back to the file (clean and rewrite)
+  --force             clean a signed PDF anyway. The signature becomes void.
   --paranoid          also strip emoji glue and script joiners; CORRUPTS real text
   --confusables       map Cyrillic/Greek lookalikes back to Latin
   --typography        flatten em dashes, curly quotes and ellipses to ASCII
@@ -56,7 +57,6 @@ REWRITE (the tells no regex reaches: word choice, and the shape of the argument)
                       LEAVES YOUR MACHINE. Priced first when llm-models is present.
   --attempts <n>      how many tries before giving up and saying why (default 3)
   --against <file>    the original a rewrite is checked against (verify only)
-  --force             clean a signed PDF anyway. The signature becomes void.
 
   With no --model, rewrite talks to Ollama on 127.0.0.1 and nothing leaves the
   machine. The browser page has no rewrite at all: its Content-Security-Policy
@@ -263,12 +263,32 @@ async function commandClean(target: string, options: Options): Promise<number> {
 
   if (options.inPlace) {
     await writeInPlace(target, result.output)
-    if (!options.json) {
-      const out = [`${bold(source.name)} ${dim(`· ${result.format} · written in place`)}`, '']
-      renderFindings([...result.findings, ...result.preserved], out)
-      summarise([...result.findings, ...result.preserved], out)
-      process.stderr.write(`${out.join('\n')}\n`)
+    if (options.json) {
+      // `--json` promises machine-readable output. Combined with `--in-place`
+      // it used to emit nothing at all on either stream, so
+      // `unmark clean f.docx --in-place --json | jq '.findings|length'` handed
+      // jq an empty input while unmark exited 0 — and there was no way at all
+      // to learn what an in-place clean had stripped.
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            file: source.name,
+            format: result.format,
+            writtenInPlace: true,
+            findings: result.findings,
+            preserved: result.preserved,
+          },
+          undefined,
+          2,
+        )}\n`,
+      )
+      return 0
     }
+
+    const out = [`${bold(source.name)} ${dim(`· ${result.format} · written in place`)}`, '']
+    renderFindings([...result.findings, ...result.preserved], out)
+    summarise([...result.findings, ...result.preserved], out)
+    process.stderr.write(`${out.join('\n')}\n`)
     return 0
   }
 
@@ -343,14 +363,63 @@ async function commandDecode(target: string, options: Options): Promise<number> 
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', '.next', 'build'])
 
-async function* walk(dir: string): AsyncGenerator<string> {
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
+/**
+ * Every file under a tree, symlinks included, one unreadable directory at a
+ * time rather than none at all.
+ *
+ * Two things this had wrong, and both of them ended an audit early and quietly.
+ *
+ * A `readdir` that throws — a directory the user cannot read, which is ordinary
+ * in a home folder — threw out of the generator, past the per-file catch below,
+ * into main's handler: exit 2, no partial results, nothing said about which
+ * directory. Per-file failures were already handled; per-directory ones were
+ * the same problem one level up.
+ *
+ * And `Dirent.isFile()` is false for a symlink, so a symlinked file or
+ * directory was dropped with no note. In a repo where `docs/` is a link,
+ * `unmark audit .` answered "nothing marked" and exit 0. `seen` is what keeps a
+ * link that points back up the tree from walking forever.
+ */
+// A tree is walked in order, so the report reads in order and a large tree
+// starts producing rows before it has finished. Resolving every entry up front
+// would reorder the output and hold the whole listing in memory to do it.
+// oxlint-disable no-await-in-loop
+async function* walk(dir: string, seen = new Set<string>()): AsyncGenerator<string> {
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`unmark: skipped ${dir} — ${why}\n`)
+    return
+  }
+
+  for (const entry of entries) {
     if (SKIP.has(entry.name)) continue
     const path = join(dir, entry.name)
-    if (entry.isDirectory()) yield* walk(path)
-    else if (entry.isFile()) yield path
+
+    let resolved = path
+    if (entry.isSymbolicLink()) {
+      try {
+        resolved = await realpath(path)
+      } catch {
+        continue // A broken link points at nothing to audit.
+      }
+      if (seen.has(resolved)) continue
+      seen.add(resolved)
+    }
+
+    let info
+    try {
+      info = await stat(resolved)
+    } catch {
+      continue
+    }
+    if (info.isDirectory()) yield* walk(path, seen)
+    else if (info.isFile()) yield path
   }
 }
+// oxlint-enable no-await-in-loop
 
 async function commandAudit(target: string, options: Options): Promise<number> {
   const isDirectory = (await stat(target)).isDirectory()
@@ -573,6 +642,17 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0
   }
 
+  // A flag whose value is not a number is a mistake, and it used to be an
+  // expensive silent one: `Number('abc')` is NaN, `--attempts 0` is 0, both are
+  // falsy, both were dropped by the spread below, and both came out as the
+  // default of 3. Someone writing `--attempts 0` to mean "just check, spend
+  // nothing" got three paid calls.
+  const attempts = value('--attempts')
+  if (attempts !== undefined && !/^[1-9]\d*$/.test(attempts)) {
+    process.stderr.write(`unmark: --attempts needs a whole number of tries, not "${attempts}"\n`)
+    return 2
+  }
+
   const options: Options = {
     json: flags.has('--json'),
     inPlace: flags.has('--in-place'),
@@ -581,7 +661,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     printPrompt: flags.has('--print-prompt'),
     force: flags.has('--force'),
     ...(value('--model') ? { model: value('--model') as string } : {}),
-    ...(value('--attempts') ? { attempts: Number(value('--attempts')) } : {}),
+    ...(attempts ? { attempts: Number(attempts) } : {}),
     ...(value('--against') ? { against: value('--against') as string } : {}),
     // --plain is one name for the pair, defined once in the core so the page's
     // button and this flag cannot drift into two different presets.

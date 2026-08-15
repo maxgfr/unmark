@@ -1221,7 +1221,11 @@ export function ImageTab() {
                               type="checkbox"
                               checked={ticked.has(key)}
                               disabled={working}
-                              aria-label={`Include the ${placeOf(candidate.rect, raster)} region`}
+                              // The place alone is not a name: two bands across the
+                              // bottom third are both "bottom band", and a screen
+                              // reader announcing the same label twice has told the
+                              // listener nothing about which is which.
+                              aria-label={`Include the ${placeOf(candidate.rect, raster)} region, ${candidate.rect.width} by ${candidate.rect.height} at ${candidate.rect.x}, ${candidate.rect.y}`}
                               onChange={(event) =>
                                 setTicked((current) => {
                                   const next = new Set(current)

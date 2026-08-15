@@ -1,7 +1,7 @@
 // oxlint-disable no-await-in-loop -- files are read one at a time so a dropped
 // batch appears in the report as it goes, and one unreadable document does not
 // take the rest of the batch down with it.
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { cleanContainer, type ContainerFormat } from '../core/container/index.ts'
 import type { Finding } from '../core/report.ts'
 import { FindingsTable, Limits, Section } from './parts.tsx'
@@ -104,8 +104,26 @@ const bytes = formatBytes
  * assert.
  */
 function Window({ entry, open }: { entry: Entry; open: Opened | undefined }) {
-  if (open?.id !== entry.id) return undefined
-  const { offset } = open
+  const mine = open?.id === entry.id ? open : undefined
+  const offset = mine?.offset ?? 0
+
+  /**
+   * The characters around the finding, for a container whose offsets are
+   * characters rather than bytes.
+   *
+   * Memoised, and it has to be: this decodes the whole retained buffer — up to
+   * the 32 MB `KEEPABLE` allows — to produce sixty-four characters, and it ran
+   * on every render of the tab. Dragging a second file over the drop zone
+   * fires `setDragging` on every `dragover`, so an open window on a 20 MB log
+   * paid a full UTF-8 decode per mouse move.
+   */
+  const text = useMemo(() => {
+    if (!mine || mine.where !== undefined || !entry.input || !entry.textual) return undefined
+    const from = Math.max(0, offset - WINDOW / 2)
+    return decodeUtf8(entry.input).slice(from, from + WINDOW)
+  }, [mine, entry.input, entry.textual, offset])
+
+  if (!mine) return undefined
 
   if (!entry.input) {
     return (
@@ -125,7 +143,7 @@ function Window({ entry, open }: { entry: Entry; open: Opened | undefined }) {
   // first character is a zero-width space, or an `.html` opening on a generator
   // comment. Clicking those — the most legible case there is, a mark at the
   // very start — answered with a sentence about ZIP archives.
-  if (open.where !== undefined) {
+  if (mine.where !== undefined) {
     return (
       <p className="mt-3 text-xs text-[var(--color-muted)]">
         This one is named by the part it lives in rather than by a position in the file.
@@ -134,16 +152,14 @@ function Window({ entry, open }: { entry: Entry; open: Opened | undefined }) {
   }
 
   const start = Math.max(0, offset - WINDOW / 2)
-  const slice = entry.input.subarray(start, Math.min(entry.input.length, start + WINDOW))
-
-  // A textual container's offsets index its decoded characters, not its bytes,
-  // so slicing the array would land in the middle of a multi-byte character.
-  const text = entry.textual
-    ? decodeUtf8(entry.input).slice(
-        Math.max(0, offset - WINDOW / 2),
-        Math.max(0, offset - WINDOW / 2) + WINDOW,
-      )
-    : undefined
+  // Only when there is no decoded text to show. A textual container's offsets
+  // index characters rather than bytes, so slicing the array would land in the
+  // middle of a multi-byte one — and computing it anyway was a slice nothing
+  // read.
+  const slice =
+    text === undefined
+      ? entry.input.subarray(start, Math.min(entry.input.length, start + WINDOW))
+      : new Uint8Array()
 
   return (
     <div className="mt-3 overflow-x-auto rounded-md border border-[var(--color-rule)] bg-[var(--color-panel)] p-3">
