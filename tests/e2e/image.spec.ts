@@ -190,7 +190,7 @@ test.describe('the overlay scan', () => {
     // sat beside a loaded button. Removal is a decision now, taken by hand.
     const boxes = panel.locator('input[type=checkbox]')
     expect(await boxes.count()).toBeGreaterThan(0)
-    for (const box of await boxes.all()) await expect(box).not.toBeChecked()
+    await Promise.all((await boxes.all()).map((box) => expect(box).not.toBeChecked()))
     await expect(panel.getByRole('button', { name: /^Unblend/ })).toHaveCount(0)
   })
 

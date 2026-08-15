@@ -29,8 +29,32 @@ import { splice, type Splice } from './frame.ts'
 const AI_PARAMETER =
   /\b(utm_source|utm_medium|ref|referrer|source)=(chatgpt\.com|chat\.openai\.com|openai\.com|perplexity(?:\.ai)?|claude\.ai|copilot(?:\.microsoft\.com)?|gemini\.google\.com|poe\.com)\b/gi
 
-/** A URL, matched loosely enough to find one inside prose or Markdown. */
-const URL_PATTERN = /\bhttps?:\/\/[^\s<>"'\])}]+/gi
+/**
+ * A URL, matched loosely enough to find one inside prose or Markdown.
+ *
+ * The class excludes the punctuation that ends a link in running text, and the
+ * typographic half of that list is not decoration. It used to stop only at
+ * whitespace, angle brackets, straight quotes and closing brackets — so an em
+ * dash was "part of the URL", and
+ *
+ *   the announcement—https://x/p?utm_source=chatgpt.com—it is short
+ *
+ * matched through to `—it`. Stripping the parameter rewrote the whole match as
+ * the part before `?`, and the word went with it. This pass is on by default
+ * and has no toggle: it was silently deleting words from the sentence a reader
+ * had handed over to be inspected. Curly quotes and guillemets are the same
+ * failure with a different character.
+ *
+ * The cost of being wrong the other way is a miss, not damage: a link that
+ * genuinely contains one of these is matched only up to it, so its tracking
+ * parameter is left in place. In practice those characters are percent-encoded
+ * in a real URL, and a mark left behind is a smaller wrong than a word removed.
+ *
+ * Escapes rather than literals: U+2012-U+2015 is a range over the four dashes,
+ * and a literal em dash inside a class is indistinguishable from one.
+ */
+const URL_PATTERN =
+  /\bhttps?:\/\/[^\s<>"'\])}\u00ab\u00bb\u2012-\u2015\u2018\u2019\u201c\u201d\u2026]+/gi
 
 /**
  * ChatGPT citation furniture.

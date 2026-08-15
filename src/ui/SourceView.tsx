@@ -56,6 +56,9 @@ function chipLabel(slice: string): string {
 
 interface Run {
   text: string
+  /** Where this run sits in the document, so a selection can be matched to it. */
+  start: number
+  end: number
   /** Index into `findings`, when this run is a mark. */
   mark?: number
   /** Inside the span of a decoded payload. */
@@ -127,12 +130,14 @@ function runsOf(text: string, findings: readonly Finding[]): { runs: Run[]; hidd
         const banded = inBand(cursor)
         let next = cursor + 1
         while (next < span.start && inBand(next) === banded) next += 1
-        runs.push({ text: text.slice(cursor, next), banded })
+        runs.push({ text: text.slice(cursor, next), start: cursor, end: next, banded })
         cursor = next
       }
     }
     runs.push({
       text: text.slice(span.start, span.end),
+      start: span.start,
+      end: span.end,
       mark: span.mark,
       banded: inBand(span.start),
     })
@@ -144,7 +149,7 @@ function runsOf(text: string, findings: readonly Finding[]): { runs: Run[]; hidd
       const banded = inBand(cursor)
       let next = cursor + 1
       while (next < text.length && inBand(next) === banded) next += 1
-      runs.push({ text: text.slice(cursor, next), banded })
+      runs.push({ text: text.slice(cursor, next), start: cursor, end: next, banded })
       cursor = next
     }
   }
@@ -161,21 +166,43 @@ export function SourceView({
   text: string
   /** Positional findings only, addressing `text` as it stands. */
   findings: readonly Finding[]
+  /**
+   * Where the reader last asked to look, as an offset into `text`.
+   *
+   * An offset, not an index into `findings`, and that is the whole fix. This
+   * used to take an index, which the view then had to find again among runs it
+   * had already rewritten — and it rewrites them twice: touching marks of one
+   * kind merge into a single chip keeping only the first one's index, and
+   * overlapping findings are dropped in favour of the shorter. On the tab's own
+   * demo paragraph that left 2 of 111 selectable findings addressable, so
+   * clicking a row lit up nothing and clicking a chip rendered it unpressed.
+   *
+   * A run knows the span it covers, so an offset needs no translation and
+   * cannot be invalidated by a collapse.
+   */
   selected: number | undefined
-  onSelect: (index: number) => void
+  onSelect: (finding: Finding) => void
 }) {
   const container = useRef<HTMLDivElement>(null)
   const { runs, hidden } = useMemo(() => runsOf(text, findings), [text, findings])
+
+  /** The run the selected offset falls inside, if any run is drawn over it. */
+  const active = useMemo(() => {
+    if (selected === undefined) return -1
+    return runs.findIndex(
+      (run) => run.mark !== undefined && selected >= run.start && selected < run.end,
+    )
+  }, [runs, selected])
 
   // Scrolling is done by querying rather than by holding a ref per mark: there
   // may be two thousand of them, and a map of two thousand refs rebuilt on every
   // keystroke costs more than one selector lookup on a click.
   useEffect(() => {
-    if (selected === undefined) return
+    if (active === -1) return
     container.current
-      ?.querySelector(`[data-mark="${selected}"]`)
+      ?.querySelector('[data-selected="true"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [selected])
+  }, [active])
 
   return (
     <>
@@ -197,15 +224,21 @@ export function SourceView({
 
           const finding = findings[run.mark] as Finding
           const invisible = INVISIBLE.has(finding.kind)
-          const active = selected === run.mark
+          const chosen = active === index
 
           return (
             <button
               key={key}
               type="button"
-              data-mark={run.mark}
-              onClick={() => onSelect(run.mark as number)}
-              aria-pressed={active}
+              data-selected={chosen}
+              // The run's own span, not the finding's. A merged chip stands for
+              // every mark under it, and selecting the one that happened to be
+              // first would put the cursor on one carrier out of a hundred and
+              // twelve — which is the opposite of what a merged chip is for.
+              onClick={() =>
+                onSelect({ ...finding, offset: run.start, length: run.end - run.start })
+              }
+              aria-pressed={chosen}
               title={finding.label}
               // No amber on a mark, whatever its verdict. The palette reserves
               // it for a confirmed finding and a decoded payload, and an
@@ -217,7 +250,7 @@ export function SourceView({
                 invisible
                   ? 'mx-0.5 rounded-sm border border-[var(--color-rule-bright)] px-1 align-baseline text-[10px] tracking-wide text-[var(--color-muted)] hover:border-[var(--color-bone)] hover:text-[var(--color-bone)]'
                   : 'underline decoration-[var(--color-rule-bright)] decoration-dotted underline-offset-4 hover:decoration-[var(--color-bone)]'
-              } ${active ? 'mark-selected' : ''} cursor-pointer transition-colors duration-150`}
+              } ${chosen ? 'mark-selected' : ''} cursor-pointer transition-colors duration-150`}
             >
               {invisible ? chipLabel(run.text) : run.text}
             </button>

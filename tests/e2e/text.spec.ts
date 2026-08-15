@@ -144,3 +144,60 @@ test('a style tell says it describes the document rather than a place in it', as
   await expect(style).toContainText('whole document')
   await expect(style.getByRole('button', { name: /^Apply/ })).toHaveCount(0)
 })
+
+test('clicking a finding lights up the mark it points at', async ({ page }) => {
+  // "Located" has two halves and only one of them worked. The cursor landed on
+  // the right characters; the chip in the source view — the thing that exists
+  // *because* those characters are invisible — did not light up.
+  //
+  // `marked` is 112 carriers, drawn as one chip because touching chips of a
+  // kind merge. The findings row is the matching fold. Selecting either used to
+  // be translated into an index into a list the view had already collapsed, so
+  // the index addressed a chip that was no longer in the document.
+  const input = page.getByLabel('Text to inspect')
+  await input.fill(marked)
+
+  const source = page.locator('section', {
+    has: page.getByRole('heading', { name: 'Source' }),
+  })
+  const chip = source
+    .getByRole('button')
+    .filter({ hasText: /^U\+200B/ })
+    .first()
+  await expect(chip).toBeVisible()
+  await expect(chip).toHaveAttribute('aria-pressed', 'false')
+
+  await page
+    .locator('li.finding-row')
+    .filter({ hasText: /zero-width/i })
+    .first()
+    .locator('div[role="button"]')
+    .click()
+
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('clicking a mark leaves that mark selected', async ({ page }) => {
+  // The other direction, and it failed the same way: clicking a chip set an
+  // offset, the offset was translated back into a different index, and the chip
+  // the reader had just pressed rendered as unpressed.
+  const input = page.getByLabel('Text to inspect')
+  await input.fill(marked)
+
+  const source = page.locator('section', {
+    has: page.getByRole('heading', { name: 'Source' }),
+  })
+  const chip = source
+    .getByRole('button')
+    .filter({ hasText: /^U\+200B/ })
+    .first()
+  await chip.click()
+
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
+  // And the cursor is on the run it stands for, not on one character of it.
+  const selected = await input.evaluate((element) => {
+    const area = element as HTMLTextAreaElement
+    return area.selectionEnd - area.selectionStart
+  })
+  expect(selected).toBeGreaterThan(1)
+})

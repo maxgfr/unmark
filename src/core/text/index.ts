@@ -50,6 +50,17 @@ export interface TextReport {
   findings: Finding[]
   /** Carriers matched but deliberately kept, with the reason on each. */
   preserved: Finding[]
+  /**
+   * The stripped document, from the same pass the findings came out of.
+   *
+   * Carried on the report rather than left to the caller, because the caller
+   * that wanted both ran `cleanText` a second time to get it — and `cleanText`
+   * is the expensive half. Measured on 139k characters of ordinary prose: 361
+   * ms of the report's 422, paid twice on every rebuild. `useDeferredValue`
+   * does not help with that; a single synchronous pass is uninterruptible
+   * however it is scheduled.
+   */
+  cleaned: CleanResult<string>
   /** Payloads recovered from the carriers, most plausible first. */
   stego: StegoDecoding[]
   style: StyleReport
@@ -111,12 +122,14 @@ export function applyFindings(text: string, findings: readonly Finding[]): strin
 
 /** Read a document without changing it. */
 export function inspectTextDocument(text: string, options?: TextOptions): TextReport {
-  const { findings, preserved } = cleanText(text, options)
+  const cleaned = cleanText(text, options)
+  const { findings, preserved } = cleaned
   return {
     findings: [...findings, ...preserved, ...stegoFindings(text), ...stylometryFindings(text)].sort(
       byPosition,
     ),
     preserved,
+    cleaned,
     stego: decodeStego(text),
     style: analyzeStyle(text),
   }

@@ -38,6 +38,44 @@ describe('tracking parameters', () => {
     expect(output).toBe('Read https://example.com/p.')
   })
 
+  it('does not swallow the word on the other side of a dash', () => {
+    // The worst bug this file has had. A URL was matched as "everything up to
+    // whitespace or a bracket", and an em dash is neither — so a link set off
+    // by dashes swallowed the word after it, and stripping the parameter took
+    // that word with it. On by default, with no toggle, editing the sentence a
+    // reader had asked it to inspect.
+    const { output } = cleanProvenance(
+      'Read the announcement—https://example.com/p?utm_source=chatgpt.com—it is short.',
+    )
+    expect(output).toBe('Read the announcement—https://example.com/p—it is short.')
+  })
+
+  it('does not swallow the word after an ellipsis', () => {
+    const { output } = cleanProvenance(
+      'See https://example.com/p?utm_source=chatgpt.com…then stop.',
+    )
+    expect(output).toBe('See https://example.com/p…then stop.')
+  })
+
+  it('does not swallow a closing curly quote', () => {
+    const { output } = cleanProvenance(
+      '“https://example.com/p?utm_source=chatgpt.com” is the link.',
+    )
+    expect(output).toBe('“https://example.com/p” is the link.')
+  })
+
+  it('leaves the sentence alone when there is nothing to strip', () => {
+    // The same shapes, with no tracking parameter: the pass must be a no-op
+    // rather than merely a smaller edit.
+    for (const text of [
+      'Read it—https://example.com/p—it is short.',
+      'See https://example.com/p…then stop.',
+      '“https://example.com/p” is the link.',
+    ]) {
+      expect(cleanProvenance(text).output).toBe(text)
+    }
+  })
+
   it('cleans a Markdown link target', () => {
     const { output } = cleanProvenance('[the post](https://example.com/p?utm_source=chatgpt.com)')
     expect(output).toBe('[the post](https://example.com/p)')

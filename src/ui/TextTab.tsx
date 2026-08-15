@@ -1,7 +1,6 @@
 import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react'
 import {
   applyFindings,
-  cleanText,
   distinctSignals,
   encodeStego,
   inspectTextDocument,
@@ -10,7 +9,7 @@ import {
   type StyleLayer,
 } from '../core/text/index.ts'
 import { CopyButton, FindingsTable, Limits, Section, Toggle } from './parts.tsx'
-import { editsOf, summariseOutcomes, type Finding, type Row } from '../core/report.ts'
+import { editsOf, summariseOutcomes, type Row } from '../core/report.ts'
 import { SourceView } from './SourceView.tsx'
 
 const LAYER_NOTE: Record<StyleLayer, string> = {
@@ -47,9 +46,11 @@ export function TextTab() {
   // wait on a full re-scan of a long document.
   const deferred = useDeferredValue(input)
 
-  // One function, shared with the CLI. This used to be assembled inline here
-  // and again in core/text/index.ts, which is two implementations of one report
-  // and exactly the kind of pair that drifts apart without anyone noticing.
+  // One function, shared with the CLI, and one call. This used to be assembled
+  // inline here and again in core/text/index.ts, which is two implementations
+  // of one report and exactly the kind of pair that drifts apart without anyone
+  // noticing. The cleaned document comes back on the report for the same
+  // reason: asking for it separately meant running the strip pass twice.
   const report = useMemo(() => {
     const options = {
       ...(paranoid ? { paranoid } : {}),
@@ -57,20 +58,53 @@ export function TextTab() {
       ...(typography ? { typography } : {}),
       ...(humaniseText ? { humanise: humaniseText } : {}),
     }
-    return { ...inspectTextDocument(deferred, options), cleaned: cleanText(deferred, options) }
+    return inspectTextDocument(deferred, options)
   }, [deferred, paranoid, confusables, typography, humaniseText])
 
+  /**
+   * Whether the report on screen describes the text on screen.
+   *
+   * `useDeferredValue` is what keeps typing responsive, and it does it by
+   * letting the report lag: for a render or two, `report` addresses `deferred`
+   * while the textarea holds `input`. Every offset in it is measured against a
+   * string that is no longer there.
+   *
+   * That was invisible while the report was a column of numbers and became a
+   * defect the moment an offset had to act. Locate put the cursor on a span
+   * computed for the previous text; Apply spliced at it. Measured on a 200 kB
+   * article the window is over a second, and one Apply during it deletes a
+   * character 33 positions from the em dash the reader pressed the button on —
+   * silently, in the middle of their document, with Undo restoring the state
+   * before the *second* apply rather than before the damage.
+   *
+   * So the two actions are withheld until the report has caught up. It is a
+   * render or two on anything short, and on the documents where it is longer it
+   * is exactly the case that used to corrupt them.
+   */
+  const settled = deferred === input
+
   const removed = report.cleaned.findings.length
+  const shorterBy = deferred.length - report.cleaned.output.length
+  const lengthChange =
+    shorterBy === 0
+      ? 'same length'
+      : shorterBy > 0
+        ? `${shorterBy} characters shorter`
+        : `${-shorterBy} characters longer`
   const tells = report.style.metrics.filter((metric) => metric.triggered)
   const signals = distinctSignals(report.style.metrics)
   const plain = typography && humaniseText
 
-  // Everything with a place in the document, in one list the viewer and the
-  // table both index. `preserved` belongs here too: an emoji joiner that was
-  // kept is exactly the kind of thing a reader wants to go and look at.
+  // Everything with a place in the document. `preserved` belongs in it — an
+  // emoji joiner that was kept is exactly the kind of thing a reader wants to
+  // go and look at — and `inspectTextDocument` already folded it in, so adding
+  // it again here put every one of those findings in the list twice. The
+  // duplicates were invisible, because the viewer drops a candidate that
+  // overlaps one it has already claimed and a finding overlaps itself
+  // perfectly; they still shifted every index after the first of them.
   const located = useMemo(
     () =>
-      [...report.findings, ...report.preserved]
+      report.findings
         .filter((finding) => finding.scope !== 'document' && finding.length > 0)
         .sort((a, b) => a.offset - b.offset),
     [report],
@@ -105,12 +139,6 @@ export function TextTab() {
     [input],
   )
 
-  // The viewer indexes its own list; the table and the textarea speak offsets.
-  // Translating here rather than storing an index keeps the selection valid
-  // across a keystroke, which rebuilds the list under it.
-  const locatedIndex = located.findIndex((finding) => finding.offset === selected)
-  const marked = locatedIndex === -1 ? undefined : locatedIndex
-
   const undo = useCallback(() => {
     setHistory((current) => {
       const previous = current.at(-1)
@@ -141,7 +169,16 @@ export function TextTab() {
               {input.length > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setInput('')}
+                  // Through the history, like every other thing that changes
+                  // the text. This called setInput('') directly, so a misclick
+                  // on a pasted five-thousand-word document destroyed it with
+                  // no way back — and the Undo button beside it was not even
+                  // rendered, because nothing had been pushed.
+                  onClick={() => {
+                    setHistory((current) => [...current, input])
+                    setInput('')
+                    setSelected(undefined)
+                  }}
                   className="transition-colors duration-150 hover:text-[var(--color-bone)]"
                 >
                   Clear
@@ -247,12 +284,10 @@ export function TextTab() {
           // chip, so `113 marked` beside a panel showing one box would ask the
           // reader to reconcile two numbers that are both right.
           <Section title="Source" aside="click a mark to put the cursor on it">
-            <SourceView
-              text={input}
-              findings={located}
-              selected={marked}
-              onSelect={(index) => locate(located[index] as Finding)}
-            />
+            {/* `deferred`, not `input`: the findings address that string, and
+                drawing them over a newer one puts every chip beside the
+                character it names. */}
+            <SourceView text={deferred} findings={located} selected={selected} onSelect={locate} />
           </Section>
         ) : undefined}
 
@@ -264,8 +299,12 @@ export function TextTab() {
           </output>
           {input.length > 0 ? (
             <p className="tnum mt-2 font-mono text-xs text-[var(--color-muted)]">
-              {removed} removed · {report.cleaned.preserved.length} kept ·{' '}
-              {input.length - report.cleaned.output.length} characters shorter
+              {/* Both figures from the same string. This measured the length
+                  against `input` and the output against `deferred`, so mid-type
+                  it reported a difference neither pass had made — and it read
+                  "shorter" unconditionally, so flattening an ellipsis to three
+                  dots printed "-2 characters shorter". */}
+              {removed} removed · {report.cleaned.preserved.length} kept · {lengthChange}
             </p>
           ) : undefined}
         </Section>
@@ -274,8 +313,17 @@ export function TextTab() {
       <div className="flex flex-col gap-6">
         {report.stego.length > 0 ? (
           <Section title="Recovered payload" aside="what the invisible characters spell">
+            {/* The payload is part of the key, and it has to be: a zero-width
+                run is decoded once per permutation of its alphabet, so ten
+                readings of the same eight carriers share a scheme and an
+                offset. Keyed on those two alone, React saw one child ten times
+                and reconciliation across a keystroke was undefined — the panel
+                could go on showing a payload from the previous document. */}
             {report.stego.map((decoding) => (
-              <div key={`${decoding.scheme}-${decoding.offset}`} className="mb-3 last:mb-0">
+              <div
+                key={`${decoding.scheme}-${decoding.offset}-${decoding.payload}`}
+                className="mb-3 last:mb-0"
+              >
                 <p className="font-mono text-lg leading-snug break-all text-[var(--color-signal)]">
                   {decoding.payload}
                 </p>
@@ -299,8 +347,7 @@ export function TextTab() {
             <FindingsTable
               findings={report.findings}
               selectedOffset={selected}
-              onLocate={locate}
-              onApply={apply}
+              {...(settled ? { onLocate: locate, onApply: apply } : {})}
             />
           )}
         </Section>
