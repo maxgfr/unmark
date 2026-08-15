@@ -1,22 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { paint, rasterFromBlob, rasterToBlob, requantizeJpeg } from '../image/canvas.ts'
+import {
+  encodableFormats,
+  paint,
+  rasterFromBlob,
+  rasterToBlob,
+  requantizeJpeg,
+} from '../image/canvas.ts'
 import { disrupt, type DisruptionOptions } from '../image/disrupt.ts'
 import {
-  estimateOverlay,
-  findCornerOverlays,
-  unblend,
-  type OverlayEstimate,
-  type Rect,
-} from '../image/detect/overlay.ts'
-import { coverageMap, estimateShaped, unblendVarying } from '../image/detect/coverage.ts'
-import { inpaint, rectMask } from '../image/inpaint/telea.ts'
+  DEFAULT_QUALITY,
+  defaultFormat,
+  EXPORT_FORMATS,
+  exportName,
+  FORMAT_LABEL,
+  hasTransparency,
+  measureKey,
+  mimeOf,
+  type ExportFormat,
+} from '../image/export.ts'
+import { estimateOverlay, type OverlayCandidate, type Rect } from '../image/detect/overlay.ts'
+import { estimateShaped } from '../image/detect/coverage.ts'
+import { disjoint, removeAll, removeOverlay } from '../image/detect/remove.ts'
+import { findOverlays, scanCorners } from '../image/detect/scan.ts'
+import { inpaint, rectMask, rectsMask } from '../image/inpaint/telea.ts'
 import { inpaintWithMigan, MODEL_BYTES, RUNTIME_BYTES } from '../image/inpaint/migan.ts'
 import { ImageWorker, workerAvailable } from '../image/offload.ts'
 import type { Raster } from '../image/raster.ts'
-import { cleanContainer } from '../core/container/index.ts'
+import { cleanContainer, type ContainerFormat } from '../core/container/index.ts'
 import { summariseOutcomes, type Finding } from '../core/report.ts'
 import { saveBlob } from './download.ts'
-import { FindingsTable, Limits, Section, Toggle } from './parts.tsx'
+import { cleanedName, formatBytes } from './format.ts'
+import { Choice, FindingsTable, Limits, Section, Slider, Toggle } from './parts.tsx'
 import { IconDownload } from './icons.tsx'
 
 interface Loaded {
@@ -24,6 +38,16 @@ interface Loaded {
   raster: Raster
   metadata: Finding[]
   bytes: number
+  /**
+   * The original file with its metadata removed, and nothing else touched.
+   *
+   * `cleanContainer` produced this on the way in and it used to be discarded,
+   * which meant the one case the tab handles most often — "take the EXIF off
+   * this photo" — re-encoded the pixels for no reason and handed back a file
+   * five times the size of the one that went in.
+   */
+  output: Uint8Array
+  container: ContainerFormat
 }
 
 /**
@@ -40,6 +64,129 @@ const TELEA_PIXELS_PER_SECOND = 200_000
 
 /** Past this many pixels the wait is worth warning about rather than starting. */
 const HEAVY_SELECTION = 400_000
+
+/**
+ * How long the quality slider has to sit still before the file is encoded.
+ *
+ * Encoding is the measurement — the number shown is a real blob's size, not a
+ * model of one — so it is not free, and a drag across the slider is thirty
+ * values nobody asked the size of.
+ */
+const MEASURE_SETTLE_MS = 250
+
+/** A candidate's identity, which is its rectangle. Two scans agree on this. */
+const keyOf = (candidate: OverlayCandidate) =>
+  `${candidate.rect.x},${candidate.rect.y},${candidate.rect.width},${candidate.rect.height}`
+
+/**
+ * Where a region sits, in words.
+ *
+ * `120x40 at 880,12` is precise and tells a reader nothing about which mark on
+ * their screen it means. The corner or edge it is in does, and the numbers stay
+ * on the row underneath for anyone who wants them.
+ */
+function placeOf(rect: Rect, raster: Raster): string {
+  const spansX = rect.width >= raster.width * 0.9
+  const spansY = rect.height >= raster.height * 0.9
+  if (spansX && spansY) return 'the whole frame'
+
+  const middleX = rect.x + rect.width / 2
+  const middleY = rect.y + rect.height / 2
+  const across =
+    middleX < raster.width / 3 ? 'left' : middleX > (raster.width * 2) / 3 ? 'right' : ''
+  const down =
+    middleY < raster.height / 3 ? 'top' : middleY > (raster.height * 2) / 3 ? 'bottom' : ''
+
+  if (spansX) return `${down || 'middle'} band`
+  if (spansY) return `${across || 'middle'} column`
+  if (across && down) return `${down} ${across}`
+  return across || down || 'centre'
+}
+
+/**
+ * A rectangle drawn over the canvas, in the picture's own coordinates.
+ *
+ * Percentages rather than pixels, because the canvas element is capped at
+ * 2048px for display and a 40-megapixel raster is drawn much smaller than it
+ * is. A box positioned in raster pixels would land somewhere else entirely.
+ */
+function RegionBox({
+  rect,
+  raster,
+  tone,
+}: {
+  rect: Rect
+  raster: Raster
+  tone: 'faint' | 'bright' | 'selected'
+}) {
+  const border =
+    tone === 'faint'
+      ? 'border-[var(--color-rule-bright)]'
+      : tone === 'bright'
+        ? 'border-[var(--color-bone)]'
+        : 'border-[var(--color-signal)]'
+
+  return (
+    <div
+      aria-hidden
+      className={`pointer-events-none absolute border transition-colors duration-150 ${border}`}
+      style={{
+        left: `${(rect.x / raster.width) * 100}%`,
+        top: `${(rect.y / raster.height) * 100}%`,
+        width: `${(rect.width / raster.width) * 100}%`,
+        height: `${(rect.height / raster.height) * 100}%`,
+      }}
+    />
+  )
+}
+
+/**
+ * The cost of a large fill, named before it is paid.
+ *
+ * Telea is O(area) and a big region is a wait worth stating rather than
+ * starting. Rendered beside whichever button asked for it: a warning about a
+ * batch that appeared under the single-selection panel would be a warning the
+ * reader has to go and find, and on a picture with no committed selection that
+ * panel is not on the screen at all.
+ */
+function HeavyPrompt({
+  pixels,
+  onRun,
+  onCancel,
+}: {
+  pixels: number
+  onRun: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="mt-4 border border-[var(--color-rule-bright)] p-3">
+      <p className="text-sm text-[var(--color-bone)]">
+        That is {pixels.toLocaleString()} pixels — roughly {seconds(pixels)}.
+      </p>
+      <p className="mt-1 text-xs text-[var(--color-muted)]">
+        It runs off the main thread, so the page stays usable and you can stop it. Telea also has
+        less to work with the larger the hole is: it continues the edges inward, and over a region
+        this size that is mostly a smear.
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={onRun}
+          className="rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)]"
+        >
+          Run it anyway
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors duration-150 hover:text-[var(--color-bone)]"
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const hex = ([r, g, b]: readonly [number, number, number]) =>
   `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`
@@ -61,16 +208,32 @@ export function ImageTab() {
   // several hundred milliseconds per frame, and the figures would be flickering
   // through values nobody asked about anyway.
   const [committed, setCommitted] = useState<Rect | undefined>()
-  const [candidates, setCandidates] = useState<OverlayEstimate[]>([])
+  const [candidates, setCandidates] = useState<OverlayCandidate[]>([])
+  // Which candidates a batch action would touch, keyed by rectangle. An index
+  // would point at a different region the moment a wider scan reorders the list.
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set())
+  const [hovered, setHovered] = useState<string | undefined>()
+  const [scanned, setScanned] = useState<'corners' | 'whole'>('corners')
+  const [batchNote, setBatchNote] = useState('')
   const [history, setHistory] = useState<Raster[]>([])
   const [busy, setBusy] = useState('')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
 
+  // What the download will be. `keepOriginal` is a preference, not the whole
+  // answer: it only holds while the pixels are untouched, and the render below
+  // resolves the two into one mode.
+  const [keepOriginal, setKeepOriginal] = useState(true)
+  const [format, setFormat] = useState<ExportFormat>('png')
+  const [quality, setQuality] = useState(DEFAULT_QUALITY)
+  const [encodable, setEncodable] = useState<ReadonlySet<ExportFormat>>()
+  const [measured, setMeasured] = useState<ReadonlyMap<string, Blob>>(new Map())
+  const [measuring, setMeasuring] = useState(false)
+
   const [aiPrompt, setAiPrompt] = useState(false)
   const [aiNote, setAiNote] = useState('')
   const [modelReady, setModelReady] = useState(false)
-  const [heavyPrompt, setHeavyPrompt] = useState(false)
+  const [heavyPrompt, setHeavyPrompt] = useState<'' | 'selection' | 'batch'>('')
   const [lowBits, setLowBits] = useState(false)
   const [resampleRound, setResampleRound] = useState(false)
   const [crop, setCrop] = useState(false)
@@ -98,6 +261,10 @@ export function ImageTab() {
   const accept = useCallback(async (file: File) => {
     setError('')
     setBusy('reading')
+    // A scan still running belongs to the file being replaced. The id map keeps
+    // its reply from being mistaken for another job's, but not from being
+    // applied to a picture the visitor has already moved on from.
+    worker.current?.cancel()
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
       // Metadata first, always: it is the part that can be removed losslessly.
@@ -109,12 +276,21 @@ export function ImageTab() {
         raster: decoded,
         metadata: [...stripped.findings, ...stripped.preserved],
         bytes: bytes.length,
+        output: stripped.output,
+        container: stripped.format,
       })
       setRaster(decoded)
       setHistory([])
       setSelection(undefined)
       setCommitted(undefined)
-      setCandidates(findCornerOverlays(decoded))
+      setCandidates(scanCorners(decoded))
+      setTicked(new Set())
+      setScanned('corners')
+      // Do not change the kind of file someone brought you: a photograph
+      // arrives lossy and leaves lossy, and a screenshot stays a PNG.
+      setFormat(defaultFormat(stripped.format))
+      setQuality(DEFAULT_QUALITY)
+      setKeepOriginal(true)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'that file could not be decoded')
     } finally {
@@ -190,15 +366,210 @@ export function ImageTab() {
     }
   }, [raster, crop, resampleRound, jpeg, lowBits, noise, apply, offload])
 
+  /**
+   * Whether any pixel has been touched.
+   *
+   * By identity, not by a flag: every operation here returns a fresh Raster and
+   * `undo` puts the previous object back, so this is exact and costs nothing.
+   * It is what decides whether handing back the original file is still an
+   * honest offer or would quietly throw an edit away.
+   */
+  const edited = loaded !== undefined && raster !== loaded.raster
+  const lossless = keepOriginal && !edited
+
+  useEffect(() => {
+    void encodableFormats().then(setEncodable)
+  }, [])
+
+  // Any edit invalidates every measurement, including the one on screen.
+  useEffect(() => setMeasured(new Map()), [raster])
+
+  const encodeNow = useCallback(
+    async (source: Raster, chosen: ExportFormat, level: number): Promise<Blob | undefined> => {
+      const mime = mimeOf(chosen)
+      if (!workerAvailable()) {
+        return rasterToBlob(source, mime, chosen === 'png' ? undefined : level)
+      }
+      const outcome = await offload().encode(source, mime, level)
+      return outcome?.blob
+    },
+    [offload],
+  )
+
+  /**
+   * What has to be encoded, in the order it is wanted.
+   *
+   * The chosen format first, because that is the number the reader is waiting
+   * on. PNG second, and only when it is not already the choice, because the
+   * comparison — "PNG would be 19.4 MB" — is what makes the old default's cost
+   * visible rather than merely absent.
+   */
+  const wanted = useMemo(
+    () => (format === 'png' ? ['png'] : [measureKey(format, quality), 'png']),
+    [format, quality],
+  )
+
+  useEffect(() => {
+    if (!raster || lossless || busy !== '') return
+
+    const pending = wanted.find((key) => !measured.has(key))
+    if (!pending) return
+
+    const target: ExportFormat = pending === 'png' ? 'png' : format
+    let live = true
+    const timer = setTimeout(() => {
+      setMeasuring(true)
+      void encodeNow(raster, target, quality)
+        .then((blob) => {
+          // A cancel elsewhere terminates the shared worker and resolves this
+          // with nothing. There is no result and no failure to report.
+          if (live && blob) setMeasured((known) => new Map(known).set(pending, blob))
+        })
+        .catch(() => {
+          if (live) setError('this browser could not encode that format')
+        })
+        .finally(() => {
+          if (live) setMeasuring(false)
+        })
+    }, MEASURE_SETTLE_MS)
+
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [raster, lossless, busy, wanted, measured, format, quality, encodeNow])
+
   const download = useCallback(async () => {
     if (!raster || !loaded) return
-    const blob = await rasterToBlob(raster)
-    saveBlob(blob, `${loaded.name.replace(/\.[^.]+$/, '')}-unmarked.png`)
-  }, [raster, loaded])
+
+    if (lossless) {
+      saveBlob(new Blob([loaded.output as BlobPart]), cleanedName(loaded.name))
+      return
+    }
+
+    // The blob whose size was shown is the blob that is saved. Encoding a
+    // second time to produce the file would risk handing over something other
+    // than the thing that was measured.
+    const key = measureKey(format, quality)
+    const blob = measured.get(key) ?? (await encodeNow(raster, format, quality))
+    if (!blob) return
+    saveBlob(blob, exportName(loaded.name, format))
+  }, [raster, loaded, lossless, format, quality, measured, encodeNow])
+
+  /**
+   * Look everywhere, on request.
+   *
+   * A button rather than part of opening a file, and the panel says why: over
+   * the whole frame the flat model reads a patch of smooth sky as a strongly
+   * opaque overlay, more confidently than it reads some real marks. That is a
+   * list worth offering to someone who asked for it and worth refusing to
+   * volunteer.
+   */
+  const runWideScan = useCallback(async () => {
+    if (!raster) return
+    setError('')
+    setBusy('scanning the whole image')
+    setProgress(0)
+    try {
+      const found = workerAvailable()
+        ? await offload().scan(raster, { wide: true, shaped: true }, (fraction) =>
+            setProgress(fraction),
+          )
+        : { candidates: findOverlays(raster, { wide: true, shaped: true }) }
+
+      if (!found) return
+      setCandidates(found.candidates)
+      // Flat candidates start ticked, shaped ones do not. The difference is
+      // measured, not stylistic: coverage.test.ts records a shaped estimate
+      // that cannot tell a badge from a road sign.
+      setTicked(new Set(found.candidates.filter((c) => c.kind === 'flat').map((c) => keyOf(c))))
+      setScanned('whole')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'the scan failed')
+    } finally {
+      setBusy('')
+      setProgress(0)
+    }
+  }, [raster, offload])
+
+  const chosen = useMemo(
+    () => candidates.filter((candidate) => ticked.has(keyOf(candidate))),
+    [candidates, ticked],
+  )
+
+  /**
+   * Undo every ticked region, as one operation and one undo step.
+   *
+   * `disjoint` first: two regions that share a pixel would have it inverted
+   * twice, which is worse than leaving the mark alone. It drops rather than
+   * trims, and the count it drops is reported rather than swallowed.
+   */
+  const runRemoveAll = useCallback(async () => {
+    if (!raster || chosen.length === 0) return
+    setError('')
+    const safe = disjoint(chosen)
+
+    setBusy(`removing ${safe.length === 1 ? 'one region' : `${safe.length} regions`}`)
+    setProgress(0)
+    try {
+      const outcome = workerAvailable()
+        ? await offload().removeAll(raster, safe, (fraction) => setProgress(fraction))
+        : { raster: removeAll(raster, safe), note: '' }
+
+      if (!outcome) return
+      apply(outcome.raster, raster)
+      setBatchNote(
+        safe.length < chosen.length
+          ? `Removed ${safe.length} of ${chosen.length}. The rest overlapped a region already undone, and inverting a pixel twice damages it more than the mark did.`
+          : '',
+      )
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'the removal failed')
+    } finally {
+      setBusy('')
+      setProgress(0)
+    }
+  }, [raster, chosen, apply, offload])
+
+  const chosenPixels = useMemo(
+    () =>
+      chosen.reduce(
+        (pixels, candidate) => pixels + candidate.rect.width * candidate.rect.height,
+        0,
+      ),
+    [chosen],
+  )
+
+  /** Fill every ticked region in one Telea pass over the union of them. */
+  const runInpaintAll = useCallback(async () => {
+    if (!raster || chosen.length === 0) return
+    setError('')
+    setBatchNote('')
+    setHeavyPrompt('')
+    const mask = rectsMask(
+      raster.width,
+      raster.height,
+      chosen.map((candidate) => candidate.rect),
+    )
+
+    setBusy('inpainting')
+    setProgress(0)
+    try {
+      const outcome = workerAvailable()
+        ? await offload().inpaint(raster, mask, (fraction) => setProgress(fraction))
+        : { raster: inpaint(raster, mask), note: '' }
+      if (outcome) apply(outcome.raster, raster)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'the inpaint failed')
+    } finally {
+      setBusy('')
+      setProgress(0)
+    }
+  }, [raster, chosen, apply, offload])
 
   const runInpaint = useCallback(async () => {
     if (!raster || !committed) return
-    setHeavyPrompt(false)
+    setHeavyPrompt('')
     setError('')
     const mask = rectMask(raster.width, raster.height, committed)
 
@@ -266,15 +637,17 @@ export function ImageTab() {
 
   const runUnblend = useCallback(() => {
     if (!raster || !estimate) return
-    // A region the flat estimator is confident about is exactly the case its
-    // inverse is exact for, and a coverage map over it can only add measurement
-    // noise — about two levels of it. Anything else goes through the map, where
-    // a single alpha is worth thirty.
-    const restored =
-      flat && flat.confidence >= 0.7
-        ? unblend(raster, flat)
-        : unblendVarying(raster, estimate, coverageMap(raster, estimate.rect, estimate.color))
-    apply(restored, raster)
+    // The routing lives in remove.ts now, shared with the batch. It used to be
+    // written out here, which was fine while removal was one region at a time
+    // and became a second copy of the same decision the moment it was not.
+    apply(
+      removeOverlay(raster, {
+        ...estimate,
+        kind: flat ? 'flat' : 'shaped',
+        source: 'selection',
+      }),
+      raster,
+    )
   }, [raster, estimate, flat, apply])
 
   const undo = useCallback(() => {
@@ -288,6 +661,12 @@ export function ImageTab() {
   const downloadSize = Math.round((MODEL_BYTES + RUNTIME_BYTES) / 1024 / 1024)
   const working = busy !== ''
   const selectedPixels = committed ? committed.width * committed.height : 0
+
+  const current = measured.get(measureKey(format, quality))
+  const asPng = measured.get('png')
+  // Scanned once per edit rather than per render: this walks every pixel, and
+  // a 40-megapixel raster does not want that on a slider drag.
+  const transparent = useMemo(() => (raster ? hasTransparency(raster) : false), [raster])
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-12">
@@ -352,17 +731,21 @@ export function ImageTab() {
                 }}
                 onLostPointerCapture={endDrag}
               />
-              {selection && selection.width > 2 ? (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute border border-[var(--color-signal)]"
-                  style={{
-                    left: `${(selection.x / raster.width) * 100}%`,
-                    top: `${(selection.y / raster.height) * 100}%`,
-                    width: `${(selection.width / raster.width) * 100}%`,
-                    height: `${(selection.height / raster.height) * 100}%`,
-                  }}
+              {/* Every proposed region, drawn faintly, and the hovered one
+                  brightly. This is the change that makes the list legible: a
+                  row reading `120x40 at 880,12` is a fact about a picture the
+                  reader is looking at, and until now it was the only place that
+                  fact appeared. */}
+              {candidates.map((candidate) => (
+                <RegionBox
+                  key={keyOf(candidate)}
+                  rect={candidate.rect}
+                  raster={raster}
+                  tone={hovered === keyOf(candidate) ? 'bright' : 'faint'}
                 />
+              ))}
+              {selection && selection.width > 2 ? (
+                <RegionBox rect={selection} raster={raster} tone="selected" />
               ) : undefined}
             </div>
           ) : (
@@ -413,15 +796,6 @@ export function ImageTab() {
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                disabled={working}
-                onClick={() => void download()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-rule)] px-2.5 py-1 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] hover:bg-[var(--color-panel)] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <IconDownload />
-                Download PNG
-              </button>
-              <button
-                type="button"
                 disabled={working || history.length === 0}
                 onClick={undo}
                 className="rounded-md border border-[var(--color-rule)] px-2.5 py-1 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
@@ -462,12 +836,142 @@ export function ImageTab() {
           ) : undefined}
         </Section>
 
+        {raster && loaded ? (
+          <Section
+            title="Download"
+            aside={<span className="tnum font-mono">arrived at {formatBytes(loaded.bytes)}</span>}
+          >
+            <Choice
+              name="download-mode"
+              label="What to download"
+              value={lossless ? 'original' : 'reencode'}
+              onChange={(next) => setKeepOriginal(next === 'original')}
+              options={[
+                {
+                  value: 'original',
+                  label: 'Original file',
+                  unavailable: edited
+                    ? 'The pixels have been edited. The original file does not contain those edits.'
+                    : undefined,
+                },
+                { value: 'reencode', label: 'Re-encode' },
+              ]}
+            />
+
+            {lossless ? (
+              <div className="mt-3">
+                <p className="tnum font-mono text-sm">
+                  <span className="text-[var(--color-bone)]">
+                    {formatBytes(loaded.output.length)}
+                  </span>
+                  <span className="text-[var(--color-muted)]">
+                    {' '}
+                    · {loaded.container} · not re-encoded
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  The file that arrived, minus its metadata. Every pixel is byte for byte the one it
+                  came with, and nothing is compressed a second time — which is why this is the
+                  smallest honest answer while the picture is untouched.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-col gap-3">
+                <Choice
+                  name="download-format"
+                  label="Format"
+                  value={format}
+                  onChange={setFormat}
+                  options={EXPORT_FORMATS.map((candidate) => ({
+                    value: candidate,
+                    label: FORMAT_LABEL[candidate],
+                    // Probed, not assumed. Safari answers a request for WebP
+                    // with a PNG rather than a refusal, so an option left
+                    // enabled here is a file that lies about what is in it.
+                    unavailable:
+                      encodable && !encodable.has(candidate)
+                        ? `This browser cannot encode ${FORMAT_LABEL[candidate]}. It would hand back a PNG under that name.`
+                        : undefined,
+                  }))}
+                />
+
+                {format === 'png' ? undefined : (
+                  <Slider
+                    label="Quality"
+                    min={30}
+                    max={100}
+                    step={1}
+                    value={Math.round(quality * 100)}
+                    reading={String(Math.round(quality * 100))}
+                    onChange={(next) => setQuality(next / 100)}
+                  />
+                )}
+
+                <p className="tnum font-mono text-sm">
+                  {/* An <output>, because that is what this is: a figure the
+                      page computed rather than one the visitor typed. It also
+                      gives the number a name to be announced under when it
+                      changes, which a <span> that silently swaps 19.4 MB for
+                      2.1 MB does not. */}
+                  <output
+                    className={current ? 'text-[var(--color-bone)]' : 'text-[var(--color-muted)]'}
+                  >
+                    {current
+                      ? formatBytes(current.size)
+                      : measuring
+                        ? 'measuring…'
+                        : busy !== ''
+                          ? 'waiting'
+                          : '—'}
+                  </output>
+                  {format !== 'png' && asPng ? (
+                    <span className="text-[var(--color-muted)]">
+                      {' '}
+                      · PNG would be {formatBytes(asPng.size)}
+                    </span>
+                  ) : undefined}
+                </p>
+
+                <p className="text-xs text-[var(--color-muted)]">
+                  PNG is lossless, and on a photograph that makes it the largest file the browser
+                  knows how to write. JPEG and WebP compress a picture that was already compressed
+                  once — at 85 the second generation is hard to see, below about 70 the 8×8 blocks
+                  start showing on flat gradients.
+                </p>
+
+                {format === 'jpeg' && transparent ? (
+                  <p className="text-xs text-[var(--color-signal)]">
+                    This image has transparent pixels and JPEG has no alpha channel. They will come
+                    out black, not clear. PNG and WebP keep them.
+                  </p>
+                ) : undefined}
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={working || (!lossless && !current && measuring)}
+                onClick={() => void download()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-rule)] px-2.5 py-1 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] hover:bg-[var(--color-panel)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <IconDownload />
+                Download
+              </button>
+              <span className="tnum truncate font-mono text-xs text-[var(--color-muted)]">
+                {lossless ? cleanedName(loaded.name) : exportName(loaded.name, format)}
+              </span>
+            </div>
+          </Section>
+        ) : undefined}
+
         {loaded ? (
           <Section title="Metadata in the file" aside={summariseOutcomes(loaded.metadata)}>
             <FindingsTable findings={loaded.metadata} />
             <p className="mt-2 text-xs text-[var(--color-muted)]">
-              Stripped from the downloaded copy. This is the lossless half — the pixels are not
-              touched.
+              {lossless
+                ? 'Removed from the download above, which is otherwise the file you dropped in. This is the lossless half — the pixels are not touched.'
+                : 'A re-encode drops all of this on its own: the encoder writes a new file from the pixels and nothing else survives the trip.'}
             </p>
           </Section>
         ) : undefined}
@@ -480,57 +984,186 @@ export function ImageTab() {
             badge — the common case — that is the wrong conclusion. */}
         {raster ? (
           <Section
-            title="Possible overlays"
-            aside={candidates.length > 0 ? 'found in the corners' : 'nothing flat in the corners'}
+            title="Overlay scan"
+            aside={
+              <span className="tnum font-mono">
+                {scanned === 'whole' ? 'whole image' : '4 corners'} ·{' '}
+                {candidates.length === 0
+                  ? 'nothing'
+                  : `${candidates.length} ${candidates.length === 1 ? 'region' : 'regions'}`}
+              </span>
+            }
           >
+            <p className="mb-3 text-xs text-[var(--color-muted)]">
+              An <span className="text-[var(--color-bone)]">overlay</span> is something composited
+              on top of the picture — a caption scrim, a tint bar, a generator badge. Where it is
+              one flat colour at one opacity, it can be undone exactly: the original pixels are
+              still underneath, contracted toward the overlay&rsquo;s colour, not replaced by it.
+              This lists the regions that measure that way. Nothing here has been changed yet.
+            </p>
+
             {candidates.length > 0 ? (
               <ul className="divide-y divide-[var(--color-rule)] border-y border-[var(--color-rule)]">
-                {candidates.map((candidate) => (
-                  <li key={`${candidate.rect.x}-${candidate.rect.y}`}>
-                    <button
-                      type="button"
-                      disabled={working}
-                      onClick={() => {
-                        setSelection(candidate.rect)
-                        setCommitted(candidate.rect)
-                      }}
-                      className="tnum flex w-full items-baseline justify-between gap-4 py-2.5 text-left font-mono text-xs transition-colors duration-150 hover:text-[var(--color-signal)] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span>
-                        {candidate.rect.width}×{candidate.rect.height} at {candidate.rect.x},
-                        {candidate.rect.y}
-                      </span>
-                      <span className="text-[var(--color-muted)]">
-                        α {percent(candidate.alpha)} · {hex(candidate.color)} ·{' '}
-                        {percent(candidate.confidence)} sure
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                {candidates.map((candidate, index) => {
+                  const key = keyOf(candidate)
+                  const previous = candidates[index - 1]
+                  const opensShaped = candidate.kind === 'shaped' && previous?.kind !== 'shaped'
+
+                  return (
+                    <li key={key}>
+                      {opensShaped ? (
+                        <p className="pt-3 pb-1 text-xs text-[var(--color-signal)]">
+                          Shaped marks — a glyph rather than a rectangle. Left unticked on purpose:
+                          the same measurement reads a road sign, a page or a lit window exactly as
+                          confidently. Check each against the picture before removing it.
+                        </p>
+                      ) : undefined}
+                      <div
+                        className="flex items-start gap-2.5 py-2.5"
+                        onPointerEnter={() => setHovered(key)}
+                        onPointerLeave={() => setHovered(undefined)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={ticked.has(key)}
+                          disabled={working}
+                          aria-label={`Include the ${placeOf(candidate.rect, raster)} region`}
+                          onChange={(event) =>
+                            setTicked((current) => {
+                              const next = new Set(current)
+                              if (event.target.checked) next.add(key)
+                              else next.delete(key)
+                              return next
+                            })
+                          }
+                          className="mt-1 h-3.5 w-3.5 shrink-0 appearance-none rounded-sm border border-[var(--color-rule-bright)] transition-colors duration-150 checked:border-[var(--color-signal)] checked:bg-[var(--color-signal)] disabled:opacity-40"
+                        />
+                        <button
+                          type="button"
+                          disabled={working}
+                          onFocus={() => setHovered(key)}
+                          onBlur={() => setHovered(undefined)}
+                          onClick={() => {
+                            setSelection(candidate.rect)
+                            setCommitted(candidate.rect)
+                          }}
+                          className="min-w-0 flex-1 text-left transition-colors duration-150 hover:text-[var(--color-signal)] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                            <span>{placeOf(candidate.rect, raster)}</span>
+                            <span className="font-mono text-xs text-[var(--color-muted)]">
+                              {candidate.kind === 'shaped' ? 'shaped' : 'flat'} ·{' '}
+                              {percent(candidate.alpha)} opaque
+                            </span>
+                          </span>
+                          <span className="tnum mt-0.5 block font-mono text-xs text-[var(--color-muted)]">
+                            {candidate.rect.width}×{candidate.rect.height} at {candidate.rect.x},
+                            {candidate.rect.y} · {hex(candidate.color)} ·{' '}
+                            {percent(candidate.confidence)} sure
+                          </span>
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             ) : undefined}
 
             {candidates.length > 0 ? (
-              <p className="mt-2 text-xs text-[var(--color-muted)]">
-                A corner scan proposes regions; it does not measure them. Click one to select it,
-                then adjust the edges by dragging — the estimate is recomputed on whatever you
-                settle on.
-              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={working || chosen.length === 0}
+                  onClick={() => void runRemoveAll()}
+                  className="rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)] disabled:cursor-not-allowed disabled:border-[var(--color-rule)] disabled:text-[var(--color-muted)]"
+                >
+                  Unblend{' '}
+                  {chosen.length === 1 ? 'the ticked region' : `all ${chosen.length} ticked`}
+                </button>
+                <button
+                  type="button"
+                  disabled={working || chosen.length === 0}
+                  onClick={() =>
+                    chosenPixels > HEAVY_SELECTION ? setHeavyPrompt('batch') : void runInpaintAll()
+                  }
+                  className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Inpaint them instead
+                </button>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() =>
+                    setTicked(
+                      ticked.size === candidates.length
+                        ? new Set()
+                        : new Set(candidates.map((candidate) => keyOf(candidate))),
+                    )
+                  }
+                  className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors duration-150 hover:text-[var(--color-bone)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {ticked.size === candidates.length ? 'Untick all' : 'Tick all'}
+                </button>
+              </div>
             ) : undefined}
 
-            <p className="mt-2 text-xs text-[var(--color-muted)]">
-              The scan only finds <span className="text-[var(--color-bone)]">flat</span> overlays:
-              one colour at one opacity over a rectangle, like a caption scrim or a tint bar. A
-              generator badge usually is not one. A sparkle or a corner mark is a shaped glyph, and
-              the detail its own antialiased edges add is the thing that makes the scan read that
-              corner as unmarked. Drag a box around it instead — a shaped mark is measured properly
-              once it is selected.
+            {heavyPrompt === 'batch' ? (
+              <HeavyPrompt
+                pixels={chosenPixels}
+                onRun={() => void runInpaintAll()}
+                onCancel={() => setHeavyPrompt('')}
+              />
+            ) : undefined}
+
+            {batchNote ? (
+              <p className="mt-2 text-xs text-[var(--color-signal)]">{batchNote}</p>
+            ) : undefined}
+
+            <p className="mt-3 text-xs text-[var(--color-muted)]">
+              Click a row to select that region on the picture and adjust its edges by dragging —
+              the estimate is recomputed on whatever you settle on. Hovering a row outlines it.
             </p>
-            <p className="mt-2 text-xs text-[var(--color-muted)]">
-              Shaped marks are not proposed automatically because the same measurement flags a road
-              sign, a page or a lit window in a corner just as confidently. A list whose wrong
-              entries look exactly like its right ones is worse than no list.
-            </p>
+
+            {scanned === 'corners' ? (
+              <>
+                <p className="mt-3 text-xs text-[var(--color-muted)]">
+                  The automatic pass looks in the four corners only, for{' '}
+                  <span className="text-[var(--color-bone)]">flat</span> overlays. That is where
+                  generator badges are, and searching only there is what lets it find nothing at all
+                  in a photograph that carries nothing.
+                </p>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => void runWideScan()}
+                  className="mt-3 rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Scan the whole image
+                </button>
+                <p className="mt-2 text-xs text-[var(--color-muted)]">
+                  Bands across the frame, marks in the middle, and shaped glyphs as well as flat
+                  rectangles. It takes a few seconds and it is much less precise — read the note it
+                  leaves before removing anything.
+                </p>
+              </>
+            ) : (
+              <p className="mt-3 text-xs text-[var(--color-signal)]">
+                A whole-image scan is a report, not a verdict. Over the full frame this measurement
+                cannot tell an overlay from a genuinely smooth part of the picture: a patch of sky,
+                a wall, an out-of-focus background reads as a strongly opaque region — measurably
+                more confidently than some real marks do. Everything above is a place to look, and
+                the ones that are wrong look exactly like the ones that are right.
+              </p>
+            )}
+
+            {candidates.length === 0 ? (
+              <p className="mt-3 text-xs text-[var(--color-muted)]">
+                Nothing measured as a flat overlay. That is not the same as &ldquo;this image is
+                clean&rdquo;: a mark that is a shaped glyph, one that covers the whole picture
+                evenly, or one encoded in the pixel values rather than drawn on top would all leave
+                this empty. Drag a box around anything you can see.
+              </p>
+            ) : undefined}
           </Section>
         ) : undefined}
 
@@ -580,7 +1213,7 @@ export function ImageTab() {
                 type="button"
                 disabled={working}
                 onClick={() =>
-                  selectedPixels > HEAVY_SELECTION ? setHeavyPrompt(true) : void runInpaint()
+                  selectedPixels > HEAVY_SELECTION ? setHeavyPrompt('selection') : void runInpaint()
                 }
                 className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -596,38 +1229,12 @@ export function ImageTab() {
               </button>
             </div>
 
-            {/* Telea is O(area) and this selection is large enough for the wait
-                to be worth naming. Starting a fifteen-second freeze because a
-                button looked instant is the same mistake as the 41 MB download
-                below, in a smaller size. */}
-            {heavyPrompt ? (
-              <div className="mt-4 border border-[var(--color-rule-bright)] p-3">
-                <p className="text-sm text-[var(--color-bone)]">
-                  That is {selectedPixels.toLocaleString()} pixels — roughly{' '}
-                  {seconds(selectedPixels)}.
-                </p>
-                <p className="mt-1 text-xs text-[var(--color-muted)]">
-                  It runs off the main thread, so the page stays usable and you can stop it. Telea
-                  also has less to work with the larger the hole is: it continues the edges inward,
-                  and over a region this size that is mostly a smear.
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void runInpaint()}
-                    className="rounded-md border border-[var(--color-signal)] px-3 py-1.5 text-xs text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)]"
-                  >
-                    Run it anyway
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHeavyPrompt(false)}
-                    className="rounded-md border border-[var(--color-rule)] px-3 py-1.5 text-xs text-[var(--color-muted)] transition-colors duration-150 hover:text-[var(--color-bone)]"
-                  >
-                    Not now
-                  </button>
-                </div>
-              </div>
+            {heavyPrompt === 'selection' ? (
+              <HeavyPrompt
+                pixels={selectedPixels}
+                onRun={() => void runInpaint()}
+                onCancel={() => setHeavyPrompt('')}
+              />
             ) : undefined}
 
             {/* The download is a decision, so it is asked for rather than

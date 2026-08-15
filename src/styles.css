@@ -102,6 +102,15 @@ input {
   caret-color: var(--color-signal);
 }
 
+/* The quality slider. One property themes the track fill and the thumb in every
+   engine that matters, and an engine that ignores it still renders a working
+   range control rather than an invisible one — which is what hand-drawn
+   ::-webkit-slider-thumb rules degrade to in Firefox. */
+input[type='range'] {
+  accent-color: var(--color-signal);
+  cursor: pointer;
+}
+
 /* Offsets, counts and codepoints sit in columns. Proportional digits make them
    jitter every time a report re-renders under a keystroke. */
 .tnum {

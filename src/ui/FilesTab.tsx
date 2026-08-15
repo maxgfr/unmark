@@ -8,6 +8,7 @@ import { FindingsTable, Limits, Section } from './parts.tsx'
 import { decodeUtf8 } from '../core/container/types.ts'
 import { IconDownload, IconTrash } from './icons.tsx'
 import { saveBlob } from './download.ts'
+import { cleanedName, formatBytes } from './format.ts'
 
 interface Entry {
   id: string
@@ -44,14 +45,10 @@ const WINDOW = 64
 
 const ACCEPTED = '.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,.docx,.odt,.html,.htm,.md,.txt'
 
-const bytes = (count: number) =>
-  count < 1024 ? `${count} B` : `${(count / 1024).toFixed(count < 1024 * 100 ? 1 : 0)} kB`
-
-/** Prefix the download so the original is never silently overwritten. */
-const cleanedName = (name: string) => {
-  const dot = name.lastIndexOf('.')
-  return dot <= 0 ? `${name}-unmarked` : `${name.slice(0, dot)}-unmarked${name.slice(dot)}`
-}
+// Both of these used to live here, privately. The Image tab needs them too,
+// and a second copy that formats megabytes differently is how two panels come
+// to disagree about the size of the same file.
+const bytes = formatBytes
 
 /**
  * Sixty-four bytes of the file around a finding, as hex and as characters.

@@ -335,17 +335,42 @@ export function inpaint(raster: Raster, mask: Uint8Array, options: InpaintOption
 }
 
 /** A rectangular mask, the shape the corner detector and a drag select produce. */
-export function rectMask(
+export const rectMask = (
   width: number,
   height: number,
   rect: { x: number; y: number; width: number; height: number },
+): Uint8Array => rectsMask(width, height, [rect])
+
+/**
+ * A mask over several rectangles at once.
+ *
+ * One mask, not one call per rectangle. Telea fills from whatever the mask does
+ * not cover, and it treats any unmasked neighbour as known picture — so
+ * inpainting region A while region B is still marked continues the *watermark's*
+ * edge into A. Measured on two 40x40 holes four pixels apart in a noisy ramp:
+ * one union pass leaves 4.5 levels of error, two sequential passes leave 8.4,
+ * and the union pass is the faster of the two. Far-apart regions agree, which
+ * is the control that says the difference is the interference and not the
+ * method.
+ *
+ * Overlapping rectangles are marked once. The mask is a set, and `inpaint`
+ * counts the hole by scanning it.
+ */
+export function rectsMask(
+  width: number,
+  height: number,
+  rects: readonly { x: number; y: number; width: number; height: number }[],
 ): Uint8Array {
   const mask = new Uint8Array(width * height)
-  const x1 = Math.min(width, rect.x + rect.width)
-  const y1 = Math.min(height, rect.y + rect.height)
 
-  for (let y = Math.max(0, rect.y); y < y1; y += 1) {
-    mask.fill(1, y * width + Math.max(0, rect.x), y * width + x1)
+  for (const rect of rects) {
+    const x0 = Math.max(0, rect.x)
+    const x1 = Math.min(width, rect.x + rect.width)
+    const y1 = Math.min(height, rect.y + rect.height)
+
+    for (let y = Math.max(0, rect.y); y < y1; y += 1) {
+      if (x1 > x0) mask.fill(1, y * width + x0, y * width + x1)
+    }
   }
   return mask
 }

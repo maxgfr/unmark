@@ -49,6 +49,57 @@ export interface OverlayEstimate {
   confidence: number
 }
 
+/**
+ * An estimate, plus where it came from.
+ *
+ * The two extra fields are provenance, and both are load-bearing rather than
+ * decorative. `kind` decides which inverse undoes it, so recomputing it at the
+ * point of removal would be a second place for the decision to live. `source`
+ * is what lets the panel say "found in a corner" rather than "found", and what
+ * lets a test assert that the band family is the one that found the band.
+ */
+export interface OverlayCandidate extends OverlayEstimate {
+  /**
+   * Which model measured it.
+   *
+   * `flat` is the exactly-invertible case. `shaped` is the median-based
+   * fallback, and it carries a precision caveat the flat model does not: an
+   * ordinary bright object measures the same way a glyph badge does.
+   */
+  kind: 'flat' | 'shaped'
+  /** Which family of probes proposed it, or `selection` for one drawn by hand. */
+  source: 'corner' | 'band' | 'centre' | 'grid' | 'selection'
+}
+
+/** Overlapping area of two rectangles, in pixels. Zero when they are disjoint. */
+export function intersectionArea(a: Rect, b: Rect): number {
+  const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+  const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  return width > 0 && height > 0 ? width * height : 0
+}
+
+/** Intersection over union. The usual measure of "these two boxes are the same box". */
+export function iou(a: Rect, b: Rect): number {
+  const shared = intersectionArea(a, b)
+  if (shared === 0) return 0
+  return shared / (a.width * a.height + b.width * b.height - shared)
+}
+
+/**
+ * How much of the smaller rectangle the larger one swallows.
+ *
+ * IoU alone cannot fold a scale pyramid. One mark probed at four sizes produces
+ * fragments wholly inside the largest of them whose IoU against it is under
+ * 0.25 — far below any sane threshold — while their containment is 1.0. IoU is
+ * what keeps two same-sized neighbours (the tiles of a repeating watermark)
+ * apart; containment is what collapses one mark's many descriptions into one.
+ */
+export function containment(a: Rect, b: Rect): number {
+  const shared = intersectionArea(a, b)
+  if (shared === 0) return 0
+  return shared / Math.min(a.width * a.height, b.width * b.height)
+}
+
 interface Stats {
   mean: [number, number, number]
   /** Mean squared difference between neighbouring pixels, per channel. */
@@ -184,11 +235,24 @@ export function estimateOverlay(raster: Raster, rect: Rect): OverlayEstimate | u
  */
 export function unblend(raster: Raster, estimate: OverlayEstimate): Raster {
   const out = cloneRaster(raster)
-  const { rect, alpha, color } = estimate
-  if (alpha >= 1) return out
+  unblendInto(out, estimate)
+  return out
+}
 
-  const x1 = Math.min(raster.width, rect.x + rect.width)
-  const y1 = Math.min(raster.height, rect.y + rect.height)
+/**
+ * The same inverse, written into a raster the caller already owns.
+ *
+ * Split out for batch removal, which undoes several overlays at once: each is a
+ * clone, and on a 12-megapixel photo that is 48 MB apiece. Eight of them would
+ * be the whole undo budget spent inside one operation. The arithmetic has one
+ * implementation and this is it — `unblend` is the clone around it.
+ */
+export function unblendInto(out: Raster, estimate: OverlayEstimate): void {
+  const { rect, alpha, color } = estimate
+  if (alpha >= 1) return
+
+  const x1 = Math.min(out.width, rect.x + rect.width)
+  const y1 = Math.min(out.height, rect.y + rect.height)
 
   for (let y = Math.max(0, rect.y); y < y1; y += 1) {
     for (let x = Math.max(0, rect.x); x < x1; x += 1) {
@@ -199,7 +263,6 @@ export function unblend(raster: Raster, estimate: OverlayEstimate): Raster {
       }
     }
   }
-  return out
 }
 
 /**
@@ -246,8 +309,19 @@ function lineDetail(
  *
  * Each edge is walked outward from the centre until the line's detail energy
  * climbs back toward the surrounding level, which is where the overlay stops.
+ *
+ * `axes` names which extent may move — 'vertical' refines top and bottom only,
+ * 'horizontal' left and right only. It exists for bands. The walk is capped at
+ * 1.6x the rectangle's longest side, so a square probe can never grow into a
+ * full-width caption scrim: a 92px probe on a 1024px band refines to a 280x127
+ * fragment, which is a worse answer than the probe was. A band is therefore
+ * proposed at its real width and refined on the free axis only.
  */
-export function refineRect(raster: Raster, rect: Rect): Rect {
+export function refineRect(
+  raster: Raster,
+  rect: Rect,
+  axes: 'both' | 'vertical' | 'horizontal' = 'both',
+): Rect {
   const cx = Math.round(rect.x + rect.width / 2)
   const cy = Math.round(rect.y + rect.height / 2)
   if (cx < 1 || cy < 1 || cx >= raster.width - 1 || cy >= raster.height - 1) return rect
@@ -291,10 +365,16 @@ export function refineRect(raster: Raster, rect: Rect): Rect {
     return edge
   }
 
-  const left = walk(-1, true)
-  const right = walk(1, true)
-  const top = walk(-1, false)
-  const bottom = walk(1, false)
+  // `axes` names the extent that is allowed to move, not the edges: 'vertical'
+  // refines top and bottom and leaves x and width exactly as proposed, which is
+  // what a full-width band needs.
+  const movesX = axes !== 'vertical'
+  const movesY = axes !== 'horizontal'
+
+  const left = movesX ? walk(-1, true) : rect.x
+  const right = movesX ? walk(1, true) : rect.x + rect.width - 1
+  const top = movesY ? walk(-1, false) : rect.y
+  const bottom = movesY ? walk(1, false) : rect.y + rect.height - 1
 
   const width = right - left + 1
   const height = bottom - top + 1

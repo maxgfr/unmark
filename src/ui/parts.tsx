@@ -271,6 +271,101 @@ export function Toggle({
 }
 
 /**
+ * One choice out of a few, as a segmented control.
+ *
+ * Built on real radio inputs rather than buttons with `role="radio"`. The
+ * arrow-key behaviour a radio group has — and that a row of buttons does not,
+ * without a roving tabindex nobody remembers to write — comes free, and the
+ * group is one tab stop instead of three.
+ */
+export function Choice<T extends string>({
+  name,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  /** Shared across the inputs, which is what makes them one group to the browser. */
+  name: string
+  label: string
+  value: T
+  /** `unavailable` is the reason, shown on hover — never a bare boolean. */
+  options: readonly { value: T; label: string; unavailable?: string | undefined }[]
+  onChange: (next: T) => void
+}) {
+  return (
+    <fieldset className="inline-flex gap-0.5 rounded-md border border-[var(--color-rule)] p-0.5">
+      <legend className="sr-only">{label}</legend>
+      {options.map((option) => {
+        const selected = option.value === value
+        return (
+          <label
+            key={option.value}
+            title={option.unavailable}
+            className={`rounded-[4px] px-2.5 py-1 text-xs transition-colors duration-150 has-[:focus-visible]:outline has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-[var(--color-signal)] ${
+              option.unavailable
+                ? 'cursor-not-allowed text-[var(--color-muted)] opacity-40'
+                : selected
+                  ? 'cursor-pointer bg-[var(--color-panel-high)] text-[var(--color-bone)]'
+                  : 'cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-bone)]'
+            }`}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={selected}
+              disabled={option.unavailable !== undefined}
+              onChange={() => onChange(option.value)}
+              className="sr-only"
+            />
+            {option.label}
+          </label>
+        )
+      })}
+    </fieldset>
+  )
+}
+
+/** A number chosen by dragging, with the number itself always on screen. */
+export function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  reading,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  /** What to print beside it. The raw value is rarely the useful units. */
+  reading: string
+  onChange: (next: number) => void
+}) {
+  return (
+    <label className="flex items-center gap-3 text-xs">
+      <span className="shrink-0 text-[var(--color-muted)]">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-1 min-w-0 flex-1"
+      />
+      <span className="tnum w-10 shrink-0 text-right font-mono text-[var(--color-bone)]">
+        {reading}
+      </span>
+    </label>
+  )
+}
+
+/**
  * The limit panel.
  *
  * Not a footnote and not dismissible: what the tool cannot do belongs on the

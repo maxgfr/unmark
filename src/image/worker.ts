@@ -14,7 +14,9 @@
 // would pull its `new Worker(new URL('./worker.ts', ...))` into the worker's
 // own bundle, leaving Vite emitting a chunk that references itself.
 
-import { requantizeJpeg } from './canvas.ts'
+import { rasterToBlob, requantizeJpeg } from './canvas.ts'
+import { removeAll } from './detect/remove.ts'
+import { findOverlays } from './detect/scan.ts'
 import { disrupt, type DisruptionOptions } from './disrupt.ts'
 import { inpaintWithMigan } from './inpaint/migan.ts'
 import { inpaint } from './inpaint/telea.ts'
@@ -57,6 +59,38 @@ function finish(id: number, raster: Raster, note = ''): void {
 
 async function run(request: WorkRequest): Promise<void> {
   const raster = adopt(request.raster)
+
+  if (request.kind === 'encode') {
+    // PNG has no quality, and passing one is not merely ignored everywhere —
+    // rasterToBlob omits the key entirely rather than sending a number the
+    // encoder has no meaning for.
+    const blob = await rasterToBlob(
+      raster,
+      request.mime,
+      request.mime === 'image/png' ? undefined : request.quality,
+    )
+    scope.postMessage({ id: request.id, kind: 'encoded', blob })
+    return
+  }
+
+  if (request.kind === 'scan') {
+    const candidates = findOverlays(raster, request.options, {
+      onProgress: (fraction) => report(request.id, fraction, 'scanning'),
+    })
+    scope.postMessage({ id: request.id, kind: 'found', candidates })
+    return
+  }
+
+  if (request.kind === 'removeAll') {
+    finish(
+      request.id,
+      removeAll(raster, request.candidates, {
+        onProgress: (fraction) => report(request.id, fraction),
+      }),
+      `Removed ${request.candidates.length} ${request.candidates.length === 1 ? 'region' : 'regions'}.`,
+    )
+    return
+  }
 
   if (request.kind === 'inpaint') {
     const mask = new Uint8Array(request.mask)

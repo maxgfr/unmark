@@ -648,6 +648,16 @@ export function unblendVarying(
   coverage: CoverageMap,
 ): Raster {
   const out = cloneRaster(raster)
+  unblendVaryingInto(out, estimate, coverage)
+  return out
+}
+
+/** The same inverse in place. `unblendInto` says why the split exists. */
+export function unblendVaryingInto(
+  out: Raster,
+  estimate: OverlayEstimate,
+  coverage: CoverageMap,
+): void {
   const { rect } = coverage
   const { color } = estimate
 
@@ -663,5 +673,4 @@ export function unblendVarying(
       }
     }
   }
-  return out
 }

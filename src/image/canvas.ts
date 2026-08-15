@@ -5,6 +5,7 @@
 // two things that genuinely need the platform, so they are confined here — the
 // algorithms never import this file, which is what keeps them testable.
 
+import { EXPORT_FORMATS, mimeOf, type ExportFormat } from './export.ts'
 import { createRaster, type Raster } from './raster.ts'
 
 /** Decode any format the browser can read into a plain buffer. */
@@ -40,6 +41,51 @@ function toCanvas(raster: Raster): OffscreenCanvas {
  */
 export const rasterToBlob = (raster: Raster, type = 'image/png', quality?: number): Promise<Blob> =>
   toCanvas(raster).convertToBlob(quality === undefined ? { type } : { type, quality })
+
+/**
+ * Which of the three export formats this browser can actually encode.
+ *
+ * `convertToBlob` does not refuse a type it does not support — it quietly
+ * returns a PNG. So a visitor on an older WebKit who picks WebP would be handed
+ * a PNG named `.webp`: a file that is bigger than the JPEG they were avoiding,
+ * under a name that says otherwise, and nothing anywhere would have said so.
+ *
+ * The only honest test is to encode one pixel and read the type back. Probed
+ * once and remembered, because the answer cannot change inside a page load.
+ */
+let probe: Promise<ReadonlySet<ExportFormat>> | undefined
+
+export function encodableFormats(): Promise<ReadonlySet<ExportFormat>> {
+  probe ??= (async () => {
+    const canvas = new OffscreenCanvas(1, 1)
+    // Load-bearing, and it cost a round of red tests to find out. Chromium
+    // throws `"OffscreenCanvas" has no rendering context` from convertToBlob on
+    // a canvas nothing has drawn to, so a probe that skipped this reported
+    // every format as unsupported — on the engine that supports all three.
+    canvas.getContext('2d')
+
+    const answers = await Promise.all(
+      EXPORT_FORMATS.map(async (format) => {
+        const type = mimeOf(format)
+        try {
+          const blob = await canvas.convertToBlob({ type })
+          return blob.type === type ? format : undefined
+        } catch {
+          // A throw is a refusal, which is the answer being asked for.
+          return undefined
+        }
+      }),
+    )
+
+    const supported = new Set(answers.filter((format) => format !== undefined))
+    // PNG is what everything else degrades to, so a browser that reported
+    // nothing at all still has to be offered something.
+    supported.add('png')
+    return supported
+  })()
+
+  return probe
+}
 
 /**
  * Round-trip through JPEG at a given quality.

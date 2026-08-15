@@ -124,6 +124,27 @@ opt-in MI-GAN pass for content a boundary cannot imply. Plus signal disruption �
 low-bit scrub, Lanczos resample, micro-crop, JPEG requantise, noise — for marks
 encoded in the exact pixel values.
 
+**Looking outside the corners.** _Scan the whole image_ adds bands across the
+frame, marks in the middle, and shaped glyphs as well as flat rectangles, then
+removes every region you tick as one operation and one undo step. It is a button
+rather than part of opening a file, and the panel says why: over the full frame
+this measurement cannot tell an overlay from a genuinely smooth part of the
+picture. A patch of sky reads as a strongly opaque region — measurably more
+confidently than some real marks do. The corner pass stays automatic precisely
+because searching only where badges actually are is what lets it find nothing at
+all in a photograph that carries nothing. `src/image/detect/scan.test.ts` holds
+both numbers.
+
+**Downloads.** The image tab offers the original file with its metadata stripped
+and nothing else touched — no re-encode, same pixels byte for byte — for as long
+as the pixels are untouched, which is the whole of the commonest job. Once they
+are not, you choose PNG, JPEG or WebP with a quality slider, and the size shown
+is the size of a blob that was actually encoded, with the lossless figure beside
+it for comparison. It used to re-encode to PNG whatever went in, which turns a
+3 MB photograph into 20 MB. Formats are probed rather than assumed: `convertToBlob`
+answers a request it cannot satisfy with a PNG rather than an error, so WebKit is
+offered PNG and JPEG only instead of handing back a PNG named `.webp`.
+
 ## What leaves your device
 
 Nothing. Not "nothing important" — nothing.

@@ -27,6 +27,8 @@
 // what the synchronous fallback path uses in a browser with no worker, and it
 // is what carries the progress callback.
 
+import type { OverlayCandidate } from './detect/overlay.ts'
+import type { ScanOptions } from './detect/scan.ts'
 import type { DisruptionOptions } from './disrupt.ts'
 import type { Raster } from './raster.ts'
 
@@ -50,10 +52,15 @@ export type WorkRequest =
   | { id: number; kind: 'inpaint'; raster: RasterTransfer; mask: ArrayBuffer }
   | { id: number; kind: 'migan'; raster: RasterTransfer; mask: ArrayBuffer }
   | { id: number; kind: 'disrupt'; raster: RasterTransfer; options: DisruptionOptions }
+  | { id: number; kind: 'encode'; raster: RasterTransfer; mime: string; quality: number }
+  | { id: number; kind: 'scan'; raster: RasterTransfer; options: ScanOptions }
+  | { id: number; kind: 'removeAll'; raster: RasterTransfer; candidates: OverlayCandidate[] }
 
 export type WorkResponse =
   | { id: number; kind: 'progress'; fraction: number; note: string }
   | { id: number; kind: 'done'; raster: RasterTransfer; note: string }
+  | { id: number; kind: 'encoded'; blob: Blob }
+  | { id: number; kind: 'found'; candidates: OverlayCandidate[] }
   | { id: number; kind: 'failed'; message: string }
 
 /** Copy a raster into a message. The page keeps its own; see RasterTransfer. */
@@ -80,8 +87,32 @@ export interface Outcome {
   note: string
 }
 
+/**
+ * What an encode job comes back with.
+ *
+ * A separate shape from Outcome because it genuinely is one: measuring a file
+ * size produces a file, not a picture, and folding it into `Outcome` would mean
+ * every caller carrying a raster field that is never populated.
+ */
+export interface Encoded {
+  blob: Blob
+}
+
+/**
+ * What a scan comes back with.
+ *
+ * Its own shape for the same reason as Encoded, plus a practical one: echoing
+ * the raster back to fit `done` would be a 48 MB round trip to deliver a few
+ * hundred bytes of rectangles.
+ */
+export interface Found {
+  candidates: OverlayCandidate[]
+}
+
+export type JobResult = Outcome | Encoded | Found
+
 interface Pending {
-  resolve: (outcome: Outcome | undefined) => void
+  resolve: (result: JobResult | undefined) => void
   reject: (cause: unknown) => void
   onProgress: Progress | undefined
 }
@@ -117,6 +148,10 @@ export class ImageWorker {
       this.pending.delete(message.id)
       if (message.kind === 'done') {
         waiting.resolve({ raster: adoptTransfer(message.raster), note: message.note })
+      } else if (message.kind === 'encoded') {
+        waiting.resolve({ blob: message.blob })
+      } else if (message.kind === 'found') {
+        waiting.resolve({ candidates: message.candidates })
       } else {
         waiting.reject(new Error(message.message))
       }
@@ -134,17 +169,25 @@ export class ImageWorker {
     return worker
   }
 
-  private send(
+  private send<T extends JobResult>(
     build: (id: number) => WorkRequest,
     transfer: Transferable[],
     onProgress?: Progress,
-  ): Promise<Outcome | undefined> {
+  ): Promise<T | undefined> {
     const id = this.next
     this.next += 1
     const request = build(id)
 
-    return new Promise<Outcome | undefined>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, onProgress })
+    return new Promise<T | undefined>((resolve, reject) => {
+      // The one cast in this file. Which response shape a job produces is
+      // fixed by its `kind`, and the pending map cannot express that without a
+      // second map per shape — which would buy nothing but three more places
+      // for a stale id to be forgotten in.
+      this.pending.set(id, {
+        resolve: resolve as Pending['resolve'],
+        reject,
+        onProgress,
+      })
       this.ensure().postMessage(request, transfer)
     })
   }
@@ -153,7 +196,7 @@ export class ImageWorker {
   inpaint(raster: Raster, mask: Uint8Array, onProgress?: Progress): Promise<Outcome | undefined> {
     const carried = copyForTransfer(raster)
     const carriedMask = mask.slice().buffer
-    return this.send(
+    return this.send<Outcome>(
       (id) => ({ id, kind: 'inpaint', raster: carried, mask: carriedMask }),
       [carried.data, carriedMask],
       onProgress,
@@ -163,7 +206,7 @@ export class ImageWorker {
   migan(raster: Raster, mask: Uint8Array, onProgress?: Progress): Promise<Outcome | undefined> {
     const carried = copyForTransfer(raster)
     const carriedMask = mask.slice().buffer
-    return this.send(
+    return this.send<Outcome>(
       (id) => ({ id, kind: 'migan', raster: carried, mask: carriedMask }),
       [carried.data, carriedMask],
       onProgress,
@@ -176,8 +219,53 @@ export class ImageWorker {
     onProgress?: Progress,
   ): Promise<Outcome | undefined> {
     const carried = copyForTransfer(raster)
-    return this.send(
+    return this.send<Outcome>(
       (id) => ({ id, kind: 'disrupt', raster: carried, options }),
+      [carried.data],
+      onProgress,
+    )
+  }
+
+  /**
+   * Encode the raster to a file, off the main thread.
+   *
+   * The size the download panel shows is this blob's size, and the blob it
+   * shows the size of is the one that gets saved. Encoding a 40-megapixel
+   * raster to PNG is a second or more of solid arithmetic, which on the main
+   * thread is a second of a frozen tab every time a slider moves.
+   */
+  encode(raster: Raster, mime: string, quality: number): Promise<Encoded | undefined> {
+    const carried = copyForTransfer(raster)
+    return this.send<Encoded>(
+      (id) => ({ id, kind: 'encode', raster: carried, mime, quality }),
+      [carried.data],
+    )
+  }
+
+  /**
+   * Look for overlays, off the main thread.
+   *
+   * Even the corner scan belongs here. It runs on every file that is opened and
+   * costs a couple of hundred milliseconds on a 12-megapixel photo, which it
+   * used to spend frozen inside the drop handler.
+   */
+  scan(raster: Raster, options: ScanOptions, onProgress?: Progress): Promise<Found | undefined> {
+    const carried = copyForTransfer(raster)
+    return this.send<Found>(
+      (id) => ({ id, kind: 'scan', raster: carried, options }),
+      [carried.data],
+      onProgress,
+    )
+  }
+
+  removeAll(
+    raster: Raster,
+    candidates: readonly OverlayCandidate[],
+    onProgress?: Progress,
+  ): Promise<Outcome | undefined> {
+    const carried = copyForTransfer(raster)
+    return this.send<Outcome>(
+      (id) => ({ id, kind: 'removeAll', raster: carried, candidates: [...candidates] }),
       [carried.data],
       onProgress,
     )
