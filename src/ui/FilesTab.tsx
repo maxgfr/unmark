@@ -43,7 +43,51 @@ const KEEPABLE = 32 * 1024 * 1024
 /** How much of the file to show around a finding. */
 const WINDOW = 64
 
-const ACCEPTED = '.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,.docx,.odt,.html,.htm,.md,.txt'
+/** Which row's byte window is open, and what kind of location it has. */
+interface Opened {
+  id: string
+  offset: number
+  /** Set when the finding names a part rather than a position. */
+  where?: string
+}
+
+/**
+ * What the file picker will let you choose.
+ *
+ * Every format `cleanContainer` handles, which is not what this was: it listed
+ * thirteen extensions and left out HEIC, AVIF, MP4/MOV, PPTX, XLSX and EPUB —
+ * six the engine fully supports, and the six the README goes into most detail
+ * about. A MOV's `©xyz` location atom and the iPhone `keys` table, a
+ * presentation's `docProps/thumbnail.jpeg`: all reachable, none openable
+ * through the button. Drag-and-drop worked, because the drop handler never
+ * consults this, so the capability existed by an undiscoverable path while the
+ * masthead advertised seventeen formats.
+ */
+const ACCEPTED = [
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.heic',
+  '.heif',
+  '.avif',
+  '.mp4',
+  '.m4v',
+  '.mov',
+  '.svg',
+  '.pdf',
+  '.docx',
+  '.pptx',
+  '.xlsx',
+  '.odt',
+  '.epub',
+  '.html',
+  '.htm',
+  '.md',
+  '.markdown',
+  '.txt',
+].join(',')
 
 // Both of these used to live here, privately. The Image tab needs them too,
 // and a second copy that formats megabytes differently is how two panels come
@@ -59,9 +103,9 @@ const bytes = formatBytes
  * legible at a glance and settles what the row's one-line label could only
  * assert.
  */
-function Window({ entry, open }: { entry: Entry; open: string | undefined }) {
-  if (!open?.startsWith(`${entry.id}:`)) return undefined
-  const offset = Number(open.slice(entry.id.length + 1))
+function Window({ entry, open }: { entry: Entry; open: Opened | undefined }) {
+  if (open?.id !== entry.id) return undefined
+  const { offset } = open
 
   if (!entry.input) {
     return (
@@ -72,10 +116,16 @@ function Window({ entry, open }: { entry: Entry; open: string | undefined }) {
     )
   }
 
-  // The formats built on a zip all report offset 0 — the part is the location,
-  // and it is already on the row. A window of the first sixty-four bytes of a
-  // zip is the local file header, which tells the reader nothing.
-  if (offset === 0) {
+  // The formats built on a zip name the part they live in and report offset 0,
+  // because a byte offset into a zip means nothing on its own — the sixty-four
+  // bytes there are the local file header, which tells the reader nothing.
+  //
+  // `where` is what says so. This used to test `offset === 0` as a stand-in for
+  // it, which is true of every zip-part finding and also of a `.txt` whose
+  // first character is a zero-width space, or an `.html` opening on a generator
+  // comment. Clicking those — the most legible case there is, a mark at the
+  // very start — answered with a sentence about ZIP archives.
+  if (open.where !== undefined) {
     return (
       <p className="mt-3 text-xs text-[var(--color-muted)]">
         This one is named by the part it lives in rather than by a position in the file.
@@ -120,19 +170,30 @@ function Window({ entry, open }: { entry: Entry; open: string | undefined }) {
 export function FilesTab() {
   const [entries, setEntries] = useState<Entry[]>([])
   const [dragging, setDragging] = useState(false)
-  const [error, setError] = useState('')
+  /**
+   * One line per file that could not be read, not one line per batch.
+   *
+   * Isolation worked — the loop carries on, which is what the header promises —
+   * and the reporting did not: `setError` held a single string, so dropping
+   * twenty files where the third and the eleventh failed showed the eleventh's
+   * message and eighteen rows, with no way to tell which two were missing
+   * except counting rows against the folder.
+   */
+  const [errors, setErrors] = useState<string[]>([])
   const picker = useRef<HTMLInputElement>(null)
   const counter = useRef(0)
   /**
-   * Which finding is open, as `entry id` and offset.
+   * Which finding is open.
    *
-   * Keyed by both because two dropped files can hold a finding at the same
-   * offset, and opening one would otherwise open the other as well.
+   * The entry id is part of it because two dropped files can hold a finding at
+   * the same offset, and opening one would otherwise open the other as well.
+   * `where` travels with it because it is what distinguishes "this lives in a
+   * zip part" from "this is at byte 0", which are not the same thing.
    */
-  const [open, setOpen] = useState<string | undefined>(undefined)
+  const [open, setOpen] = useState<Opened | undefined>(undefined)
 
   const accept = useCallback(async (files: readonly File[]) => {
-    setError('')
+    setErrors([])
     // One file at a time: a dropped batch appears in the report as it is read,
     // and a DOCX that fails to parse does not take the rest of the batch with it.
     for (const file of files) {
@@ -156,9 +217,8 @@ export function FilesTab() {
           ...current,
         ])
       } catch (cause) {
-        setError(
-          `${file.name} could not be read: ${cause instanceof Error ? cause.message : 'unknown error'}`,
-        )
+        const why = cause instanceof Error ? cause.message : 'unknown error'
+        setErrors((current) => [...current, `${file.name} could not be read: ${why}`])
       }
     }
   }, [])
@@ -206,7 +266,8 @@ export function FilesTab() {
             .
           </p>
           <p className="mt-2 font-mono text-xs text-[var(--color-muted)]">
-            PNG · JPEG · WebP · GIF · SVG · PDF · DOCX · ODT · HTML · Markdown · text
+            PNG · JPEG · WebP · GIF · HEIC · AVIF · MP4/MOV · SVG · PDF · DOCX · PPTX · XLSX · ODT ·
+            EPUB · HTML · Markdown · text
           </p>
           <p className="mt-3 text-xs text-[var(--color-muted)]">
             Read in this tab with the File API. Nothing is uploaded.
@@ -224,10 +285,12 @@ export function FilesTab() {
           />
         </div>
 
-        {error ? (
-          <p role="alert" className="mt-3 font-mono text-xs text-[var(--color-signal)]">
-            {error}
-          </p>
+        {errors.length > 0 ? (
+          <ul role="alert" className="mt-3 font-mono text-xs text-[var(--color-signal)]">
+            {errors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         ) : undefined}
       </Section>
 
@@ -262,8 +325,15 @@ export function FilesTab() {
           <FindingsTable
             findings={[...entry.findings, ...entry.preserved]}
             onLocate={(row) => {
-              const key = `${entry.id}:${row.offset}`
-              setOpen((current) => (current === key ? undefined : key))
+              setOpen((current) =>
+                current?.id === entry.id && current.offset === row.offset
+                  ? undefined
+                  : {
+                      id: entry.id,
+                      offset: row.offset,
+                      ...(row.where ? { where: row.where } : {}),
+                    },
+              )
             }}
           />
           {/* Under the table rather than inside a row: the window is sixty-four

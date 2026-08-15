@@ -97,6 +97,22 @@ const finding = (
   ...(evidence ? { evidence } : {}),
 })
 
+/**
+ * A finding that reports a refusal, which is not a finding that reports a removal.
+ *
+ * `outcomeOf` reads `preserved` first and falls through to "is this the kind of
+ * thing a clean pass acts on" — and a `confirmed` `doc_property` is exactly
+ * that. So "Digitally signed — the file was left exactly as it arrived" came
+ * out badged **removed**, in red, and counted into the summary's "1 removed",
+ * on a file that is byte-identical to the one that went in. That is the precise
+ * failure the outcome column was added to prevent, and isobmff/index.ts already
+ * avoids it by attaching the reason as `preserved`. This is the same move.
+ */
+const refusal = (label: string, why: string): Finding => ({
+  ...finding('doc_property', 'confirmed', label, why),
+  preserved: why,
+})
+
 // ---------------------------------------------------------------- refusals
 
 const ENCRYPT = /\/Encrypt\s+\d+\s+\d+\s+R|\/Encrypt\s*<</
@@ -496,10 +512,9 @@ export async function cleanPdf(
   if (isEncrypted(doc, src.text)) {
     return {
       output: bytes,
-      findings: [
-        finding(
-          'doc_property',
-          'confirmed',
+      findings: [],
+      preserved: [
+        refusal(
           'Encrypted PDF — nothing was read and nothing was changed (no pass ran)',
           'Every string in this file is encrypted, so a scan for metadata finds nothing and ' +
             'would report the file as clean. It is not: the author, the producer and the ' +
@@ -507,7 +522,6 @@ export async function cleanPdf(
             'this again.',
         ),
       ],
-      preserved: [],
     }
   }
 
@@ -515,17 +529,15 @@ export async function cleanPdf(
   if (signed && !options.force) {
     return {
       output: bytes,
-      findings: [
-        finding(
-          'doc_property',
-          'confirmed',
+      findings: [],
+      preserved: [
+        refusal(
           'Digitally signed — the file was left exactly as it arrived (no pass ran)',
           'A signature covers a byte range of this file, so any edit voids it, including ' +
             'removing metadata. Nothing was changed. Pass { force: true } to clean it anyway ' +
             'and accept a broken signature.',
         ),
       ],
-      preserved: [],
     }
   }
 

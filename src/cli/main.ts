@@ -6,7 +6,7 @@
 // allowed to import `node:` — the core underneath it stays environment-free,
 // which is what lets the page and the terminal share one implementation.
 
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { chmod, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import process from 'node:process'
 import { VERSION } from '../core/index.ts'
@@ -179,6 +179,35 @@ async function readSource(target: string): Promise<Source> {
   return { name: target, bytes: new Uint8Array(await readFile(target)) }
 }
 
+/**
+ * Replace a file's contents without ever leaving it half written.
+ *
+ * `writeFile` opens with `'w'`, which truncates to zero before a single byte
+ * goes in. `--in-place` is the only destructive thing this tool does, and it
+ * did it that way: a full disk, a SIGINT or a lost battery partway through a
+ * forty-megabyte PDF left the user's only copy empty or cut in half, with the
+ * original already gone.
+ *
+ * So it writes a sibling and renames over the target, which is atomic on every
+ * filesystem this runs on: the file is either the old one or the new one and
+ * never neither. `realpath` first, so a symlink is followed rather than
+ * replaced — the old behaviour, and the one that surprises nobody. The mode is
+ * copied across, because a rename brings the temporary file's permissions with
+ * it and a 0600 replacement for a 0644 document is a change nobody asked for.
+ */
+async function writeInPlace(target: string, bytes: Uint8Array | string): Promise<void> {
+  const path = await realpath(target)
+  const temporary = `${path}.unmark-${process.pid}`
+  try {
+    await writeFile(temporary, bytes)
+    await chmod(temporary, (await stat(path)).mode)
+    await rename(temporary, path)
+  } catch (cause) {
+    await rm(temporary, { force: true })
+    throw cause
+  }
+}
+
 // ------------------------------------------------------------------ commands
 
 interface Options {
@@ -233,7 +262,7 @@ async function commandClean(target: string, options: Options): Promise<number> {
   const result = await cleanContainer(source.bytes, source.name, textOptions(options))
 
   if (options.inPlace) {
-    await writeFile(target, result.output)
+    await writeInPlace(target, result.output)
     if (!options.json) {
       const out = [`${bold(source.name)} ${dim(`· ${result.format} · written in place`)}`, '']
       renderFindings([...result.findings, ...result.preserved], out)
@@ -262,13 +291,27 @@ async function commandClean(target: string, options: Options): Promise<number> {
 
   if (result.textual) {
     process.stdout.write(decodeUtf8(result.output))
-  } else {
-    // Binary on stdout would corrupt a terminal. Say what to do instead.
-    process.stderr.write(
-      `unmark: ${result.format} is binary — use --in-place, or redirect stdout to a file\n`,
-    )
-    process.stdout.write(result.output)
+    return 0
   }
+
+  // Binary on stdout corrupts a terminal, so it is refused there rather than
+  // announced and then done anyway — which is what this did: it printed the
+  // warning and wrote the bytes on the next line, scrambling the terminal it
+  // had just said it was protecting. Redirected, the bytes are the whole point,
+  // so the same command into a file or a pipe is exactly as it was.
+  // Asked here rather than through `tty`: that one is cached at import and also
+  // folds in NO_COLOR, which answers "should this be coloured", not "is stdout
+  // a terminal". They are the same value almost always and not the same
+  // question, and this is the one place where being wrong writes a megabyte of
+  // binary into somebody's shell.
+  if (process.stdout.isTTY === true) {
+    process.stderr.write(
+      `unmark: ${result.format} is binary and stdout is a terminal — nothing was written.\n` +
+        `        Use --in-place, or redirect: unmark clean ${target} > cleaned\n`,
+    )
+    return 2
+  }
+  process.stdout.write(result.output)
   return 0
 }
 
@@ -429,7 +472,7 @@ async function commandRewrite(target: string, options: Options): Promise<number>
   if (outcome.kind === 'unavailable') return 1
 
   if (outcome.kind === 'accepted') {
-    if (options.inPlace && target !== '-') await writeFile(target, outcome.text)
+    if (options.inPlace && target !== '-') await writeInPlace(target, outcome.text)
     else process.stdout.write(`${outcome.text}\n`)
     process.stderr.write(dim(`  accepted after ${outcome.attempts} attempt(s)\n`))
     return 0
@@ -451,8 +494,51 @@ async function commandRewrite(target: string, options: Options): Promise<number>
 
 // ------------------------------------------------------------------ entry
 
+/**
+ * Every flag this tool answers to.
+ *
+ * Kept as data and checked, because the alternative is what was here: any
+ * argument beginning with a dash went into a set nobody validated, so a typo
+ * was indistinguishable from silence. `unmark clean report.docx --in-plce`
+ * exited 0 having written nothing, and a CI step reading `unmark clean x
+ * --in-place || fail` passed while the file sat untouched. main.test.ts named
+ * this hazard and patched the one case that had bitten; this closes the class.
+ */
+const KNOWN_FLAGS = new Set([
+  '--json',
+  '--in-place',
+  '--paranoid',
+  '--confusables',
+  '--typography',
+  '--humanise',
+  '--plain',
+  '--force',
+  '--print-prompt',
+  '--model',
+  '--attempts',
+  '--against',
+  '--version',
+  '-V',
+  '--help',
+  '-h',
+])
+
 export async function main(argv: readonly string[]): Promise<number> {
   const flags = new Set(argv.filter((arg) => arg.startsWith('-') && arg !== '-'))
+
+  // `--model=x` carries its value in the same token, so the name is what is
+  // checked. A bare `--` is the conventional end-of-options marker and is not
+  // a flag this tool has anything to say about.
+  const unknown = [...flags]
+    .map((flag) => flag.split('=')[0] as string)
+    .filter((flag) => flag !== '--' && !KNOWN_FLAGS.has(flag))
+  if (unknown.length > 0) {
+    process.stderr.write(
+      `unmark: unknown option${unknown.length === 1 ? '' : 's'} ${unknown.join(', ')}\n\n` +
+        'Run `unmark --help` for the list. Nothing was read and nothing was written.\n',
+    )
+    return 2
+  }
 
   /** `--model gpt-x` and `--model=gpt-x` both work; a missing value is undefined. */
   const value = (name: string): string | undefined => {

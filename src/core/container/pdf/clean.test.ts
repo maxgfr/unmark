@@ -3,6 +3,7 @@ import { cleanPdf } from './clean.ts'
 import { source } from './lex.ts'
 import { loadDocument } from './objects.ts'
 import { encode } from '../types.ts'
+import { outcomeOf } from '../../report.ts'
 import { pdf, pdfPatch, type PdfOptions } from '../../../test/containers.ts'
 
 const marked = (options: PdfOptions = {}) =>
@@ -20,10 +21,15 @@ const marked = (options: PdfOptions = {}) =>
 
 const cleaned = async (bytes: Uint8Array, options?: { force?: boolean }) => {
   const result = await cleanPdf(bytes, options)
+  // Both buckets. A refusal is reported through `preserved`, because nothing
+  // was removed and `outcomeOf` reads that field to say so — see `refusal` in
+  // clean.ts. A test that only looked at `findings` would call the file clean.
+  const reported = [...result.findings, ...result.preserved]
   return {
     ...result,
+    reported,
     text: source(result.output).text,
-    labels: result.findings.map((f) => f.label),
+    labels: reported.map((f) => f.label),
   }
 }
 
@@ -181,14 +187,25 @@ describe('encrypted documents', () => {
     const result = await cleaned(bytes)
 
     expect([...result.output]).toEqual([...bytes])
-    expect(result.findings).toHaveLength(1)
-    expect(result.findings[0]?.label).toContain('Encrypted')
-    expect(result.findings[0]?.verdict).toBe('confirmed')
-    expect(result.findings[0]?.label).toContain('no pass ran')
+    expect(result.reported).toHaveLength(1)
+    expect(result.reported[0]?.label).toContain('Encrypted')
+    expect(result.reported[0]?.verdict).toBe('confirmed')
+    expect(result.reported[0]?.label).toContain('no pass ran')
   })
 
   it('does not report an ordinary document as encrypted', async () => {
     expect(has((await cleaned(marked())).labels, 'Encrypted')).toBe(false)
+  })
+
+  it('is not reported as something that was removed', async () => {
+    // The outcome column exists to answer "what happened to this", separately
+    // from "how sure are you". A refusal is the one case where the honest
+    // answer is "nothing" — and it read `removed`, in red, counted into the
+    // summary's "1 removed". The file is byte-identical. isobmff/index.ts
+    // already does this correctly for a fragmented video; the PDF path was the
+    // outlier.
+    const [finding] = (await cleaned(marked({ encrypted: true }))).reported
+    expect(finding && outcomeOf(finding)).toBe('kept')
   })
 })
 
@@ -198,15 +215,20 @@ describe('signed documents', () => {
     const result = await cleaned(bytes)
 
     expect([...result.output]).toEqual([...bytes])
-    expect(result.findings).toHaveLength(1)
-    expect(result.findings[0]?.label).toContain('Digitally signed')
-    expect(result.findings[0]?.evidence).toContain('force')
+    expect(result.reported).toHaveLength(1)
+    expect(result.reported[0]?.label).toContain('Digitally signed')
+    expect(result.reported[0]?.evidence).toContain('force')
   })
 
   it('cleans it anyway when asked, and reports the signature as void', async () => {
     const result = await cleaned(marked({ signature: true }), { force: true })
     expect(result.text).not.toContain('Jane Doe')
     expect(has(result.labels, 'signature is now void')).toBe(true)
+  })
+
+  it('is not reported as something that was removed', async () => {
+    const [finding] = (await cleaned(marked({ signature: true }))).reported
+    expect(finding && outcomeOf(finding)).toBe('kept')
   })
 
   it('does not claim an unsigned document is signed', async () => {
@@ -273,8 +295,8 @@ describe('every finding names the pass that produced it', () => {
     for (const bytes of cases) {
       // oxlint-disable-next-line no-await-in-loop
       const result = await cleaned(bytes)
-      expect(result.findings.length).toBeGreaterThan(0)
-      for (const found of result.findings) {
+      expect(result.reported.length).toBeGreaterThan(0)
+      for (const found of result.reported) {
         expect(found.label, found.label).toMatch(/\((structural rebuild|byte pass|no pass ran)\)$/)
       }
     }

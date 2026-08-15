@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  lstat,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -153,6 +163,37 @@ describe('clean', () => {
     expect(await readFile(path, 'utf8')).toBe(family)
   })
 
+  it('keeps the file it replaces: same link, same mode, no leftovers', async () => {
+    // `--in-place` used to be `writeFile(target)`, which opens with 'w' and
+    // truncates before a byte goes in: a full disk or a Ctrl-C partway through
+    // a large PDF left the user's only copy empty with the original gone. It
+    // writes a sibling and renames over the target now.
+    //
+    // The atomicity is not what this asserts — a torn write is not something a
+    // test here can stage. What it asserts is everything the new path could
+    // plausibly break and the old one got for free: a symlink must still be a
+    // symlink rather than replaced by a regular file, the mode must survive a
+    // rename that would otherwise bring the temporary file's own, and the
+    // sibling must not be left lying around.
+    const path = await file('marked.txt', MARKED)
+    await chmod(path, 0o640)
+    const link = join(dir, 'link.txt')
+    await symlink(path, link)
+
+    expect(await main(['clean', link, '--in-place'])).toBe(0)
+
+    // Followed, not replaced: the old behaviour, and the one nobody is
+    // surprised by. A rename would otherwise leave a regular file where the
+    // symlink was.
+    expect((await lstat(link)).isSymbolicLink()).toBe(true)
+    expect(await readFile(path, 'utf8')).toBe('Quarterly results.')
+    // A rename carries the temporary file's permissions with it, and 0600 in
+    // place of 0640 is a change nobody asked for.
+    expect((await stat(path)).mode & 0o777).toBe(0o640)
+    // And nothing left behind.
+    expect((await readdir(dir)).sort()).toEqual(['link.txt', 'marked.txt'])
+  })
+
   it('strips it anyway under --paranoid', async () => {
     const family = `${String.fromCodePoint(0x1f468)}${String.fromCodePoint(0x200d)}${String.fromCodePoint(0x1f469)}`
     const path = await file('emoji.txt', family)
@@ -284,9 +325,51 @@ describe('argument parsing', () => {
 
   it('accepts --force, which the documentation promises', async () => {
     // The flag was documented in the skill's format reference and parsed
-    // nowhere, and unknown flags are silently ignored — so following the docs
-    // produced the refusal anyway with no signal that the flag did nothing.
+    // nowhere — so following the docs produced the refusal anyway with no
+    // signal that the flag had done nothing.
     await file('plain.txt', 'Nothing hidden.')
     expect(await main(['clean', join(dir, 'plain.txt'), '--force'])).toBe(0)
+  })
+
+  it('refuses an option it does not know, rather than ignoring it', async () => {
+    // The bug the test above could only work around one flag at a time. Any
+    // argument starting with a dash went into a set nobody checked, so a typo
+    // was indistinguishable from silence: `--in-plce` exited 0 having written
+    // nothing at all, and `unmark clean x --in-place || fail` in CI passed
+    // while the file sat untouched.
+    await file('plain.txt', 'Nothing hidden.')
+    expect(await main(['clean', join(dir, 'plain.txt'), '--in-plce'])).toBe(2)
+    expect(stderr()).toContain('--in-plce')
+    expect(stdout()).toBe('')
+  })
+
+  it('names every unknown option, not just the first', async () => {
+    await file('plain.txt', 'Nothing hidden.')
+    expect(await main(['clean', join(dir, 'plain.txt'), '--in-plce', '--typograhpy'])).toBe(2)
+    expect(stderr()).toContain('--in-plce')
+    expect(stderr()).toContain('--typograhpy')
+  })
+
+  it('takes a flag written with an equals sign', async () => {
+    await file('draft.md', 'Some prose here.')
+    expect(
+      await main(['rewrite', join(dir, 'draft.md'), '--model=vendor/model', '--print-prompt']),
+    ).toBe(0)
+  })
+
+  it('leaves a terminal alone rather than writing binary to it', async () => {
+    // It used to print "this is binary, redirect stdout" and then write the
+    // bytes on the next line, scrambling the terminal it had just said it was
+    // protecting. Redirected — which is what a test is — the bytes are the
+    // point, so that path is unchanged.
+    await file('shot.png', png())
+    ;(process.stdout as { isTTY?: boolean }).isTTY = true
+    try {
+      expect(await main(['clean', join(dir, 'shot.png')])).toBe(2)
+      expect(stderr()).toContain('nothing was written')
+      expect(stdout()).toBe('')
+    } finally {
+      delete (process.stdout as { isTTY?: boolean }).isTTY
+    }
   })
 })
