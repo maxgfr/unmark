@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { cleanZipDocument } from './zipdoc.ts'
+import { cleanContainer } from './index.ts'
 import { readZip, writeZip, zipDocumentKind } from './zip.ts'
-import { DOCX_APP, DOCX_CORE, zip } from '../../test/containers.ts'
+import { DOCX_APP, DOCX_CORE, exifSegment, jpeg, zip } from '../../test/containers.ts'
 import { decodeUtf8, encode } from './types.ts'
 
 const docx = () =>
@@ -201,5 +202,196 @@ describe('identity outside docProps', () => {
       '<w:document>Just text.</w:document>',
     )
     expect(result.findings).toEqual([])
+  })
+})
+
+// The eval contract: every new format and every new rule carries a case that
+// must fire and a case that must not.
+
+describe('the OOXML family beyond Word', () => {
+  it('recognises a presentation', async () => {
+    const bytes = zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      { name: 'ppt/presentation.xml', content: '<p:presentation/>' },
+      { name: 'docProps/core.xml', content: DOCX_CORE },
+    ])
+    expect((await cleanContainer(bytes)).format).toBe('PPTX')
+  })
+
+  it('recognises a workbook', async () => {
+    const bytes = zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      { name: 'xl/workbook.xml', content: '<workbook/>' },
+      { name: 'docProps/core.xml', content: DOCX_CORE },
+    ])
+    expect((await cleanContainer(bytes)).format).toBe('XLSX')
+  })
+
+  it('still calls a document a DOCX', async () => {
+    const bytes = zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      { name: 'word/document.xml', content: '<w:document/>' },
+    ])
+    expect((await cleanContainer(bytes)).format).toBe('DOCX')
+  })
+
+  it('strips the same properties whichever application wrote it', async () => {
+    // One handler covers all three, because the parts that leak are the same
+    // three parts. The flavour is what the report calls the file, nothing more.
+    const bytes = zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      { name: 'xl/workbook.xml', content: '<workbook/>' },
+      { name: 'docProps/core.xml', content: DOCX_CORE },
+    ])
+    const result = await cleanContainer(bytes)
+    const core = (await readZip(result.output)).find((e) => e.name === 'docProps/core.xml')
+    expect(decodeUtf8(core!.data)).not.toContain('Jane')
+  })
+})
+
+describe('EPUB', () => {
+  const epub = (opf: string) =>
+    zip([
+      { name: 'mimetype', content: 'application/epub+zip' },
+      { name: 'META-INF/container.xml', content: '<container/>' },
+      { name: 'OEBPS/content.opf', content: opf },
+    ])
+
+  it('is recognised', async () => {
+    expect((await cleanContainer(epub('<package><metadata/></package>'))).format).toBe('EPUB')
+  })
+
+  it('empties the creator without removing the element', async () => {
+    // Same reasoning as the OOXML parts: a reader that expects <dc:creator> to
+    // be there should still find it.
+    const bytes = epub(
+      '<package><metadata><dc:title>A Book</dc:title><dc:creator>Jane Q. Smith</dc:creator></metadata></package>',
+    )
+    const result = await cleanContainer(bytes)
+    const opf = decodeUtf8(
+      (await readZip(result.output)).find((e) => e.name.endsWith('.opf'))!.data,
+    )
+
+    expect(opf).not.toContain('Jane Q. Smith')
+    expect(opf).toContain('<dc:creator>')
+  })
+
+  it('keeps the title, which is the book and not the person', async () => {
+    const bytes = epub('<package><metadata><dc:title>A Book</dc:title></metadata></package>')
+    const result = await cleanContainer(bytes)
+    const opf = decodeUtf8(
+      (await readZip(result.output)).find((e) => e.name.endsWith('.opf'))!.data,
+    )
+    expect(opf).toContain('A Book')
+  })
+
+  it('survives a self-closing meta sitting above the fields it must keep', async () => {
+    // The shape that broke this: `<meta name="cover"/>` is self-closing, and an
+    // open-tag pattern that ignored the `/` ran forward to the next `</meta>`
+    // anywhere later in the file — swallowing the title, the language and the
+    // identifier in between, leaving a file that is no longer a valid EPUB.
+    // Both halves are in every real book: EPUB 2 writes the cover meta, EPUB 3
+    // is required to carry a paired dcterms:modified.
+    const bytes = epub(
+      [
+        '<package unique-identifier="uid"><metadata>',
+        '<meta name="cover" content="cover-image"/>',
+        '<dc:title>My Actual Book Title</dc:title>',
+        '<dc:identifier id="uid">urn:isbn:9780000000001</dc:identifier>',
+        '<dc:language>en</dc:language>',
+        '<dc:creator>Jane Q. Smith</dc:creator>',
+        '<meta property="dcterms:modified">2024-01-01T00:00:00Z</meta>',
+        '</metadata></package>',
+      ].join(''),
+    )
+    const result = await cleanContainer(bytes)
+    const opf = decodeUtf8(
+      (await readZip(result.output)).find((e) => e.name.endsWith('.opf'))!.data,
+    )
+
+    expect(opf).not.toContain('Jane Q. Smith')
+    expect(opf).toContain('My Actual Book Title')
+    expect(opf).toContain('<dc:language>en</dc:language>')
+    // The identifier stays, id and all: `unique-identifier` points at it.
+    expect(opf).toContain('<dc:identifier id="uid">urn:isbn:9780000000001</dc:identifier>')
+    // EPUB 3 requires this one to exist.
+    expect(opf).toContain('dcterms:modified')
+  })
+
+  it('keeps the attributes on a field it empties', async () => {
+    const bytes = epub(
+      '<package><metadata><dc:creator id="author" opf:role="aut">Jane</dc:creator></metadata></package>',
+    )
+    const result = await cleanContainer(bytes)
+    const opf = decodeUtf8(
+      (await readZip(result.output)).find((e) => e.name.endsWith('.opf'))!.data,
+    )
+    expect(opf).toContain('<dc:creator id="author" opf:role="aut"></dc:creator>')
+    expect(opf).not.toContain('Jane')
+  })
+
+  it('removes reading-software bookkeeping', async () => {
+    const bytes = epub(
+      '<package><metadata><meta name="calibre:timestamp" content="2024-01-01"/><dc:title>Book</dc:title></metadata></package>',
+    )
+    const result = await cleanContainer(bytes)
+    const opf = decodeUtf8(
+      (await readZip(result.output)).find((e) => e.name.endsWith('.opf'))!.data,
+    )
+    expect(opf).not.toContain('calibre')
+    expect(opf).toContain('Book')
+  })
+
+  it('cleans a photograph wherever the book keeps it', async () => {
+    // An EPUB's content directory is declared in container.xml and is routinely
+    // not OEBPS. Anchoring to three directory names meant a GPS-bearing
+    // photograph in any other layout survived with no finding at all.
+    const photo = jpeg([{ marker: 0xe1, data: exifSegment('GPSLatitude=48.8566') }])
+    const bytes = zip([
+      { name: 'mimetype', content: 'application/epub+zip' },
+      { name: 'META-INF/container.xml', content: '<container/>' },
+      { name: 'item/content.opf', content: '<package><metadata/></package>' },
+      { name: 'item/images/cover.jpg', content: photo },
+    ])
+
+    const result = await cleanContainer(bytes)
+    const entries = await readZip(result.output)
+    const cleaned = entries.find((e) => e.name === 'item/images/cover.jpg')
+    expect(decodeUtf8(cleaned!.data)).not.toContain('GPSLatitude')
+  })
+})
+
+describe('pictures pasted into a document', () => {
+  const withPhoto = (photo: Uint8Array) =>
+    zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      { name: 'word/document.xml', content: '<w:document/>' },
+      { name: 'word/media/image1.jpeg', content: photo },
+    ])
+
+  it('cleans the EXIF out of an embedded photograph', async () => {
+    // The leak users are most surprised by, and the one every XML-reading pass
+    // walks straight past: a document could be reported clean while carrying
+    // the coordinates of where a picture in it was taken.
+    const photo = jpeg([{ marker: 0xe1, data: exifSegment('Make=Canon GPSLatitude=48.8566') }])
+    const result = await cleanContainer(withPhoto(photo))
+
+    const cleaned = (await readZip(result.output)).find((e) => e.name === 'word/media/image1.jpeg')
+    expect(decodeUtf8(cleaned!.data)).not.toContain('GPSLatitude')
+    expect(result.findings.some((f) => f.label.includes('word/media/image1.jpeg'))).toBe(true)
+  })
+
+  it('names the entry it cleaned, so the report is not a silent success', async () => {
+    const photo = jpeg([{ marker: 0xe1, data: exifSegment('Make=Canon') }])
+    const result = await cleanContainer(withPhoto(photo))
+    const finding = result.findings.find((f) => f.label.startsWith('word/media/image1.jpeg →'))
+    expect(finding).toBeDefined()
+  })
+
+  it('leaves a photograph that carries nothing byte-identical', async () => {
+    const photo = jpeg([])
+    const result = await cleanContainer(withPhoto(photo))
+    const cleaned = (await readZip(result.output)).find((e) => e.name === 'word/media/image1.jpeg')
+    expect([...cleaned!.data]).toEqual([...photo])
   })
 })

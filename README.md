@@ -13,11 +13,14 @@ npx skills add maxgfr/unmark    # the same engine, as a Claude skill and a CLI
 
 ## Why
 
-Two good open-source projects each solve half of this, and neither runs in a
+Several good open-source projects each solve part of this, and none runs in a
 browser: [`watermarks-remover`](https://github.com/guillaumemeyer/watermarks-remover)
-covers text Unicode hygiene and container metadata in Python, and
+covers text Unicode hygiene and container metadata in Python,
 [`watermark-removal`](https://github.com/zuruoke/watermark-removal) covers visible
-image watermarks with TensorFlow and a GPU. Both ask you to install a toolchain
+image watermarks with TensorFlow and a GPU, and
+[`unslop`](https://github.com/theclaymethod/unslop) is the sharpest thing written
+on detecting generated prose — its three-layer split and its eval contract are
+both borrowed here, with credit. All of them ask you to install a toolchain
 before you can check whether a paragraph you were sent has a zero-width character
 in it.
 
@@ -49,11 +52,26 @@ hunts for invisible codepoints walks straight past them. unmark also measures
 **periodicity** — "every third space is a three-per-em" is a pattern, not typing,
 and a periodic substitution is reported `confirmed` where a lone one is not.
 
-A deterministic stylometry report flags the habits of generated prose — dash
-density, triples, negative parallelism, marker vocabulary, sentence-length variance
-— and never rewrites anything. It cannot return a `confirmed` verdict, and it
-refuses to measure below 120 words, because one em dash in twelve words is
-eighty-three per thousand and that is a division, not a signal.
+A deterministic stylometry report flags the habits of generated prose and never
+rewrites anything. Eighteen metrics in three layers, following unslop's split,
+because _which kind_ of tell fired is more useful than how many did:
+
+| Layer          | Reads                                                                                                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **phrase**     | marker vocabulary, business jargon, attribution with nobody behind it                                                                                                                    |
+| **structure**  | **dashes per paragraph**, sentence-length and paragraph-length spread, signpost density, how uniformly paragraphs open, staccato runs, false ranges, copula avoidance, aphorism formulas |
+| **silhouette** | a closing paragraph that recaps the ones above it, headings that would fit any subject, paragraphs built to one internal template                                                        |
+
+The silhouette layer is the one that survives a word-level rewrite, which is why
+it is worth more than another vocabulary list. Dashes are counted per paragraph
+as well as per document, because a rate across three thousand words hides the one
+paragraph with four of them in it.
+
+It cannot return a `confirmed` verdict, and it refuses to measure below 120 words,
+because one em dash in twelve words is eighty-three per thousand and that is a
+division, not a signal. Co-occurrence is counted over distinct _signals_ rather
+than metrics: three metrics reading the same em dashes are one habit, and letting
+each vote would manufacture a pattern out of a single character.
 
 **Making text read less like a machine wrote it** is a separate, opt-in pass,
 following [Wikipedia's _Signs of AI writing_](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing).
@@ -75,8 +93,9 @@ Neither pass removes a watermark, and both are off by default. They still _run_
 on every inspection, so the report lists what they would do before you have
 guessed to turn anything on.
 
-**Files.** Provenance metadata across eleven formats: PNG, JPEG, WebP, GIF, SVG,
-PDF, DOCX, ODT, HTML, Markdown and plain text. C2PA manifests, EXIF, XMP, IPTC,
+**Files.** Provenance metadata across seventeen formats: PNG, JPEG, WebP, GIF,
+HEIC, AVIF, MP4/MOV, SVG, PDF, DOCX, PPTX, XLSX, ODT, EPUB, HTML, Markdown and
+plain text. C2PA manifests, EXIF, XMP, IPTC,
 document properties, generator tags. Removal only — dropping a PNG chunk leaves
 every other chunk's CRC valid, and JPEG's scan is copied verbatim, so the pixels
 of two real camera JPEGs come out byte-identical after their EXIF and XMP are
@@ -84,14 +103,16 @@ stripped.
 
 Including the places the format specs make easy to miss:
 
-| Where                                            | Why it matters                                                                                                                                                                     |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| JPEG **APP2 = MPF**                              | Either an ICC profile or an MPF block, told apart only by an identifier. MPF can hold **an entire second photograph**.                                                             |
-| **ICC profile**                                  | Kept, since removing it changes rendering — but reported: it survives an EXIF strip and names the software. Facebook stamps its own with `Copyright: FB`.                          |
-| DOCX **tracked changes, comments, `people.xml`** | Author names and timestamps on every edit, and a list of everyone who ever opened it. Accepting all changes removes none of it.                                                    |
-| DOCX **`docProps/thumbnail.jpeg`**               | A rendered picture of the first page. No text-level clean touches it.                                                                                                              |
-| DOCX **RSIDs**                                   | Revision save ids that fingerprint editing sessions and link documents to one machine.                                                                                             |
-| PDF **incremental saves**                        | Every earlier draft is still in the file, including text under a black rectangle someone called a redaction. Reported, not removed: rebuilding the document is beyond a byte pass. |
+| Where                                            | Why it matters                                                                                                                                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| JPEG **APP2 = MPF**                              | Either an ICC profile or an MPF block, told apart only by an identifier. MPF can hold **an entire second photograph**.                                                               |
+| **ICC profile**                                  | Kept, since removing it changes rendering — but reported: it survives an EXIF strip and names the software. Facebook stamps its own with `Copyright: FB`.                            |
+| DOCX **tracked changes, comments, `people.xml`** | Author names and timestamps on every edit, and a list of everyone who ever opened it. Accepting all changes removes none of it.                                                      |
+| DOCX **`docProps/thumbnail.jpeg`**               | A rendered picture of the first page. No text-level clean touches it.                                                                                                                |
+| DOCX **RSIDs**                                   | Revision save ids that fingerprint editing sessions and link documents to one machine.                                                                                               |
+| PDF **incremental saves**                        | Every earlier draft is still in the file, including text under a black rectangle someone called a redaction. **Removed** — the rebuild writes only the live object graph.            |
+| DOCX **`word/media/*`**                          | A photograph pasted into a document keeps its own EXIF, GPS included. Every XML-reading pass walks straight past it, so the file could be reported clean while carrying coordinates. |
+| MOV **`©xyz`, and the `keys` table**             | The location atom, plus the metadata iPhones actually write — tags named by index into a table rather than by four-character code, which a handler that only knows 4ccs never sees.  |
 
 **Images.** A corner scan finds flat semi-transparent overlays and snaps to their
 real edges, then **unblends** them: a composited badge is an invertible transform of
@@ -119,7 +140,12 @@ shipping.
 
 An in-browser paraphrase for statistical text watermarks was considered and
 dropped for exactly this reason: a CSP is static, so permitting it would have
-widened the promise for every visitor, including the ones who never used it.
+widened the promise for every visitor, including the ones who never used it. It
+lives in the terminal instead, where a network is already expected and where you
+opted in by typing the command — see **Crossing the deterministic ceiling**.
+`pnpm check:imports` follows the import graph from the page's entry point and
+fails if it can reach `src/cli`, so the boundary is a build gate rather than a
+convention one careless import away from being untrue.
 
 ## What it does not remove
 
@@ -130,9 +156,13 @@ Stated here and in the interface, not buried:
   Nothing here removes them.
 - **Statistical text watermarks** — the SynthID-Text family lives in word choice,
   not in characters. No deterministic edit touches them, so a clean report does
-  not mean unwatermarked text.
-- **Metadata inside a PDF's compressed object streams**, which a byte-level pass
-  cannot see. unmark reports that rather than implying the file came out clean.
+  not mean unwatermarked text. `unmark rewrite` reduces the score; it does not
+  zero it, and nothing here is tested against any vendor's detector.
+- **Encrypted PDFs.** Nothing is read, so nothing is reported. This used to be
+  the most dangerous bug in the project: encrypted strings do not match the byte
+  pass's patterns, so an encrypted PDF came out reported **clean**.
+- **Signed PDFs**, unless you force it. Any edit voids the signature, and the
+  tool says so rather than quietly breaking one.
 
 It is not certified to defeat any vendor's detector, and it never claims to be.
 
@@ -146,15 +176,51 @@ unmark decode  suspicious.txt     # recover what the invisible characters spell
 unmark clean   suspicious.txt --in-place
 unmark audit   ./docs             # walk a tree, list what is marked
 
-# The two opt-in style passes
+# The opt-in style passes
 unmark clean draft.md --typography   # em dashes, curly quotes, ellipses → ASCII
 unmark clean draft.md --humanise     # filler, pleasantries, signposting, decorative emoji
+unmark clean draft.md --plain        # both at once
 ```
 
 Zero dependencies — one file, no install step. Exit codes compose: `inspect`
 returns 1 when something `confirmed` is present, `audit` returns 1 when a tree is
 dirty. The CLI and the page run the **same core**, built twice from one source, so
 they cannot disagree about the same character.
+
+## Crossing the deterministic ceiling
+
+Everything above is a regex, and a regex cannot reach word choice or the shape of
+an argument. That takes a model — and the dangerous version of "use a model" is
+to hand it the document, ask for something more human, and ship what comes back.
+That trades one machine's prose for another's, quietly drops a figure, and
+reports success.
+
+So the model is bracketed rather than trusted:
+
+```bash
+unmark brief   draft.md                     # what to fix, and what must survive
+unmark verify  new.md --against draft.md    # did it clear the gates, or only read better
+unmark rewrite draft.md                     # the loop, driven for you
+```
+
+`verify` re-runs all three detection layers on the rewrite and **rejects** it when
+a flagged pattern came back, when a number or a citation went missing, or when a
+code fence was edited. Each failure is named, so the next attempt is aimed rather
+than another roll of the dice. Exit 1, so it composes.
+
+**The page has no rewrite at all**, and that is deliberate:
+
+| Surface   | Where the model runs                                                        |
+| --------- | --------------------------------------------------------------------------- |
+| the page  | nowhere. `connect-src 'self'`, and a build gate that fails on any origin    |
+| the skill | you are the model — no key, no request from our code                        |
+| the CLI   | `127.0.0.1` by default. `--model <id>` for a provider, priced first, opt-in |
+
+`--print-prompt` emits the prompt and contacts nothing at all. On the remote path,
+[`llm-models`](https://github.com/maxgfr/llm-models) resolves the model, checks
+the document fits its context, and prints the cost **before** it is spent — but
+it is spawned as a process, never imported, so "one file, no install step" still
+holds and it degrades to a note when it is absent.
 
 ## Careful by default
 
@@ -163,6 +229,13 @@ what makes 👨‍👩‍👧 one family instead of three people; a zero-width n
 Persian word is orthography. Those are reported as `likely_false_positive` and
 kept, with the reason attached. `--paranoid` strips them anyway and says that it
 will damage legitimate text.
+
+A file whose format is not recognised is reported as `unknown` and handed back
+byte for byte. That is not a smaller promise than cleaning it — it is a
+different one: the text path decodes UTF-8 and encodes it back, which is
+lossless for text and destructive for everything else, so an unrecognised file
+that fell into it came out with every invalid byte replaced and a report saying
+nothing was found.
 
 | Verdict                 | Means                                                                        |
 | ----------------------- | ---------------------------------------------------------------------------- |
@@ -177,7 +250,8 @@ will damage legitimate text.
 pnpm install
 pnpm assets    # fetch the pinned MI-GAN weights (checksummed)
 pnpm dev
-pnpm verify    # typecheck · lint · format · test · skill bundle · build · privacy gate
+pnpm verify    # typecheck · lint · format · test · import gate · skill · build · privacy gate
+pnpm e2e       # Chromium, Firefox and WebKit, plus two phones with a real touchscreen
 pnpm shoot     # screenshot and drive the built page in a real browser
 ```
 

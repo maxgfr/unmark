@@ -203,13 +203,40 @@ function estimate(raster: Raster, grid: Grid, px: number, py: number): [number, 
   ]
 }
 
+export interface InpaintOptions {
+  /** Called with 0–1 as the front advances, at most once per few thousand pixels. */
+  onProgress?: (fraction: number) => void
+  /**
+   * Polled on the same schedule. Returning true abandons the fill.
+   *
+   * The result is still returned, with whatever the front had reached left
+   * filled and the rest as it was: only a caller that asked to stop ever sees
+   * it, and it knows to throw it away.
+   */
+  shouldStop?: () => boolean
+}
+
+/**
+ * How many front pixels between one progress report and the next.
+ *
+ * Checking every pixel would put a callback and a clock read inside the hottest
+ * loop in the project. 4096 is around a hundredth of a second of work, which is
+ * finer than a progress bar can show and coarser than the loop can feel.
+ */
+const REPORT_EVERY = 4096
+
 /**
  * Fill every pixel the mask marks, from the boundary inwards.
  *
  * `mask` is one byte per pixel: non-zero means "this is a hole". The alpha
  * channel is left as it was — inpainting reconstructs colour, not coverage.
+ *
+ * Synchronous, deliberately. A megapixel selection takes seconds and belongs on
+ * a worker, but the worker is a wrapper around this rather than a second
+ * implementation of it — which is what lets the algorithm be tested in Node,
+ * where there is no Worker at all.
  */
-export function inpaint(raster: Raster, mask: Uint8Array): Raster {
+export function inpaint(raster: Raster, mask: Uint8Array, options: InpaintOptions = {}): Raster {
   const out = cloneRaster(raster)
   const grid: Grid = {
     width: raster.width,
@@ -254,11 +281,21 @@ export function inpaint(raster: Raster, mask: Uint8Array): Raster {
     }
   }
 
+  let filled = 0
+  let sinceReport = 0
+
   while (front.size > 0) {
     const current = front.pop()
     if (!current) break
     const { x, y } = current
     grid.flag[idx(grid, x, y)] = KNOWN
+
+    sinceReport += 1
+    if (sinceReport >= REPORT_EVERY) {
+      sinceReport = 0
+      options.onProgress?.(Math.min(1, filled / holes))
+      if (options.shouldStop?.()) return out
+    }
 
     for (const [dx, dy] of [
       [1, 0],
@@ -289,9 +326,11 @@ export function inpaint(raster: Raster, mask: Uint8Array): Raster {
 
       grid.flag[n] = BAND
       front.push(time, nxp, nyp)
+      filled += 1
     }
   }
 
+  options.onProgress?.(1)
   return out
 }
 

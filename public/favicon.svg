@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="unmark">
+  <!-- Three lines of text, and the one amber stroke that takes a mark off.
+       The palette is the page's: #0b0b0c ground, #8b8a86 muted, #ffb020 signal.
+       Legible at 16px because it is four rectangles and nothing else. -->
+  <rect width="64" height="64" rx="12" fill="#0b0b0c" />
+  <rect x="12" y="19" width="40" height="4" rx="2" fill="#8b8a86" />
+  <rect x="12" y="30" width="28" height="4" rx="2" fill="#8b8a86" />
+  <rect x="12" y="41" width="34" height="4" rx="2" fill="#8b8a86" />
+  <rect x="8" y="28.5" width="48" height="7" rx="3.5" fill="#ffb020" />
+</svg>

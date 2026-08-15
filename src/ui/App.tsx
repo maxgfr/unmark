@@ -4,6 +4,7 @@ import { TextTab } from './TextTab.tsx'
 import { FilesTab } from './FilesTab.tsx'
 import { ImageTab } from './ImageTab.tsx'
 import { IconFile, IconImage, IconText } from './icons.tsx'
+import { applyUpdate, onServiceWorker, type ServiceWorkerState } from './serviceWorker.ts'
 
 const TABS = [
   { id: 'text', label: 'Text', Icon: IconText },
@@ -42,9 +43,32 @@ function useHashTab(): [TabId, (next: TabId) => void] {
 
 export function App() {
   const [tab, setTab] = useHashTab()
+  const [worker, setWorker] = useState<ServiceWorkerState>({
+    needsRefresh: false,
+    offlineReady: false,
+  })
+  useEffect(() => onServiceWorker(setWorker), [])
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-5 sm:px-8">
+      {/* A waiting build never takes over on its own. Reloading under someone
+          who has a 28 MB model in memory and a mask half drawn is the one thing
+          this app must not decide for itself. */}
+      {worker.needsRefresh ? (
+        <output className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-[var(--color-rule)] px-4 py-2.5 text-xs">
+          <span className="text-[var(--color-muted)]">
+            A newer build is downloaded and waiting. Nothing reloads until you say so.
+          </span>
+          <button
+            type="button"
+            onClick={applyUpdate}
+            className="rounded-md border border-[var(--color-signal)] px-2.5 py-1 text-[var(--color-signal)] transition-colors duration-150 hover:bg-[var(--color-signal-dim)]"
+          >
+            Reload now
+          </button>
+        </output>
+      ) : undefined}
+
       <header className="grid gap-8 pt-12 pb-8 sm:pt-16 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <h1 className="text-4xl font-bold tracking-[-0.03em] sm:text-5xl">unmark</h1>
@@ -65,7 +89,7 @@ export function App() {
         <dl className="hidden border-l border-[var(--color-rule)] pl-6 font-mono text-xs lg:block">
           {[
             ['build', VERSION],
-            ['formats', '11'],
+            ['formats', '17'],
             ['uploads', 'none'],
           ].map(([term, value]) => (
             <div key={term} className="flex gap-6 py-0.5">

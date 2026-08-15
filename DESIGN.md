@@ -67,6 +67,18 @@ The header carries a masthead spec block on wide screens — build, format count
 uploads — set right against the lede. A report states its own parameters, and it
 gives the top band something to be other than empty.
 
+The writing-style panel is grouped into its three layers — phrase, structure,
+silhouette — with one line under each heading saying what that layer reads. A
+flat list of eighteen numbers is a wall; the grouping is what makes the report
+answer "which kind of tell" rather than only "how many".
+
+## Touch
+
+The image canvas sets `touch-action: none`. Without it the browser claims the
+first vertical drag for page scroll and cancels the gesture, which means the
+selection simply does not work on a phone — the failure is total and invisible
+to any test driven by a mouse.
+
 ## Motion
 
 One authored moment: findings enter with a 12ms-staggered, exponential ease-out

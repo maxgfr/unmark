@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeStyle, MIN_SENTENCES, MIN_WORDS, stylometryFindings } from './stylometry.ts'
+import {
+  analyzeStyle,
+  distinctSignals,
+  MIN_SENTENCES,
+  MIN_WORDS,
+  stylometryFindings,
+} from './stylometry.ts'
 
 const triggered = (text: string) =>
   analyzeStyle(text)
@@ -157,3 +163,213 @@ describe('stylometryFindings', () => {
     expect(stylometryFindings(LOADED).every((f) => f.kind === 'stylometry')).toBe(true)
   })
 })
+
+// The eval contract: each new metric gets a document that must trigger it and a
+// document that must not. HUMAN above is the standing negative for all of them
+// — the suite is only worth having if that sample stays silent.
+
+describe('layers', () => {
+  it('labels every metric with a layer and a signal', () => {
+    for (const metric of analyzeStyle(HUMAN).metrics) {
+      expect(['phrase', 'structure', 'silhouette']).toContain(metric.layer)
+      expect(metric.signal.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('counts one habit once, however many metrics read it', () => {
+    // Three metrics measuring the same em dashes are one tell. Letting each
+    // vote would turn a single character into a "pattern" of three.
+    const dashes = grow(
+      (i) => `The report was clear — the numbers had moved — nobody said so, case ${i}.`,
+      14,
+    )
+    const metrics = analyzeStyle(dashes).metrics.filter((m) => m.triggered)
+    const dashMetrics = metrics.filter((m) => m.signal === 'em_dash')
+    expect(dashMetrics.length).toBeGreaterThanOrEqual(2)
+    expect(distinctSignals(metrics)).toBeLessThan(metrics.length)
+  })
+})
+
+describe('phrase layer', () => {
+  it('catches business jargon', () => {
+    const text = grow(
+      (i) =>
+        `The team will circle back on best practices for region ${i}. We must move the needle and drive value through actionable insights.`,
+      8,
+    )
+    expect(triggered(text)).toContain('business_jargon')
+  })
+
+  it('does not fire on a sentence that happens to mention practice', () => {
+    const text = grow(
+      (i) => `The rider practised on the hill behind the station most mornings in week ${i}.`,
+      16,
+    )
+    expect(triggered(text)).not.toContain('business_jargon')
+  })
+
+  it('catches attribution with nobody behind it', () => {
+    const text = grow(
+      (i) => `Experts argue the figure is wrong in case ${i}. Studies show the opposite.`,
+      12,
+    )
+    expect(triggered(text)).toContain('vague_attribution')
+  })
+
+  it('does not fire when the source is named', () => {
+    const text = grow(
+      (i) => `The Institute of Statistics published the figure for year ${i} in its annual return.`,
+      14,
+    )
+    expect(triggered(text)).not.toContain('vague_attribution')
+  })
+})
+
+describe('structure layer', () => {
+  it('catches a paragraph stuffed with dashes that a document-wide rate would average away', () => {
+    // The whole point of the per-paragraph rule. One dense paragraph inside a
+    // long clean document does not move the per-1000-words figure at all.
+    const clean = grow((i) => `A plain sentence about the work in week ${i}.`, 90)
+    const text = `${clean}\n\nThe report — late again — arrived — and nobody read it.\n\n${clean}`
+    const ids = triggered(text)
+    expect(ids).toContain('em_dash_paragraph')
+    expect(ids).not.toContain('em_dash')
+  })
+
+  it('does not fire on a paragraph with a single dash', () => {
+    const text = `${grow((i) => `A plain sentence about the work in week ${i}.`, 40)}\n\nThe report — late — arrived.`
+    expect(triggered(text)).not.toContain('em_dash_paragraph')
+  })
+
+  it('catches sentences that all open with a transition', () => {
+    const text = grow(
+      (i) =>
+        `However, the figure moved in month ${i}. Moreover, nobody noticed. Furthermore, the report was late. Ultimately, it did not matter.`,
+      6,
+    )
+    expect(triggered(text)).toContain('signpost_density')
+  })
+
+  it('does not fire on prose with one however in it', () => {
+    const text = grow((i) => `The figure moved in month ${i} and nobody noticed at all.`, 18)
+    expect(`${text} However, it did not matter.`).toBeTruthy()
+    expect(triggered(`${text} However, it did not matter.`)).not.toContain('signpost_density')
+  })
+
+  it('catches a run of short sentences manufacturing drama', () => {
+    const text = `${grow((i) => `The system processed the request for client ${i} without any delay.`, 20)} Then it stopped. No warning. No log. Nothing at all.`
+    expect(triggered(text)).toContain('staccato')
+  })
+
+  it('does not fire on one short sentence used for emphasis', () => {
+    const text = `${grow((i) => `The system processed the request for client ${i} without any delay.`, 20)} Then it stopped.`
+    expect(triggered(text)).not.toContain('staccato')
+  })
+
+  it('catches copula avoidance', () => {
+    const text = grow(
+      (i) =>
+        `The gallery serves as the main space in city ${i}. It boasts four rooms and features a courtyard. The wing represents a later addition.`,
+      7,
+    )
+    expect(triggered(text)).toContain('copula_avoidance')
+  })
+
+  it('catches an aphorism formula', () => {
+    const text = grow(
+      (i) => `Symmetry is the language of trust in design ${i}. Efficiency becomes a trap.`,
+      12,
+    )
+    expect(triggered(text)).toContain('aphorism')
+  })
+
+  it('catches paragraphs cut to one length', () => {
+    const paragraph = (i: number) =>
+      `The team reviewed the report for region ${i} and confirmed that the totals matched the ledger held by the finance group at the close of the quarter.`
+    const text = Array.from({ length: 6 }, (_, i) => paragraph(i)).join('\n\n')
+    expect(triggered(text)).toContain('paragraph_variance')
+  })
+
+  it('does not judge paragraph length across too few paragraphs', () => {
+    // Three paragraphs will look either uniform or varied depending on which
+    // three they are, which is not a measurement.
+    expect(triggered(HUMAN)).not.toContain('paragraph_variance')
+    expect(analyzeStyle(HUMAN).paragraphs).toBeLessThan(5)
+  })
+})
+
+// Long enough to clear MIN_WORDS: the module is right to refuse a short sample,
+// so a fixture that tests anything else has to get past that floor first.
+const RECAP_BODY = [
+  'The parser reads the central directory before it seeks to any local header entry, because the directory is the only place the archive states what it really contains.',
+  'Deflate is the only compression method the reader handles anywhere in the archive, and an entry stored with anything else raises rather than returning half a file.',
+  'A stored entry is copied verbatim into the output without any further processing at all, which is what keeps the mimetype entry of an open document format legal.',
+  'The writer zeroes every timestamp it emits, because a timestamp is metadata exactly like an author name, and leaving it behind would undo half of the work.',
+].join('\n\n')
+
+describe('silhouette layer', () => {
+  it('catches a closing paragraph that recaps the ones above it', () => {
+    const recap =
+      'The parser reads the central directory, handles deflate compression, copies stored entries verbatim, and zeroes every timestamp in every single archive that it writes out anywhere.'
+    expect(triggered(`${RECAP_BODY}\n\n${recap}`)).toContain('recap_loop')
+  })
+
+  it('does not fire when the last paragraph says something new', () => {
+    const ending =
+      'Encryption remains unsupported, and a password-protected archive raises immediately rather than returning half a document to whoever happened to ask for it.'
+    expect(triggered(`${RECAP_BODY}\n\n${ending}`)).not.toContain('recap_loop')
+  })
+
+  it('catches paragraphs built to one internal template', () => {
+    const paragraph = (i: number) =>
+      `Caching improves latency in service ${i} by keeping recent answers close to the caller. For example, a lookup that took forty milliseconds now takes two. However, a stale entry can be worse than a slow one.`
+    const text = Array.from({ length: 5 }, (_, i) => paragraph(i)).join('\n\n')
+    expect(triggered(text)).toContain('paragraph_template')
+  })
+
+  it('does not fire on paragraphs that happen to contain an example', () => {
+    const text = [
+      'Caching keeps recent answers close to the caller and cuts the round trip out of the common path entirely.',
+      'For example, a lookup that took forty milliseconds now takes two, which is the whole reason anyone bothers.',
+      'A stale entry can be worse than a slow one, and the invalidation rules are where most of the bugs live.',
+      'The team measured the hit rate for a week before turning it on for everyone in the London office.',
+      'Nobody has changed the eviction policy since, which is either confidence or nobody wanting to touch it.',
+    ].join('\n\n')
+    expect(triggered(text)).not.toContain('paragraph_template')
+  })
+
+  it('catches a generic outline', () => {
+    const section = (name: string, i: number) =>
+      `## ${name}\n\nThe report covers the material for section ${i} in the detail the reader needs to follow the argument through, with the figures set beside the text rather than collected at the end where nobody ever reads them.`
+    const text = ['Introduction', 'Background', 'Challenges', 'Future Outlook', 'Conclusion']
+      .map((name, i) => section(name, i))
+      .join('\n\n')
+    expect(triggered(text)).toContain('generic_outline')
+  })
+
+  it('does not fire on headings that name their subject', () => {
+    const section = (name: string, i: number) =>
+      `## ${name}\n\nThe report covers the material for section ${i} in the detail the reader needs to follow the argument through, with the figures set beside the text rather than collected at the end where nobody ever reads them.`
+    const text = [
+      'Central directory layout',
+      'Deflate and stored entries',
+      'Timestamp zeroing',
+      'What the reader refuses',
+      'Encrypted archives',
+    ]
+      .map((name, i) => section(name, i))
+      .join('\n\n')
+    expect(triggered(text)).not.toContain('generic_outline')
+  })
+})
+
+describe('measuring prose only', () => {
+  it('does not count a fenced code block as sentences', () => {
+    // A document that is half code would otherwise have its sentence
+    // statistics decided by its code.
+    const text = 'One sentence here.\n\n```js\nconst a = 1; const b = 2; const c = 3;\n```\n'
+    expect(analyzeStyle(text).words).toBe(wordsOf('One sentence here.'))
+  })
+})
+
+const wordsOf = (text: string) => [...text.matchAll(/[\p{L}\p{N}'’-]+/gu)].length

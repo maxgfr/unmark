@@ -12,6 +12,9 @@ import process from 'node:process'
 import { VERSION } from '../core/index.ts'
 import { cleanContainer, inspectContainer, type ContainerFormat } from '../core/container/index.ts'
 import { decodeStego } from '../core/text/stego.ts'
+import { PLAIN } from '../core/text/index.ts'
+import { buildBrief, verifyRewrite, type RewriteVerdict } from '../core/rewrite.ts'
+import { runRewrite } from './rewrite.ts'
 import {
   collapseRuns,
   KIND_LABEL,
@@ -30,6 +33,11 @@ USAGE
   unmark decode  <file|->        recover payloads hidden in invisible characters
   unmark audit   <dir>           walk a tree and report every marked file
 
+  unmark brief   <file|->        what a rewrite must fix and must not break (JSON)
+  unmark rewrite <file|->        run the rewrite loop; local model by default
+  unmark verify  <file|-> --against <original>
+                                 did a rewrite clear the gates, or only read better
+
 OPTIONS
   --json              machine-readable output
   --in-place          write the cleaned result back to the file (clean only)
@@ -37,11 +45,26 @@ OPTIONS
   --confusables       map Cyrillic/Greek lookalikes back to Latin
   --typography        flatten em dashes, curly quotes and ellipses to ASCII
   --humanise          remove filler, chat pleasantries and signposting
+  --plain             both of the above at once; changes how the prose reads,
+                      and does NOT remove a statistical watermark
   --version, -V       print the version
   --help, -h          print this
 
+REWRITE (the tells no regex reaches: word choice, and the shape of the argument)
+  --print-prompt      emit the prompt and stop. No network, nothing spent.
+  --model <id>        use a remote provider instead of a local one. The document
+                      LEAVES YOUR MACHINE. Priced first when llm-models is present.
+  --attempts <n>      how many tries before giving up and saying why (default 3)
+  --against <file>    the original a rewrite is checked against (verify only)
+  --force             clean a signed PDF anyway. The signature becomes void.
+
+  With no --model, rewrite talks to Ollama on 127.0.0.1 and nothing leaves the
+  machine. The browser page has no rewrite at all: its Content-Security-Policy
+  pins connect-src to 'self', and that is not negotiable for a feature.
+
 FORMATS
-  Text, Markdown, HTML, SVG, PNG, JPEG, WebP, GIF, PDF, DOCX, ODT
+  Text, Markdown, HTML, SVG, PNG, JPEG, WebP, GIF, HEIC, AVIF, MP4/MOV, PDF,
+  DOCX, PPTX, XLSX, ODT, EPUB — sniffed from the bytes, not the extension
 
 Visible watermarks in pixels — inpainting, generator badges — need a canvas and
 a GPU, so they live in the browser: https://maxgfr.github.io/unmark/
@@ -157,9 +180,15 @@ interface Options {
   confusables: boolean
   typography: boolean
   humanise: boolean
+  printPrompt: boolean
+  force: boolean
+  model?: string
+  attempts?: number
+  against?: string
 }
 
 const textOptions = (options: Options) => ({
+  ...(options.force ? { force: true } : {}),
   ...(options.paranoid ? { paranoid: true } : {}),
   ...(options.confusables ? { confusables: true } : {}),
   ...(options.typography ? { typography: true } : {}),
@@ -316,11 +345,130 @@ async function commandAudit(target: string, options: Options): Promise<number> {
   return 1
 }
 
+// ----------------------------------------------------------------- rewrite
+//
+// The deterministic half of the tool stops at word choice and at the shape of
+// an argument. These three commands cross that line, and they are built so the
+// model is bracketed rather than trusted: `brief` says what is wrong and what
+// must survive, `verify` checks the answer against both, `rewrite` runs the
+// loop between them.
+
+async function commandBrief(target: string): Promise<number> {
+  // Always JSON. This had a `if (json || printPrompt === false)` branch whose
+  // two arms printed the same thing, which reads as though the flags do
+  // something here. They do not: a brief is for a machine to act on.
+  const source = await readSource(target)
+  process.stdout.write(`${JSON.stringify(buildBrief(decodeUtf8(source.bytes)), undefined, 2)}\n`)
+  return 0
+}
+
+function renderVerdict(verdict: RewriteVerdict, out: string[]): void {
+  if (verdict.ok) {
+    out.push(paint('32', '  passed'), dim('  every gate cleared: patterns, facts, protected spans'))
+    return
+  }
+  out.push(paint('31', `  rejected — ${verdict.failures.length} problem(s)`), '')
+  for (const failure of verdict.failures) {
+    out.push(`  ${paint('33', failure.kind.padEnd(9))} ${failure.what}`)
+    out.push(`  ${' '.repeat(9)} ${dim(failure.detail)}`)
+  }
+}
+
+async function commandVerify(target: string, options: Options): Promise<number> {
+  if (!options.against) {
+    process.stderr.write('unmark: verify needs --against <the original file>\n')
+    return 2
+  }
+
+  const original = decodeUtf8((await readSource(options.against)).bytes)
+  const rewritten = decodeUtf8((await readSource(target)).bytes)
+  const verdict = verifyRewrite(original, rewritten, buildBrief(original))
+
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(verdict, undefined, 2)}\n`)
+    return verdict.ok ? 0 : 1
+  }
+
+  const out = [bold(`${target} against ${options.against}`), '']
+  renderVerdict(verdict, out)
+  process.stdout.write(`${out.join('\n')}\n`)
+  return verdict.ok ? 0 : 1
+}
+
+async function commandRewrite(target: string, options: Options): Promise<number> {
+  const source = await readSource(target)
+  const text = decodeUtf8(source.bytes)
+  const brief = buildBrief(text)
+
+  const outcome = await runRewrite(text, brief, {
+    ...(options.model ? { model: options.model } : {}),
+    ...(options.attempts ? { attempts: options.attempts } : {}),
+    printPrompt: options.printPrompt,
+  })
+
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(outcome, undefined, 2)}\n`)
+    return outcome.kind === 'accepted' || outcome.kind === 'prompt' ? 0 : 1
+  }
+
+  if (outcome.kind === 'prompt') {
+    process.stdout.write(`${outcome.text}\n`)
+    return 0
+  }
+
+  for (const note of outcome.notes) process.stderr.write(`${dim(note)}\n`)
+
+  if (outcome.kind === 'unavailable') return 1
+
+  if (outcome.kind === 'accepted') {
+    if (options.inPlace && target !== '-') await writeFile(target, outcome.text)
+    else process.stdout.write(`${outcome.text}\n`)
+    process.stderr.write(dim(`  accepted after ${outcome.attempts} attempt(s)\n`))
+    return 0
+  }
+
+  // Rejected. The rewrite is still printed to stderr-adjacent stdout only when
+  // asked for, because handing back a document that failed its own check as if
+  // it had passed is the failure this whole loop exists to prevent.
+  const out = [bold('the rewrite did not clear the gates'), '']
+  if (outcome.verdict) renderVerdict(outcome.verdict, out)
+  out.push(
+    '',
+    dim(`  ${outcome.attempts} attempt(s). The document is unchanged.`),
+    dim('  A finding that keeps coming back is a sentence that needs a person.'),
+  )
+  process.stderr.write(`${out.join('\n')}\n`)
+  return 1
+}
+
 // ------------------------------------------------------------------ entry
 
 export async function main(argv: readonly string[]): Promise<number> {
   const flags = new Set(argv.filter((arg) => arg.startsWith('-') && arg !== '-'))
-  const positional = argv.filter((arg) => !arg.startsWith('-') || arg === '-')
+
+  /** `--model gpt-x` and `--model=gpt-x` both work; a missing value is undefined. */
+  const value = (name: string): string | undefined => {
+    const inline = argv.find((arg) => arg.startsWith(`${name}=`))
+    if (inline) return inline.slice(name.length + 1)
+    const at = argv.indexOf(name)
+    const next = at === -1 ? undefined : argv[at + 1]
+    return next && !next.startsWith('-') ? next : undefined
+  }
+
+  // A flag's value is not a positional argument — consumed by INDEX, not by
+  // value. Consuming by value deleted the file argument whenever it happened to
+  // equal a flag's value, so `unmark verify x.md --against x.md` lost its
+  // target, fell back to reading stdin, and hung forever with no output.
+  // Verifying a file against itself is the first thing anyone tries.
+  const consumed = new Set<number>()
+  for (const name of ['--model', '--attempts', '--against']) {
+    const at = argv.indexOf(name)
+    const next = at === -1 ? undefined : argv[at + 1]
+    if (at !== -1 && next && !next.startsWith('-')) consumed.add(at + 1)
+  }
+  const positional = argv.filter(
+    (arg, at) => (!arg.startsWith('-') || arg === '-') && !consumed.has(at),
+  )
 
   if (flags.has('--version') || flags.has('-V')) {
     process.stdout.write(`${VERSION}\n`)
@@ -336,8 +484,15 @@ export async function main(argv: readonly string[]): Promise<number> {
     inPlace: flags.has('--in-place'),
     paranoid: flags.has('--paranoid'),
     confusables: flags.has('--confusables'),
-    typography: flags.has('--typography'),
-    humanise: flags.has('--humanise'),
+    printPrompt: flags.has('--print-prompt'),
+    force: flags.has('--force'),
+    ...(value('--model') ? { model: value('--model') as string } : {}),
+    ...(value('--attempts') ? { attempts: Number(value('--attempts')) } : {}),
+    ...(value('--against') ? { against: value('--against') as string } : {}),
+    // --plain is one name for the pair, defined once in the core so the page's
+    // button and this flag cannot drift into two different presets.
+    typography: flags.has('--typography') || (flags.has('--plain') && PLAIN.typography === true),
+    humanise: flags.has('--humanise') || (flags.has('--plain') && PLAIN.humanise === true),
   }
 
   const [command, target = '-'] = positional
@@ -352,6 +507,15 @@ export async function main(argv: readonly string[]): Promise<number> {
       }
       case 'decode': {
         return await commandDecode(target, options)
+      }
+      case 'brief': {
+        return await commandBrief(target)
+      }
+      case 'verify': {
+        return await commandVerify(target, options)
+      }
+      case 'rewrite': {
+        return await commandRewrite(target, options)
       }
       case 'audit': {
         return await commandAudit(target === '-' ? '.' : target, options)

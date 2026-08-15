@@ -125,6 +125,31 @@ describe('collapseRuns', () => {
   it('is a no-op on an empty report', () => {
     expect(collapseRuns([])).toEqual([])
   })
+
+  it('keeps a folded group honest about not having been removed', () => {
+    // The fold used to copy `preserved` and drop `available`, so eleven em
+    // dashes waiting on a toggle folded into one row that read `removed` —
+    // while the text still contained every one of them. A summary that
+    // misreports the outcome is worse than no summary.
+    const waiting = Array.from({ length: 11 }, (_, i) =>
+      finding({
+        kind: 'typography',
+        verdict: 'informational',
+        offset: i * 3,
+        available: 'style, not a mark — enable the option to apply it',
+      }),
+    )
+    const collapsed = collapseRuns(waiting)
+    expect(collapsed).toHaveLength(1)
+    expect(outcomeOf(collapsed[0] as Finding)).toBe('available')
+  })
+
+  it('carries the reason a folded group was kept', () => {
+    const kept = Array.from({ length: 11 }, (_, i) =>
+      finding({ verdict: 'likely_false_positive', offset: i, preserved: 'emoji joiner' }),
+    )
+    expect(collapseRuns(kept)[0]?.preserved).toBe('emoji joiner')
+  })
 })
 
 describe('outcomeOf', () => {

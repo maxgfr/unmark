@@ -15,3 +15,15 @@ public/vendor/
 # 28 MB model inside a skill that cannot use either.
 skills/unmark/scripts/*
 !skills/unmark/scripts/unmark.mjs
+
+# Real generator output, for src/image/real.test.ts. Never committed: these are
+# other people's pictures, and the point of the directory is that everyone's
+# copy holds different ones. The README explains what belongs here.
+fixtures/real/*
+!fixtures/real/README.md
+
+# Playwright output
+test-results/
+playwright-report/
+blob-report/
+.playwright/

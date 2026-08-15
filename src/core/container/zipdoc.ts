@@ -10,6 +10,10 @@
 import type { Finding, Verdict } from '../report.ts'
 import { decodeUtf8, encode, snippet, type ContainerResult } from './types.ts'
 import { readZip, writeZip, zipDocumentKind, type ZipEntry } from './zip.ts'
+import { cleanPng, sniffPng } from './png.ts'
+import { cleanJpeg, sniffJpeg } from './jpeg.ts'
+import { cleanWebp, sniffWebp } from './webp.ts'
+import { cleanGif, sniffGif } from './gif.ts'
 
 const EMPTY_CORE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>`
@@ -59,10 +63,6 @@ const INTERESTING =
 function describe(xml: string): string {
   const values = [...xml.matchAll(INTERESTING)].map((match) => match[1]).filter(Boolean)
   return snippet(values.join(' · '))
-}
-
-export function sniffZipDocument(entries: readonly ZipEntry[]): boolean {
-  return zipDocumentKind(entries) !== undefined
 }
 
 /**
@@ -124,6 +124,7 @@ const BLANK_THUMBNAIL = Uint8Array.from([
 
 export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResult> {
   const entries = await readZip(bytes)
+  const isEpub = zipDocumentKind(entries) === 'epub'
   const findings: Finding[] = []
   const rebuilt: ZipEntry[] = []
 
@@ -204,8 +205,119 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
       }
     }
 
+    // EPUB keeps its metadata in an OPF package document rather than in
+    // docProps. Same leak, different filename: author, contributor, the
+    // identifier a library system assigned, and whatever Calibre wrote.
+    if (entry.name.endsWith('.opf')) {
+      const before = decodeUtf8(entry.data)
+      const after = stripOpfMetadata(before)
+      if (after !== before) {
+        findings.push({
+          kind: 'doc_property',
+          verdict: 'informational',
+          offset: 0,
+          length: entry.data.length,
+          label: `${entry.name} — package metadata (creator, contributor, identifier)`,
+          evidence: describe(before) || snippet(before.replaceAll(/<[^>]*>/g, ' ')),
+        })
+        rebuilt.push({
+          name: entry.name,
+          data: encode(after),
+          ...(entry.stored ? { stored: true } : {}),
+        })
+        continue
+      }
+    }
+
+    // The leak a text-level clean cannot see, and the one users are most
+    // surprised by: a photograph pasted into a document keeps its own EXIF,
+    // GPS included, inside `word/media/`. Every pass above reads XML and walks
+    // straight past it, so a document could be reported clean while carrying
+    // the coordinates of where a picture in it was taken.
+    if (MEDIA_PATH.test(entry.name) || (isEpub && IMAGE_FILE.test(entry.name))) {
+      // eslint-disable-next-line no-await-in-loop -- entries are cleaned in order
+      const cleaned = await cleanEmbeddedImage(entry.data)
+      if (cleaned && cleaned.findings.length > 0) {
+        for (const finding of cleaned.findings) {
+          findings.push({ ...finding, label: `${entry.name} → ${finding.label}` })
+        }
+        rebuilt.push({
+          name: entry.name,
+          data: cleaned.output,
+          ...(entry.stored ? { stored: true } : {}),
+        })
+        continue
+      }
+    }
+
     rebuilt.push(entry)
   }
 
   return { output: await writeZip(rebuilt), findings, preserved: [] }
 }
+
+/**
+ * Where a package keeps the pictures someone put in it.
+ *
+ * OOXML and ODF both fix the directory, so those are matched by path. EPUB does
+ * not: the content directory is declared in `META-INF/container.xml` and is
+ * routinely `item/`, `content/` or a bare `images/`, so anchoring to OEBPS,
+ * EPUB and OPS meant a GPS-bearing photograph in any other layout survived a
+ * clean with no finding at all. In an EPUB every image is content, so the
+ * extension is the test and the location is not.
+ */
+const MEDIA_PATH = /^(?:word|ppt|xl)\/media\/|^Pictures\//i
+const IMAGE_FILE = /\.(?:jpe?g|png|webp|gif)$/i
+
+/**
+ * Clean one embedded picture with the handler that already knows its format.
+ *
+ * Sniffed from the bytes rather than the extension, because a `.png` in
+ * `word/media/` produced by a paste is quite often a JPEG.
+ */
+async function cleanEmbeddedImage(bytes: Uint8Array): Promise<ContainerResult | undefined> {
+  if (sniffPng(bytes)) return cleanPng(bytes)
+  if (sniffJpeg(bytes)) return cleanJpeg(bytes)
+  if (sniffWebp(bytes)) return cleanWebp(bytes)
+  if (sniffGif(bytes)) return cleanGif(bytes)
+  return undefined
+}
+
+/**
+ * Dublin Core fields in an EPUB package document that name a person.
+ *
+ * Text-only content (`[^<]*`) and an open tag that may not be self-closing
+ * (`(?<!\/)>`). Both bounds are load-bearing, and the first version of this had
+ * neither: it also matched `meta`, so a self-closing `<meta name="cover"/>` —
+ * present in essentially every EPUB 2 — opened a match that ran forward to the
+ * next `</meta>` anywhere later in the file. In an EPUB 3, which is required to
+ * carry a paired `<meta property="dcterms:modified">`, that swallowed the
+ * title, the language and the identifier in between, and the book stopped being
+ * a valid EPUB. The finding still said "package metadata" and the pass still
+ * reported success.
+ */
+const OPF_PERSON =
+  /<(dc:(?:creator|contributor|publisher|source|rights|date))\b([^>]*?)(?<!\/)>[^<]*<\/\1>/g
+
+/** Reading-software bookkeeping, which is always self-contained and always goes. */
+const OPF_TOOL_META = /<meta\b[^>]*\bname="(?:calibre|dtb):[^"]*"[^>]*?\/?>(?:<\/meta>)?/g
+
+/**
+ * Empty the OPF fields that name someone, keeping the elements themselves.
+ *
+ * Same reasoning as the OOXML parts: a reader that expects `<dc:creator>` to
+ * exist should still find it, and its attributes are kept because `id` is what
+ * the package's `unique-identifier` points at.
+ *
+ * Deliberately untouched: `dc:title` and `dc:language`, which describe the book
+ * and not the person; `dc:identifier`, because the package element references
+ * it by id and removing it invalidates the file — it is reported instead;
+ * `<meta property="dcterms:modified">`, which EPUB 3 requires.
+ */
+const stripOpfMetadata = (xml: string): string =>
+  xml
+    .replaceAll(
+      OPF_PERSON,
+      (_match, tag: string, attributes: string) => `<${tag}${attributes}></${tag}>`,
+    )
+    .replaceAll(OPF_TOOL_META, '')

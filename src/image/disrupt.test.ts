@@ -155,3 +155,71 @@ describe('disrupt', () => {
     expect(readLsb(after, 8)).toEqual([0, 0, 0, 0, 0, 0, 0, 0])
   })
 })
+
+describe('disrupt with a JPEG leg', () => {
+  // ImageTab used to re-implement this whole sequence inline, in a different
+  // order, with the JPEG step nobody had put in `disrupt`. Two orderings of the
+  // same five operations, one tested and unused, one used and untested.
+
+  /** Stands in for a canvas round trip: quantise, the way JPEG's DCT would. */
+  const fakeJpeg = async (raster: Raster, quality: number): Promise<Raster> => {
+    const step = Math.max(2, Math.round((1 - quality) * 40))
+    const out = { ...raster, data: new Uint8ClampedArray(raster.data) }
+    for (let i = 0; i < out.data.length; i += 4) {
+      for (let c = 0; c < 3; c += 1) {
+        out.data[i + c] = Math.round((out.data[i + c] ?? 0) / step) * step
+      }
+    }
+    return out
+  }
+
+  it('stays synchronous, and identical, when no encoder is passed', async () => {
+    const before = picture(48, 48)
+    const options = { lowBits: 1, cropPixels: 2, noiseAmplitude: 1 }
+    const sync = disrupt(before, options)
+    expect([...sync.data]).toEqual([...(await disrupt(before, options, fakeJpeg)).data])
+  })
+
+  it('skips the JPEG leg when no quality is asked for', async () => {
+    const before = picture(48, 48)
+    let called = false
+    const spy = async (raster: Raster) => {
+      called = true
+      return raster
+    }
+    await disrupt(before, { lowBits: 1 }, spy)
+    expect(called).toBe(false)
+  })
+
+  it('runs the JPEG leg before the low-bit scrub, not after', async () => {
+    // Order is the whole point. A JPEG pass recomputes every low bit, so
+    // scrubbing first accomplishes nothing at all.
+    const before = picture(48, 48)
+    const after = await disrupt(before, { jpegQuality: 0.5, lowBits: 1 }, fakeJpeg)
+    for (let i = 0; i < after.data.length; i += 4) {
+      expect((after.data[i] ?? 0) & 1).toBe(0)
+    }
+  })
+
+  it('hands the encoder the size the earlier legs produced', async () => {
+    const before = picture(64, 64)
+    let seen: [number, number] | undefined
+    const spy = async (raster: Raster) => {
+      seen = [raster.width, raster.height]
+      return raster
+    }
+    await disrupt(before, { cropPixels: 4, jpegQuality: 0.8 }, spy)
+    expect(seen).toEqual([56, 56])
+  })
+
+  it('passes the quality through rather than picking its own', async () => {
+    const before = picture(32, 32)
+    let seen = -1
+    const spy = async (raster: Raster, quality: number) => {
+      seen = quality
+      return raster
+    }
+    await disrupt(before, { jpegQuality: 0.62 }, spy)
+    expect(seen).toBe(0.62)
+  })
+})

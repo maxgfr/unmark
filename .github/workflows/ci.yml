@@ -29,3 +29,45 @@ jobs:
       # build · check:network. The privacy gate and the skill-bundle freshness
       # check are part of it, so neither can be skipped on the way to a merge.
       - run: pnpm verify
+
+      # `verify` already built dist. Keep it so the e2e job does not build again.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 1
+
+  # The gap this closes: everything above runs in Node, and the product is a web
+  # page. Until now the only browser it had ever been opened in was Chromium,
+  # by a script CI did not run. Three engines, plus two phones with a real
+  # touchscreen, because the image selection had never been tried with a finger.
+  e2e:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - run: pnpm e2e:install
+
+      - run: pnpm e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

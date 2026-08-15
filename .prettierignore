@@ -6,3 +6,8 @@ pnpm-lock.yaml
 public/vendor
 skills/unmark/scripts/unmark.mjs
 tests/fixtures
+
+# Playwright output
+test-results
+playwright-report
+blob-report

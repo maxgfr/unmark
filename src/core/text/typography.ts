@@ -17,6 +17,7 @@
 // the same mistake as stripping a Persian zero-width non-joiner.
 
 import type { Finding } from '../report.ts'
+import { codeMask } from './regions.ts'
 
 interface Substitution {
   point: number
@@ -73,6 +74,10 @@ const uPlus = (point: number) => `U+${point.toString(16).toUpperCase().padStart(
 export function normaliseTypography(text: string, options?: TypographyOptions): TypographyResult {
   const tellsOnly = options?.tellsOnly ?? false
   const counts = new Map<number, number>()
+  // The narrow seal, not the wide one. A curly quote inside a JSON string in a
+  // fenced block must survive; a curly quote inside a quotation is still the
+  // author's own punctuation and is exactly what this pass exists to flatten.
+  const sealed = codeMask(text)
   let out = ''
 
   for (let index = 0; index < text.length; index += 1) {
@@ -80,7 +85,7 @@ export function normaliseTypography(text: string, options?: TypographyOptions): 
     if (point === undefined) break
 
     const substitution = BY_POINT.get(point)
-    if (!substitution || (tellsOnly && !substitution.tell)) {
+    if (!substitution || (tellsOnly && !substitution.tell) || sealed[index] === 1) {
       out += text[index]
       continue
     }

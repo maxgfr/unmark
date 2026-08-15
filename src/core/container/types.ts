@@ -16,14 +16,6 @@ export interface ContainerResult {
   preserved: Finding[]
 }
 
-export interface ContainerHandler {
-  /** Short name for the report: 'PNG', 'DOCX'. */
-  format: string
-  /** Whether these bytes are this format. Magic numbers, never the extension. */
-  sniff: (bytes: Uint8Array) => boolean
-  clean: (bytes: Uint8Array) => Promise<ContainerResult> | ContainerResult
-}
-
 export const startsWith = (bytes: Uint8Array, signature: readonly number[]): boolean =>
   bytes.length >= signature.length && signature.every((byte, i) => bytes[i] === byte)
 

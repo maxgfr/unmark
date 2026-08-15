@@ -16,6 +16,7 @@ import { CONFUSABLES } from './confusables.ts'
 import { trailingCarrierRuns } from './stego.ts'
 import { humanise } from './humanise.ts'
 import { normaliseTypography } from './typography.ts'
+import { cleanProvenance } from './provenance.ts'
 
 export interface TextOptions {
   /**
@@ -404,6 +405,27 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
   findings.push(...cleaned.findings)
   let output = cleaned.output
 
+  // Chat-window residue: tracking parameters on cited links, citation glyphs.
+  // Unlike the two passes below, this is not a style choice and is not opt-in.
+  // `?utm_source=chatgpt.com` names the tool that produced the text and phones
+  // the destination site when the link is followed, which puts it in the same
+  // category as an EXIF author field rather than in the same category as an
+  // em dash.
+  const provenance = cleanProvenance(output)
+  output = provenance.output
+  findings.push(...provenance.findings)
+
+  // A note on the offsets from here down, because it is a real compromise and
+  // not an oversight. Everything above indexes the document as it arrived. The
+  // two passes below run on the output of those edits, so their offsets address
+  // an intermediate string — and all of them are then sorted together by
+  // position as though they shared one frame. They differ only by whatever the
+  // carrier and provenance passes removed, which is usually a handful of
+  // characters, and the alternative is re-running both passes on the original
+  // and mapping every edit back through a shift table for a report that is read
+  // by eye. The same trade is made and documented between the markup and text
+  // passes in container/index.ts.
+  //
   // The two style passes always *run*, and only apply when asked.
   //
   // Reporting them unconditionally is the same rule the rest of the tool

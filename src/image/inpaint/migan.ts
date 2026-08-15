@@ -29,6 +29,20 @@ type Session = {
   run: (feeds: Record<string, unknown>) => Promise<Record<string, { data: Uint8Array }>>
 }
 
+/**
+ * Everything between the packing and the compositing, as one function.
+ *
+ * The packing, the mask inversion and the masked-only composite are arithmetic
+ * and belong under test; loading 28 MB of weights does not. Naming the boundary
+ * as a type lets a test drive the whole of `inpaintWithMigan` against a stub
+ * that returns a known tile, which is the only way the composite gets covered
+ * at all — it is the step that decides whether the model's reconstruction of
+ * pixels it was never asked about quietly replaces the real ones.
+ */
+export interface MiganRunner {
+  (image: Uint8Array, mask: Uint8Array, width: number, height: number): Promise<Uint8Array>
+}
+
 let sessionPromise: Promise<Session> | undefined
 
 /** How far MI-GAN is allowed to see around a hole, and how big a tile can get. */
@@ -37,6 +51,7 @@ const MAX_WINDOW = 1024
 const ALIGN = 8
 
 const alignUp = (value: number) => Math.ceil(value / ALIGN) * ALIGN
+const alignDown = (value: number) => Math.floor(value / ALIGN) * ALIGN
 
 export interface LoadProgress {
   (stage: 'runtime' | 'model' | 'ready'): void
@@ -86,7 +101,7 @@ export async function loadMigan(onProgress?: LoadProgress): Promise<Session> {
 
 export const isMiganLoaded = (): boolean => sessionPromise !== undefined
 
-interface Window {
+export interface Window {
   x: number
   y: number
   width: number
@@ -100,7 +115,7 @@ interface Window {
  * spend the model's capacity on pixels nowhere near the hole. A window around
  * the mask gives it the surroundings that actually inform the fill.
  */
-function windowFor(raster: Raster, mask: Uint8Array): Window | undefined {
+export function windowFor(raster: Raster, mask: Uint8Array): Window | undefined {
   let minX = raster.width
   let minY = raster.height
   let maxX = -1
@@ -119,11 +134,18 @@ function windowFor(raster: Raster, mask: Uint8Array): Window | undefined {
 
   const holeWidth = maxX - minX + 1
   const holeHeight = maxY - minY + 1
+  // alignDown on the picture's own short side, not alignUp. Rounding *up*
+  // there produced a window larger than the image whenever the short side was
+  // not already a multiple of 8 — a 300px picture asked for a 304px tile, the
+  // packing read four pixels past the end of every row, and the model was
+  // handed a tile with each row's tail wrapped in from the row below. It never
+  // threw; it just filled from the wrong pixels.
   const side = Math.min(
     MAX_WINDOW,
     Math.max(MIN_WINDOW, alignUp(Math.max(holeWidth, holeHeight) * 3)),
-    alignUp(Math.min(raster.width, raster.height)),
+    alignDown(Math.min(raster.width, raster.height)),
   )
+  if (side < ALIGN) return undefined
 
   const centreX = Math.round((minX + maxX) / 2)
   const centreY = Math.round((minY + maxY) / 2)
@@ -144,24 +166,18 @@ export interface MiganResult {
 }
 
 /**
- * Fill every pixel the mask marks, using MI-GAN.
+ * Pack a window into the layout the model wants.
  *
- * `mask` is one byte per pixel, non-zero meaning "this is a hole" — the same
- * convention as the Telea inpainter, and inverted here because the model uses
- * the opposite one.
+ * CHW rather than the interleaved RGBA everything else here uses, and the mask
+ * inverted: 0 marks a hole for this model, non-zero marks one for us. Both are
+ * one-line conventions and both are silent when wrong — an inverted mask makes
+ * the model reconstruct the whole picture except the watermark.
  */
-export async function inpaintWithMigan(
+export function packWindow(
   raster: Raster,
   mask: Uint8Array,
-  onProgress?: LoadProgress,
-): Promise<MiganResult | undefined> {
-  const region = windowFor(raster, mask)
-  if (!region) return undefined
-  if (region.width < ALIGN || region.height < ALIGN) return undefined
-
-  const session = await loadMigan(onProgress)
-  const ort = await import('onnxruntime-web/wasm')
-
+  region: Window,
+): { image: Uint8Array; mask: Uint8Array } {
   const { width, height } = region
   const plane = width * height
   const image = new Uint8Array(3 * plane)
@@ -174,36 +190,86 @@ export async function inpaintWithMigan(
       image[target] = raster.data[source] ?? 0
       image[plane + target] = raster.data[source + 1] ?? 0
       image[2 * plane + target] = raster.data[source + 2] ?? 0
-      // 0 marks a hole for this model — the inverse of ours.
       if (mask[(region.y + y) * raster.width + region.x + x]) modelMask[target] = 0
     }
   }
+  return { image, mask: modelMask }
+}
 
-  const started = performance.now()
-  const output = await session.run({
-    image: new ort.Tensor('uint8', image, [1, 3, height, width]),
-    mask: new ort.Tensor('uint8', modelMask, [1, 1, height, width]),
-  })
-  const milliseconds = Math.round(performance.now() - started)
-
-  const result = output['result']?.data
-  if (!result) throw new Error('the model returned no result tensor')
-
-  // Composite: only the masked pixels are taken from the model. Copying the
-  // whole tile back would replace real pixels with the model's reconstruction
-  // of them, which is a quiet quality loss over the entire window.
+/**
+ * Write the model's output back, over the masked pixels only.
+ *
+ * Copying the whole tile back would replace real pixels with the model's
+ * reconstruction of them, which is a quiet quality loss over an area many times
+ * the size of the watermark.
+ */
+export function compositeWindow(
+  raster: Raster,
+  mask: Uint8Array,
+  region: Window,
+  result: Uint8Array,
+): Raster {
+  const { width, height } = region
+  const plane = width * height
   const out = cloneRaster(raster)
+
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const target = y * width + x
       if (!mask[(region.y + y) * raster.width + region.x + x]) continue
-
+      const target = y * width + x
       const destination = at(out, region.x + x, region.y + y)
       out.data[destination] = result[target] ?? 0
       out.data[destination + 1] = result[plane + target] ?? 0
       out.data[destination + 2] = result[2 * plane + target] ?? 0
     }
   }
+  return out
+}
 
-  return { raster: out, window: region, milliseconds }
+/** The real runner: load the weights once, then hand the tile to the graph. */
+function sessionRunner(onProgress?: LoadProgress): MiganRunner {
+  return async (image, mask, width, height) => {
+    const session = await loadMigan(onProgress)
+    const ort = await import('onnxruntime-web/wasm')
+
+    const output = await session.run({
+      image: new ort.Tensor('uint8', image, [1, 3, height, width]),
+      mask: new ort.Tensor('uint8', mask, [1, 1, height, width]),
+    })
+    const result = output['result']?.data
+    if (!result) throw new Error('the model returned no result tensor')
+    return result
+  }
+}
+
+export interface MiganOptions {
+  onProgress?: LoadProgress
+  /** Substituted in tests. Left out, the real 28 MB graph is what runs. */
+  run?: MiganRunner
+}
+
+/**
+ * Fill every pixel the mask marks, using MI-GAN.
+ *
+ * `mask` is one byte per pixel, non-zero meaning "this is a hole" — the same
+ * convention as the Telea inpainter, and inverted on the way in because the
+ * model uses the opposite one.
+ */
+export async function inpaintWithMigan(
+  raster: Raster,
+  mask: Uint8Array,
+  options: MiganOptions = {},
+): Promise<MiganResult | undefined> {
+  const region = windowFor(raster, mask)
+  if (!region) return undefined
+  if (region.width < ALIGN || region.height < ALIGN) return undefined
+
+  const run = options.run ?? sessionRunner(options.onProgress)
+  const packed = packWindow(raster, mask, region)
+
+  const started = performance.now()
+  const result = await run(packed.image, packed.mask, region.width, region.height)
+  const milliseconds = Math.round(performance.now() - started)
+
+  return { raster: compositeWindow(raster, mask, region, result), window: region, milliseconds }
 }

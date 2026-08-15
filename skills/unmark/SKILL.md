@@ -1,86 +1,154 @@
 ---
 name: unmark
-description: Use when text or a file may carry a hidden watermark or provenance mark and it has to be found, decoded or removed — "remove the invisible characters", "why does this paste have weird spaces", "is this text watermarked", "strip the EXIF/C2PA/XMP from this image", "clean the metadata off this PDF/DOCX", "what is hidden in this string", "did an AI write this". Reports every mark with its offset and a confidence verdict before removing anything, decodes zero-width and tag-character steganography into the text it was hiding, and refuses to guess. Not for removing visible watermarks from pixels — that needs the browser app.
+description: Use when text or a file may carry a hidden watermark or provenance mark and it has to be found, decoded or removed — "remove the invisible characters", "why does this paste have weird spaces", "is this text watermarked", "strip the EXIF/C2PA/XMP from this image", "clean the metadata off this PDF/DOCX/HEIC", "what is hidden in this string", "did an AI write this", "make this draft not read as AI". Reports every mark with its offset and a confidence verdict before removing anything, decodes zero-width and tag-character steganography into the text it was hiding, rebuilds PDFs to remove their edit history, and refuses to guess. Not for removing visible watermarks from pixels — that needs the browser app.
 ---
 
 # unmark
 
-Finds, decodes and strips marks that travel with text and files: invisible Unicode
-carriers, steganographic payloads encoded in them, and provenance metadata in image
-and document containers.
-
-Run it with no install:
+Finds, decodes and strips marks that travel with text and files: invisible
+Unicode carriers, steganographic payloads encoded in them, provenance metadata
+in image and document containers, and the habits that make prose read as
+generated.
 
 ```bash
 node skills/unmark/scripts/unmark.mjs --help
 ```
 
-## The loop
+## Route the request first
 
-1. **`inspect`** first, always. It changes nothing and prints what is there, where it
-   is, and how sure the engine is. Show the user the findings before removing them.
-2. **`decode`** when the report mentions a `stego_payload`. Carriers frequently
+Four questions decide everything. Answer them before running anything.
+
+**1. Is this text, or a file?**
+Text goes to `inspect` / `decode` / `clean`. A file goes to the same commands —
+the format is sniffed from the bytes, not the extension.
+
+**2. Is the user asking about a _mark_, or about _style_?**
+They are different problems and this tool treats them differently.
+
+- A mark is a fact about the file: a zero-width payload, a C2PA manifest, an
+  author name, a tracking parameter. `clean` removes these by default.
+- Style is how the prose reads: em dashes, filler, rule-of-three cadence. None
+  of it is a mark, none of it is removed unless asked, and saying otherwise
+  would be the central lie of this category of tool.
+
+**3. Report, or remove?**
+**Always `inspect` first.** Show the user what is there before you change their
+file. This is not ceremony: the tool reports `likely_false_positive` findings it
+deliberately keeps, and the user is the one who decides whether a zero-width
+joiner in their Persian text is a watermark or orthography.
+
+**4. Does the fix need a writer?**
+If the report says the tells are `rule_of_three`, `marker_vocabulary`,
+`recap_loop` or anything in the silhouette layer, no flag fixes those. Go to
+**The rewrite loop** below.
+
+## The loop for marks
+
+1. **`inspect`** — changes nothing, prints what is there, where, and how sure.
+2. **`decode`** when the report mentions a `stego_payload`. Carriers usually
    _encode_ something — a name, an ID, a URL. Deleting them without reading them
    throws away the only evidence of who marked the text and with what.
 
-   Six schemes are read: zero-width alphabets, tag characters, variation selectors,
-   the choice of space character (U+0020 against U+2004 or U+3000), trailing tabs and
-   spaces at line ends, and the choice between a Latin letter and its Cyrillic twin.
-   **The last three use no unusual characters at all** — the text contains only
-   ordinary ones, arranged unusually — so telling a user "no invisible characters
-   found" is not the same as telling them the text is unmarked.
+   Six schemes are read: zero-width alphabets, tag characters, variation
+   selectors, the choice of space character, trailing tabs and spaces at line
+   ends, and the choice between a Latin letter and its Cyrillic twin. **The last
+   three use no unusual characters at all** — the text contains only ordinary
+   ones, arranged unusually — so "no invisible characters found" is not the same
+   as "this text is unmarked".
 
 3. **`clean`** to strip. It removes what is removable and leaves what it cannot
    justify removing, listing both.
 
-Two further passes exist for making text read less like a machine wrote it. They
-are **off unless asked for**, and neither removes a watermark:
-
-- `--typography` — em and en dashes, curly quotes and ellipses to ASCII. French
-  guillemets and the apostrophe in _l'été_ are deliberately left alone.
-- `--humanise` — filler (`in order to` → `to`), stacked hedges, chat pleasantries,
-  signposting, cutoff disclaimers, decorative emoji on headings and bullets. Only
-  phrases with one unambiguous shorter form.
-
-Everything needing a rewrite — rule-of-three cadence, promotional tone, the word
-_delve_ — is **reported and left alone**, because there is no correct substitution
-for it. If the user wants that fixed, rewrite the prose yourself; do not expect
-these flags to do it.
-
-An `inspect` reports what both passes would do even when neither is enabled, so
-you can show the user before suggesting either.
-
 ```bash
 node scripts/unmark.mjs inspect suspicious.txt
-node scripts/unmark.mjs decode suspicious.txt
-node scripts/unmark.mjs clean suspicious.txt --in-place
+node scripts/unmark.mjs decode  suspicious.txt
+node scripts/unmark.mjs clean   suspicious.txt --in-place
+node scripts/unmark.mjs audit   ./docs
 ```
+
+## The two style passes
+
+Off unless asked for. Neither removes a watermark.
+
+- `--typography` — em and en dashes, curly quotes, ellipses to ASCII. French
+  guillemets and the apostrophe in _l'été_ are deliberately left alone.
+- `--humanise` — filler (`in order to` → `to`), stacked hedges, chat
+  pleasantries, signposting, Title Case headings, mechanical boldface,
+  decorative emoji. Only patterns with one unambiguous answer.
+- `--plain` — both at once.
+
+Nothing acts inside a fenced code block, a blockquote, a quotation, a URL or
+frontmatter. `in order to` inside a shell snippet is part of a command.
+
+An `inspect` reports what both passes _would_ do even when neither is on, so you
+can show the user before suggesting either.
+
+## The rewrite loop
+
+For what no regex reaches: word choice, and the shape of an argument. This is
+the only thing here that removes a statistical-watermark signal, and it does not
+remove it — it reduces a score.
+
+**In an agent session, you are the model.** No API key, no network call:
+
+```bash
+node scripts/unmark.mjs brief draft.md > brief.json    # what to fix, what must survive
+#   ...you rewrite the document, following the brief...
+node scripts/unmark.mjs verify new.md --against draft.md
+```
+
+`brief` gives you, as JSON: every tell with the layer it belongs to and what a
+writer would actually change; every number, date, name, link and quotation that
+must survive; and every protected span to reproduce byte for byte.
+
+`verify` is the part that matters. It re-runs all three detection layers on your
+rewrite and **rejects** it when:
+
+- a flagged pattern came back, or a new one arrived,
+- a fact, number, date, name or citation went missing,
+- a protected span was edited.
+
+Exit code 1, with each failure named. **Read the failures and aim the next
+attempt at them.** Do not resubmit a rewrite that has not changed.
+
+**The stopping rule: if `verify` rejects the same finding three times, stop.**
+Tell the user which sentence needs a person and why. Three failed attempts on
+one sentence means the constraint and the content are in conflict, and a fourth
+attempt produces mangled prose, not a fix.
+
+From a terminal without an agent, `unmark rewrite` runs the same loop against a
+local model on `127.0.0.1` (nothing leaves the machine), or `--model <id>` for a
+remote provider, or `--print-prompt` to get the prompt and spend nothing.
 
 ## What it will not do
 
-**It does not strip invisible characters that are load-bearing.** A ZWJ between two
-emoji is what makes 👨‍👩‍👧 one family instead of three people; a ZWNJ inside a Persian
-word is orthography, not a watermark. Those are reported as
-`likely_false_positive` and kept. `--paranoid` removes them anyway and will corrupt
-real text — only reach for it when the user has asked for exactly that.
+**It does not strip invisible characters that are load-bearing.** A ZWJ between
+two emoji is what makes 👨‍👩‍👧 one family instead of three people; a ZWNJ inside a
+Persian word is orthography, not a watermark. Those are reported as
+`likely_false_positive` and kept. `--paranoid` removes them anyway and will
+corrupt real text — only reach for it when the user asked for exactly that.
 
-**It does not touch pixels.** Visible watermarks, generator badges and inpainting need
-a canvas and a GPU. Point the user at <https://maxgfr.github.io/unmark/>, which runs
-the same core plus the image pipeline, entirely in their browser.
+**It does not touch pixels.** Visible watermarks, generator badges and
+inpainting need a canvas. Point the user at <https://maxgfr.github.io/unmark/>,
+which runs the same core plus the image pipeline, entirely in their browser.
 
-**It cannot remove a statistical text watermark.** SynthID-Text-class marks live in
-word choice, not in characters, and survive every deterministic edit this tool makes.
-Removing one means rewriting the prose, which is the user's call and not something
-this tool does behind their back. Say so plainly rather than letting a clean report
-imply unwatermarked text.
+**It cannot promise a statistical watermark is gone.** A rewrite reduces a
+SynthID-Text confidence score; it does not zero it, and nothing here is tested
+against any vendor's detector. `verify` proves the rewrite cleared _our_ gates.
+It proves nothing about theirs. Say that plainly rather than letting a passing
+verify imply more than it means.
 
-## Reading a report
+**Some PDFs are refused, on purpose.** Encrypted, signed, or too damaged to
+rebuild — see `references/formats.md`. A refusal that says why is the correct
+outcome; a plausible broken file is not.
 
-| Verdict                 | Means                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `confirmed`             | Structurally certain — a C2PA manifest, a tag-char run that decodes to ASCII |
-| `probable`              | Consistent with a mark, but a human could have typed it                      |
-| `informational`         | Present, not evidence of anything — EXIF from a camera                       |
-| `likely_false_positive` | Matched, but context says it is legitimate; kept by default                  |
+## References
 
-Report `confirmed` findings as facts. Report `probable` ones as what they are.
+Load these when you need them, not before.
+
+- `references/verdicts.md` — the four verdicts, the outcome column, and how to
+  report each one to a user without overstating it.
+- `references/formats.md` — every format, and per format what is stripped, what
+  is deliberately kept, and what is refused.
+- `references/recipes.md` — worked sequences for the requests that actually
+  arrive, with the output shape to expect.

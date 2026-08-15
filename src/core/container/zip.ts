@@ -17,6 +17,7 @@
 
 import { ascii, concat, encode, readU32LE, type ContainerResult } from './types.ts'
 import { crc32 } from './crc32.ts'
+import { deflateRaw, inflateRaw } from './flate.ts'
 
 export interface ZipEntry {
   name: string
@@ -35,42 +36,6 @@ const readU16LE = (bytes: Uint8Array, offset: number): number =>
 const u16 = (value: number) => new Uint8Array([value & 0xff, (value >>> 8) & 0xff])
 const u32 = (value: number) =>
   new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff])
-
-async function collect(readable: ReadableStream): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = []
-  const reader = readable.getReader()
-  // Sequential by nature: a stream is read one chunk at a time.
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (value) chunks.push(value as Uint8Array)
-  }
-  return concat(chunks)
-}
-
-/**
- * Push bytes through a compression stream and collect the result.
- *
- * Written against the stream's two halves rather than `pipeThrough` because the
- * pair's writable side is typed as accepting BufferSource, which does not line
- * up with a `ReadableStream<Uint8Array>` source under TypeScript's generic
- * Uint8Array. Reading starts before the write so a large entry cannot deadlock
- * against the stream's own backpressure.
- */
-function through(
-  bytes: Uint8Array,
-  transform: { readable: ReadableStream; writable: WritableStream },
-): Promise<Uint8Array> {
-  const collected = collect(transform.readable)
-  const writer = transform.writable.getWriter()
-  return writer
-    .write(bytes)
-    .then(() => writer.close())
-    .then(() => collected)
-}
-
-const inflateRaw = (bytes: Uint8Array) => through(bytes, new DecompressionStream('deflate-raw'))
-const deflateRaw = (bytes: Uint8Array) => through(bytes, new CompressionStream('deflate-raw'))
 
 export const sniffZip = (bytes: Uint8Array) =>
   bytes.length > 4 && readU32LE(bytes, 0) === LOCAL_HEADER
@@ -200,13 +165,33 @@ export async function writeZip(entries: readonly ZipEntry[]): Promise<Uint8Array
 }
 
 /** Which flavour of zipped document this is, or undefined if it is neither. */
-export function zipDocumentKind(entries: readonly ZipEntry[]): 'ooxml' | 'odf' | undefined {
+export type ZipDocumentKind = 'ooxml' | 'odf' | 'epub'
+
+/**
+ * Which family of document a zip is, from what is inside it.
+ *
+ * OOXML covers Word, PowerPoint and Excel together, because the parts that leak
+ * — `docProps/*`, revision ids, identity attributes on tracked changes — are
+ * the same three in all of them. Telling a .docx from a .pptx matters for what
+ * the report calls the file, not for what is stripped out of it.
+ */
+export function zipDocumentKind(entries: readonly ZipEntry[]): ZipDocumentKind | undefined {
   const names = new Set(entries.map((entry) => entry.name))
   if (names.has('[Content_Types].xml')) return 'ooxml'
 
   const mimetype = entries.find((entry) => entry.name === 'mimetype')
-  if (mimetype && ascii(mimetype.data, 0, 40).includes('opendocument')) return 'odf'
+  const declared = mimetype ? ascii(mimetype.data, 0, 60) : ''
+  if (declared.includes('opendocument')) return 'odf'
+  if (declared.includes('epub+zip') || names.has('META-INF/container.xml')) return 'epub'
   return undefined
+}
+
+/** The specific OOXML application, for the report's format column. */
+export function ooxmlFlavour(entries: readonly ZipEntry[]): 'DOCX' | 'PPTX' | 'XLSX' {
+  const names = new Set(entries.map((entry) => entry.name))
+  if (names.has('ppt/presentation.xml')) return 'PPTX'
+  if (names.has('xl/workbook.xml')) return 'XLSX'
+  return 'DOCX'
 }
 
 export type { ContainerResult }

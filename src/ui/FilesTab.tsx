@@ -6,6 +6,7 @@ import { cleanContainer, type ContainerFormat } from '../core/container/index.ts
 import type { Finding } from '../core/report.ts'
 import { FindingsTable, Limits, Section } from './parts.tsx'
 import { IconDownload, IconTrash } from './icons.tsx'
+import { saveBlob } from './download.ts'
 
 interface Entry {
   id: string
@@ -66,15 +67,12 @@ export function FilesTab() {
     }
   }, [])
 
+  // A Blob URL, revoked on the next task: the file never leaves the tab, and
+  // holding the URL open would pin the whole buffer in memory. Revoking it in
+  // the same task as the click is what broke this outside Chromium — see
+  // ui/download.ts.
   const download = useCallback((entry: Entry) => {
-    // A Blob URL, revoked immediately after: the file never leaves the tab, and
-    // holding the URL open would pin the whole buffer in memory.
-    const url = URL.createObjectURL(new Blob([entry.output as BlobPart]))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = cleanedName(entry.name)
-    anchor.click()
-    URL.revokeObjectURL(url)
+    saveBlob(new Blob([entry.output as BlobPart]), cleanedName(entry.name))
   }, [])
 
   return (

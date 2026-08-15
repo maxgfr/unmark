@@ -150,3 +150,50 @@ describe('rectMask', () => {
     expect(mask.reduce((sum, v) => sum + v, 0)).toBe(4)
   })
 })
+
+describe('inpaint progress and abort', () => {
+  // A megapixel selection takes seconds, and the UI used to run it inside the
+  // same React batch that set the busy flag — so the indicator never rendered
+  // and the tab simply froze. Both halves of the fix live here: something to
+  // report, and something to stop.
+  const BIG = { x: 40, y: 40, width: 120, height: 120 }
+  const bigHole = () => punch(ramp(200, 200), BIG)
+
+  it('reports progress that rises to one', () => {
+    const seen: number[] = []
+    inpaint(bigHole(), rectMask(200, 200, BIG), { onProgress: (f) => seen.push(f) })
+
+    expect(seen.length).toBeGreaterThan(1)
+    expect(seen.at(-1)).toBe(1)
+    // Monotonic, because a bar that goes backwards is worse than no bar.
+    for (let i = 1; i < seen.length; i += 1) {
+      expect(seen[i] ?? 0).toBeGreaterThanOrEqual(seen[i - 1] ?? 0)
+    }
+  })
+
+  it('stops when asked, leaving the rest of the hole as it was', () => {
+    const damaged = bigHole()
+    const stopped = inpaint(damaged, rectMask(200, 200, BIG), { shouldStop: () => true })
+
+    // The check is polled, not tested per pixel, so a few thousand pixels are
+    // filled before the first poll. The point is that it did not finish.
+    let untouched = 0
+    for (let y = BIG.y; y < BIG.y + BIG.height; y += 1) {
+      for (let x = BIG.x; x < BIG.x + BIG.width; x += 1) {
+        const index = at(stopped, x, y)
+        if (stopped.data[index] === 255 && stopped.data[index + 1] === 255) untouched += 1
+      }
+    }
+    expect(untouched).toBeGreaterThan(BIG.width * BIG.height * 0.5)
+  })
+
+  it('is unchanged when no options are passed at all', () => {
+    // The existing callers pass two arguments and must keep getting exactly
+    // what they got before.
+    const damaged = bigHole()
+    const mask = rectMask(200, 200, BIG)
+    expect([...inpaint(damaged, mask).data]).toEqual([
+      ...inpaint(damaged, mask, { onProgress: () => {}, shouldStop: () => false }).data,
+    ])
+  })
+})

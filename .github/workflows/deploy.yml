@@ -38,9 +38,12 @@ jobs:
 
       - run: pnpm build
 
-      # A deploy must not be able to ship what CI would have rejected.
-      - name: Privacy gate
-        run: pnpm check:network
+      # A deploy must not be able to ship what CI would have rejected. Both
+      # gates run: one walks the built bundle for outbound origins, the other
+      # follows the import graph from the page's entry point and fails if it can
+      # reach the code that calls a model.
+      - name: Privacy gates
+        run: pnpm check:network && pnpm check:imports
 
       - uses: actions/configure-pages@v5
 

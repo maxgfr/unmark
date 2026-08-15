@@ -42,12 +42,19 @@ says who marked the text. And it states plainly what it cannot remove.
 - **Nothing is uploaded, and nothing can be.** There is no server, and
   `connect-src 'self'` means the browser refuses any request to any other
   origin — including from a dependency that decides to phone home. Every asset,
-  down to the 28 MB inpainting model, is served from this site. A build gate
-  fails CI if that ever stops being true.
+  down to the 28 MB inpainting model, is served from this site. Two build gates
+  fail CI if that ever stops being true: one walks the bundle for outbound
+  origins, the other follows the import graph and refuses to let the page reach
+  the code that calls a model. That code exists, in the terminal, where a
+  network is expected and asked for; it is loopback-only unless told otherwise.
 - **Honesty over reassurance.** Robust pixel watermarks (SynthID, Tree-Ring,
   StableSignature) survive this tool, and statistical text watermarks survive
   every deterministic edit it makes. Both are stated on the screen that does the
-  removing, not in a footer.
+  removing, not in a footer. A rewrite reduces a score; it does not remove a
+  watermark, and no vendor's detector has been tested against.
+- **A refusal beats a plausible broken file.** An encrypted PDF is reported as
+  unread rather than as clean. A signed one is left alone unless you force it. A
+  fragmented video is refused rather than rebuilt on a guess.
 - **Never corrupt real text.** A zero-width joiner between two emoji, or inside
   a Persian word, is not a watermark. Those are reported and kept.
 - **No verdict beyond the evidence.** Stylometry can never say "confirmed".

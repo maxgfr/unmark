@@ -173,3 +173,115 @@ describe('audit', () => {
     expect(await main(['audit', dir])).toBe(0)
   })
 })
+
+describe('the rewrite loop', () => {
+  const SLOP = [
+    '# Strategic Negotiations And Global Partnerships',
+    '',
+    'In order to understand the landscape, let us delve into this tapestry.',
+    'Revenue rose 4.2% in March 2024.',
+    '',
+    '```js',
+    'const utilize = 1 // in order to keep this',
+    '```',
+    '',
+    'I hope this helps!',
+  ].join('\n')
+
+  it('briefs what must be fixed and what must survive', async () => {
+    await file('slop.md', SLOP)
+    expect(await main(['brief', join(dir, 'slop.md')])).toBe(0)
+
+    const brief = JSON.parse(stdout()) as {
+      facts: { numbers: string[]; names: string[] }
+      protected: { why: string; text: string }[]
+    }
+    expect(brief.facts.numbers).toContain('4.2%')
+    expect(brief.protected.some((span) => span.text.includes('const utilize = 1'))).toBe(true)
+    // The heading's words are not names, or the sentence-case fix would be
+    // rejected as having lost them.
+    expect(brief.facts.names).not.toContain('Partnerships')
+  })
+
+  it('prints the prompt and contacts nothing', async () => {
+    await file('slop.md', SLOP)
+    expect(await main(['rewrite', join(dir, 'slop.md'), '--print-prompt'])).toBe(0)
+    expect(stdout()).toContain('PROTECTED SPANS')
+    expect(stdout()).toContain('const utilize = 1')
+  })
+
+  it('rejects a rewrite that lost a fact, reintroduced a pattern or edited code', async () => {
+    await file('slop.md', SLOP)
+    await file(
+      'bad.md',
+      '# Strategic negotiations\n\nLet us delve into this tapestry.\n\n```js\nconst utilize = 2\n```\n\nI hope this helps!',
+    )
+
+    expect(await main(['verify', join(dir, 'bad.md'), '--against', join(dir, 'slop.md')])).toBe(1)
+    const report = stdout()
+    expect(report).toContain('rejected')
+    expect(report).toContain('4.2%')
+    expect(report).toContain('protected')
+  })
+
+  it('refuses to verify without an original to compare against', async () => {
+    await file('bad.md', 'anything')
+    expect(await main(['verify', join(dir, 'bad.md')])).toBe(2)
+    expect(stderr()).toContain('--against')
+  })
+
+  it('does not mistake a flag value for the file to read', async () => {
+    // `--model x` used to leave `x` looking like a positional argument, so the
+    // command would try to read a file named after the model.
+    await file('slop.md', SLOP)
+    expect(
+      await main(['rewrite', join(dir, 'slop.md'), '--model', 'some/model', '--print-prompt']),
+    ).toBe(0)
+    expect(stdout()).toContain('DOCUMENT')
+  })
+})
+
+describe('--plain', () => {
+  it('is the same preset as the two flags together', async () => {
+    const text = 'In order to proceed we utilize the report. I hope this helps!'
+    await file('a.md', text)
+    await main(['clean', join(dir, 'a.md'), '--plain'])
+    const withPreset = stdout()
+
+    out = []
+    await main(['clean', join(dir, 'a.md'), '--typography', '--humanise'])
+    expect(stdout()).toBe(withPreset)
+    expect(withPreset).toContain('To proceed we use the report.')
+  })
+})
+
+describe('argument parsing', () => {
+  it('does not lose the target when it equals a flag value', async () => {
+    // `verify x.md --against x.md` used to consume flag values by string, which
+    // deleted the positional too. The target fell back to `-`, and the command
+    // blocked on stdin that was never coming — a silent hang on the most
+    // natural first thing anyone tries.
+    await file('same.md', 'The report arrived. In order to proceed we utilize it.')
+    const path = join(dir, 'same.md')
+
+    const code = await main(['verify', path, '--against', path])
+    expect(code).toBe(1)
+    expect(stdout()).toContain('same.md against')
+  })
+
+  it('reads the file named after a --model, not the model', async () => {
+    await file('draft.md', 'Some prose here.')
+    expect(
+      await main(['rewrite', join(dir, 'draft.md'), '--model', 'vendor/model', '--print-prompt']),
+    ).toBe(0)
+    expect(stdout()).toContain('Some prose here.')
+  })
+
+  it('accepts --force, which the documentation promises', async () => {
+    // The flag was documented in the skill's format reference and parsed
+    // nowhere, and unknown flags are silently ignored — so following the docs
+    // produced the refusal anyway with no signal that the flag did nothing.
+    await file('plain.txt', 'Nothing hidden.')
+    expect(await main(['clean', join(dir, 'plain.txt'), '--force'])).toBe(0)
+  })
+})

@@ -152,18 +152,27 @@ export interface DisruptionOptions {
   cropPixels?: number
   noiseAmplitude?: number
   seed?: number
+  /** 0–1 JPEG quality. Needs an encoder; without one this leg is skipped. */
+  jpegQuality?: number
 }
 
 /**
- * Run the selected disruptions in the order that does least damage.
+ * A JPEG round trip, supplied by the caller.
  *
- * Crop first (it only removes), then resample, then the low-bit scrub, then
- * noise last. Scrubbing before a resample would be pointless — resampling
- * recomputes every low bit anyway.
+ * Encoding a JPEG needs a canvas, and nothing in this directory is allowed to
+ * import canvas.ts — that rule is what lets every algorithm here run under Node
+ * in the test suite rather than only in a browser. So the one operation that
+ * genuinely needs the platform is injected: the page passes `requantizeJpeg`,
+ * a test passes a function that pretends, and the sequencing is tested either
+ * way.
  */
-export function disrupt(raster: Raster, options: DisruptionOptions): Raster {
-  let out = cloneRaster(raster)
+export interface JpegEncoder {
+  (raster: Raster, quality: number): Promise<Raster>
+}
 
+/** Crop and resample: the legs that change the picture's size. */
+function reshape(raster: Raster, options: DisruptionOptions): Raster {
+  let out = cloneRaster(raster)
   if (options.cropPixels) out = cropBorder(out, options.cropPixels)
 
   if (options.resampleTo && options.resampleTo !== 1) {
@@ -172,9 +181,45 @@ export function disrupt(raster: Raster, options: DisruptionOptions): Raster {
     // Back to the original size, so the file stays a drop-in replacement.
     out = resample(out, Math.min(width / out.width, height / out.height))
   }
+  return out
+}
 
+/** The legs that only touch values, and must run after everything that resamples. */
+function scour(raster: Raster, options: DisruptionOptions): Raster {
+  let out = raster
   if (options.lowBits) out = scrubLowBits(out, options.lowBits)
   if (options.noiseAmplitude) out = addNoise(out, options.noiseAmplitude, options.seed ?? 1)
-
   return out
+}
+
+/**
+ * Run the selected disruptions in the order that does least damage.
+ *
+ * Crop first (it only removes), then resample, then the JPEG round trip, then
+ * the low-bit scrub, then noise. Scrubbing before a resample or a JPEG pass
+ * would be pointless — both recompute every low bit anyway — and noise added
+ * before the JPEG pass would be half thrown away by it.
+ *
+ * Synchronous unless an encoder is passed, and the overloads say so rather than
+ * leaving it to be discovered. Making the whole function async would have been
+ * tidier to read and would have forced every existing caller and every existing
+ * test to await a result that is, in the no-JPEG case, already sitting there.
+ * The two signatures are not a convenience: without an encoder there is nothing
+ * asynchronous in here to wait for, and with one there is exactly one thing.
+ */
+export function disrupt(raster: Raster, options: DisruptionOptions): Raster
+export function disrupt(
+  raster: Raster,
+  options: DisruptionOptions,
+  encodeJpeg: JpegEncoder,
+): Promise<Raster>
+export function disrupt(
+  raster: Raster,
+  options: DisruptionOptions,
+  encodeJpeg?: JpegEncoder,
+): Raster | Promise<Raster> {
+  const reshaped = reshape(raster, options)
+  if (!encodeJpeg) return scour(reshaped, options)
+  if (!options.jpegQuality) return Promise.resolve(scour(reshaped, options))
+  return encodeJpeg(reshaped, options.jpegQuality).then((next) => scour(next, options))
 }

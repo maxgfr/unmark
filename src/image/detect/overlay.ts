@@ -314,16 +314,23 @@ const CORNER_FRACTIONS = [0.08, 0.12, 0.18, 0.25]
  * offered as a selection the user confirms, because a corner of sky is exactly
  * the false positive this heuristic produces.
  */
-export function findCornerOverlays(raster: Raster): OverlayEstimate[] {
+/**
+ * The rectangles the corner scan probes.
+ *
+ * Exported so the shaped estimator can search exactly the same places. It has
+ * to: the flat model returns `undefined` for every shaped badge, so a scan
+ * built only on it proposes nothing for the one thing it exists to find.
+ */
+export function cornerCandidates(raster: Raster): Rect[] {
   const short = Math.min(raster.width, raster.height)
-  const found: OverlayEstimate[] = []
+  const rects: Rect[] = []
 
   for (const fraction of CORNER_FRACTIONS) {
     const size = Math.round(short * fraction)
     if (size < 12) continue
     const inset = Math.round(short * 0.02)
 
-    const corners: Rect[] = [
+    rects.push(
       { x: inset, y: inset, width: size, height: size },
       { x: raster.width - size - inset, y: inset, width: size, height: size },
       { x: inset, y: raster.height - size - inset, width: size, height: size },
@@ -333,35 +340,49 @@ export function findCornerOverlays(raster: Raster): OverlayEstimate[] {
         width: size,
         height: size,
       },
-    ]
-
-    for (const rect of corners) {
-      const probe = estimateOverlay(raster, rect)
-      if (!probe || probe.confidence < 0.6 || probe.alpha < 0.12) continue
-
-      // Snap to the real edges, then re-measure. The probe only says "something
-      // flat is around here"; the refined rectangle is what the user is offered
-      // and what unblending will actually be applied to, so the alpha reported
-      // has to be the alpha of that region.
-      const snapped = refineRect(raster, rect)
-      const estimate = estimateOverlay(raster, snapped) ?? { ...probe, rect: snapped }
-      if (estimate.alpha >= 0.12) found.push(estimate)
-    }
+    )
   }
 
-  // One candidate per corner: the strongest, so four sizes of the same badge do
-  // not become four findings.
+  return rects
+}
+
+/** Which corner a rectangle sits in, so four sizes of one badge stay one candidate. */
+export const cornerKey = (raster: Raster, rect: Rect): string =>
+  `${rect.x < raster.width / 2 ? 'l' : 'r'}${rect.y < raster.height / 2 ? 't' : 'b'}`
+
+/** Keep the strongest candidate per corner. */
+export function bestPerCorner(
+  raster: Raster,
+  estimates: readonly OverlayEstimate[],
+): OverlayEstimate[] {
   const best = new Map<string, OverlayEstimate>()
-  for (const estimate of found) {
-    const key = `${estimate.rect.x < raster.width / 2 ? 'l' : 'r'}${
-      estimate.rect.y < raster.height / 2 ? 't' : 'b'
-    }`
+  for (const estimate of estimates) {
+    const key = cornerKey(raster, estimate.rect)
     const current = best.get(key)
     if (!current || estimate.confidence * estimate.alpha > current.confidence * current.alpha) {
       best.set(key, estimate)
     }
   }
   return [...best.values()]
+}
+
+export function findCornerOverlays(raster: Raster): OverlayEstimate[] {
+  const found: OverlayEstimate[] = []
+
+  for (const rect of cornerCandidates(raster)) {
+    const probe = estimateOverlay(raster, rect)
+    if (!probe || probe.confidence < 0.6 || probe.alpha < 0.12) continue
+
+    // Snap to the real edges, then re-measure. The probe only says "something
+    // flat is around here"; the refined rectangle is what the user is offered
+    // and what unblending will actually be applied to, so the alpha reported
+    // has to be the alpha of that region.
+    const snapped = refineRect(raster, rect)
+    const estimate = estimateOverlay(raster, snapped) ?? { ...probe, rect: snapped }
+    if (estimate.alpha >= 0.12) found.push(estimate)
+  }
+
+  return bestPerCorner(raster, found)
 }
 
 /** Composite a flat overlay onto a region — the operation the rest of this file undoes. */

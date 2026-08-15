@@ -20,13 +20,28 @@ export {
   stegoFindings,
   stylometryFindings,
 }
-export { MIN_SENTENCES, MIN_WORDS } from './stylometry.ts'
+export { distinctSignals, MIN_PARAGRAPHS, MIN_SENTENCES, MIN_WORDS } from './stylometry.ts'
 export { humanise } from './humanise.ts'
 export { normaliseTypography } from './typography.ts'
+export { cleanProvenance } from './provenance.ts'
+export { blocksOf, paragraphsOf, protectedMask } from './regions.ts'
 export { detectSpaceCadence } from './stego.ts'
 export type { StegoDecoding, StyleReport, TextOptions }
-export type { StyleMetric } from './stylometry.ts'
+export type { StyleLayer, StyleMetric } from './stylometry.ts'
 export type { StegoScheme } from './stego.ts'
+
+/**
+ * The one-button preset.
+ *
+ * Marks come off whatever the options say — that is what a clean is. This turns
+ * on the two passes that are about how the writing *reads*, which are off by
+ * default because they rewrite the author's prose. Naming it once here keeps
+ * the page's button and the CLI's `--plain` from drifting into two presets.
+ *
+ * It does not remove a statistical watermark, and every surface that offers it
+ * has to say so on the same screen.
+ */
+export const PLAIN: TextOptions = { typography: true, humanise: true }
 
 export interface TextReport {
   /** Everything found, in document order: carriers, payloads, style tells. */

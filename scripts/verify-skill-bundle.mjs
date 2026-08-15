@@ -11,7 +11,8 @@
 // differs from a fresh build is a bundle that was never rebuilt.
 
 import { execFileSync } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
@@ -72,6 +73,151 @@ try {
   execFileSync(process.execPath, [BUNDLE, '--version'], { stdio: 'pipe', timeout: 10_000 })
 } catch (error) {
   failures.push(`bundle failed to run \`--version\`: ${error.message.split('\n')[0]}`)
+}
+
+// Every reference file the skill sends an agent to has to exist. A skill that
+// says "see references/formats.md" and ships no such file wastes a tool call
+// and then makes the agent guess.
+for (const [, path] of skillMd.matchAll(/`(references\/[\w.-]+)`/g)) {
+  try {
+    // oxlint-disable-next-line no-await-in-loop -- a handful of small reads
+    await readFile(join(ROOT, 'skills', 'unmark', path), 'utf8')
+  } catch {
+    failures.push(`SKILL.md points at ${path}, which does not exist`)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The commands the documentation promises, run against real fixtures.
+//
+// The rest of this file checks that the bundle is fresh and dependency-free,
+// which says nothing about whether it does what SKILL.md claims. A skill whose
+// worked examples do not run is worse than no skill: an agent follows them,
+// gets an error inside someone else's session, and improvises.
+
+const work = await mkdtemp(join(tmpdir(), 'unmark-skill-'))
+const at = (name) => join(work, name)
+
+/** Run the bundle and return { code, out, err } without throwing. */
+function unmark(args) {
+  try {
+    const out = execFileSync(process.execPath, [BUNDLE, ...args], {
+      stdio: 'pipe',
+      timeout: 30_000,
+      encoding: 'utf8',
+      env: { ...process.env, NO_COLOR: '1' },
+    })
+    return { code: 0, out, err: '' }
+  } catch (error) {
+    return {
+      code: error.status ?? 1,
+      out: error.stdout?.toString() ?? '',
+      err: error.stderr?.toString() ?? '',
+    }
+  }
+}
+
+const check = (name, condition, detail) => {
+  if (!condition) failures.push(`${name}: ${detail}`)
+}
+
+try {
+  // A zero-width payload spelling `recipient-4417`, built the way stego.ts does.
+  const bits = [...'recipient-4417']
+    .map((c) => c.codePointAt(0).toString(2).padStart(8, '0'))
+    .join('')
+  const carriers = [...bits].map((b) => (b === '0' ? '​' : '‌')).join('')
+  await writeFile(at('marked.txt'), `Quarterly results are attached.${carriers}`)
+
+  const inspect = unmark(['inspect', at('marked.txt')])
+  check('inspect', inspect.code === 1, 'should exit 1 when something confirmed is present')
+  check('inspect', /Hidden payload|Zero-width/.test(inspect.out), 'should name what it found')
+
+  const decode = unmark(['decode', at('marked.txt')])
+  check('decode', decode.code === 0, 'should exit 0 when a payload is recovered')
+  check('decode', decode.out.includes('recipient-4417'), 'should print the decoded payload')
+
+  const clean = unmark(['clean', at('marked.txt')])
+  check('clean', !/[​‌]/.test(clean.out), 'should leave no carriers behind')
+  check('clean', clean.out.includes('Quarterly results'), 'should leave the words alone')
+
+  // The load-bearing case the skill promises it will not break.
+  await writeFile(at('family.txt'), 'The team \u{1F468}‍\u{1F469}‍\u{1F467} shipped it.')
+  const family = unmark(['clean', at('family.txt')])
+  check(
+    'clean',
+    family.out.includes('‍'),
+    'must keep the joiner that holds an emoji family together',
+  )
+
+  // --plain, and the region guard that keeps it out of a code fence.
+  const draft = [
+    '# Strategic Negotiations And Global Partnerships',
+    '',
+    'In order to proceed we utilize the report. I hope this helps!',
+    '',
+    '```js',
+    'const x = 1 // in order to keep this',
+    '```',
+  ].join('\n')
+  await writeFile(at('draft.md'), draft)
+
+  const plain = unmark(['clean', at('draft.md'), '--plain'])
+  check(
+    'clean --plain',
+    plain.out.includes('To proceed we use the report.'),
+    'should shorten filler',
+  )
+  check('clean --plain', !plain.out.includes('I hope this helps'), 'should drop chat pleasantries')
+  check(
+    'clean --plain',
+    plain.out.includes('const x = 1 // in order to keep this'),
+    'must not edit inside a fenced code block',
+  )
+
+  // The rewrite loop, end to end, including a rejection that must be rejected.
+  const brief = unmark(['brief', at('draft.md')])
+  check('brief', brief.code === 0, 'should exit 0')
+  let parsed
+  try {
+    parsed = JSON.parse(brief.out)
+  } catch {
+    failures.push('brief: output is not valid JSON')
+  }
+  if (parsed) {
+    check('brief', Array.isArray(parsed.tells), 'should list tells')
+    check(
+      'brief',
+      parsed.protected?.some((span) => span.text.includes('const x = 1')),
+      'should mark the code fence as protected',
+    )
+  }
+
+  const prompt = unmark(['rewrite', at('draft.md'), '--print-prompt'])
+  check('rewrite --print-prompt', prompt.code === 0, 'should exit 0 and contact nothing')
+  check('rewrite --print-prompt', prompt.out.includes('PROTECTED SPANS'), 'should carry the brief')
+
+  // A deliberately bad rewrite: pattern reintroduced, code fence edited.
+  await writeFile(
+    at('bad.md'),
+    '# Strategic negotiations\n\nI hope this helps!\n\n```js\nconst x = 2\n```\n',
+  )
+  const verify = unmark(['verify', at('bad.md'), '--against', at('draft.md')])
+  check('verify', verify.code === 1, 'must REJECT a rewrite that broke its constraints')
+  check('verify', verify.out.includes('rejected'), 'should say it was rejected')
+  check('verify', /protected/.test(verify.out), 'should name the edited code fence')
+
+  const missing = unmark(['verify', at('bad.md')])
+  check('verify', missing.code === 2, 'should exit 2 without --against')
+
+  // audit over a tree.
+  await writeFile(at('clean.txt'), 'Nothing hidden here at all.')
+  const audit = unmark(['audit', work])
+  check('audit', audit.code === 1, 'should exit 1 when a tree contains a marked file')
+  check('audit', audit.out.includes('marked.txt'), 'should name the marked file')
+  check('audit', !audit.out.includes('clean.txt'), 'should not list a clean file')
+} finally {
+  await rm(work, { recursive: true, force: true })
 }
 
 if (failures.length > 0) {
