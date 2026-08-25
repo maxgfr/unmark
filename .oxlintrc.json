@@ -26,6 +26,7 @@
     "dev-dist",
     "coverage",
     "node_modules",
+    ".agents",
     "public/vendor",
     "skills/unmark/scripts/unmark.mjs"
   ]

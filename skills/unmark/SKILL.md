@@ -1,6 +1,6 @@
 ---
 name: unmark
-description: Use when text or a file may carry a hidden watermark or provenance mark and it has to be found, decoded or removed — "remove the invisible characters", "why does this paste have weird spaces", "is this text watermarked", "strip the EXIF/C2PA/XMP from this image", "clean the metadata off this PDF/DOCX/HEIC", "what is hidden in this string", "did an AI write this", "make this draft not read as AI". Reports every mark with its offset and a confidence verdict before removing anything, decodes zero-width and tag-character steganography into the text it was hiding, rebuilds PDFs to remove their edit history, and refuses to guess. Not for removing visible watermarks from pixels — that needs the browser app.
+description: Inspect, decode, or remove hidden marks from text and files, including invisible Unicode, EXIF/C2PA/XMP metadata, PDF/DOCX history, and AI-style signals. Use image editing for visible pixel watermarks.
 ---
 
 # unmark
