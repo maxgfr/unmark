@@ -106,7 +106,7 @@ const FIX: Record<string, string> = {
   generic_outline: 'name each section after its subject',
 }
 
-const NUMBER = /\b\d+(?:[.,]\d+)*\s*%?/g
+const NUMBER = /(?<![\p{L}\p{N}_])[+\-−]?\d+(?:[.,]\d+)*\s*%?/gu
 const DATE =
   /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{0,4}|\b(?:19|20)\d{2}\b)/gi
 const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"'\])}]+/gi
@@ -186,7 +186,15 @@ export function protectedSpans(text: string): ProtectedSpan[] {
       why,
     })
   }
-  return spans
+  // Inline code needs the same exact preservation as a fenced block. Ignore
+  // matches inside blocks already claimed so occurrences are counted once.
+  for (const match of text.matchAll(/(?<!`)(`+)(?!`)([^\n]*?[^`])\1(?!`)/g)) {
+    const start = match.index
+    const end = start + match[0].length
+    if (spans.some((span) => start < span.end && end > span.start)) continue
+    spans.push({ start, end, text: match[0], why: 'inline code' })
+  }
+  return spans.sort((a, b) => a.start - b.start)
 }
 
 const CONSTRAINTS = [
@@ -357,17 +365,31 @@ export function verifyRewrite(_original: string, rewrite: string, brief: Brief):
         detail: 'present in the source, missing from the rewrite',
       })
     }
+    // Names are heuristic (sentence-initial capitals are deliberately skipped).
+    // Moving a name can make it newly extractable; only exact fact categories
+    // can safely reject additions.
+    if (key !== 'names') {
+      for (const added of missing(after[key], brief.facts[key])) {
+        failures.push({
+          kind: 'fact',
+          what: `${noun} ${added}`,
+          detail: 'added to the rewrite, absent from the source',
+        })
+      }
+    }
   }
 
   // 3. Protected spans, reproduced byte for byte.
+  const available = protectedSpans(rewrite).map((span) => span.text)
   for (const span of brief.protected) {
-    if (!rewrite.includes(span.text)) {
+    const index = available.indexOf(span.text)
+    if (index === -1) {
       failures.push({
         kind: 'protected',
         what: `a ${span.why} block at offset ${span.start}`,
         detail: 'changed or missing; protected spans are copied, never rewritten',
       })
-    }
+    } else available.splice(index, 1)
   }
 
   return { ok: failures.length === 0, failures, remaining }

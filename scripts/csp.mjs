@@ -11,11 +11,9 @@
 // fonts, the ONNX runtime, the 28 MB inpainting model — is served from this
 // site, so the browser will refuse a request to anywhere else outright.
 //
-// An in-browser paraphrase for statistical text watermarks was considered and
-// dropped for this: it would have meant permitting huggingface.co and two CDNs
-// for *every* visitor, since a CSP is static and cannot be widened only for the
-// ones who opt in. A best-effort feature is not worth the only claim on this
-// page that the browser itself enforces.
+// Browser rewriting runs through WebLLM with pinned, self-hosted model files.
+// Its remote catalogue and RPC sockets are excluded by local-webllm.mjs.
+// No external model host is permitted at runtime.
 //
 // Adding a row here is the deliberate act of widening that promise. The gate
 // prints these reasons when it reports, so an unjustified entry is visible in
@@ -28,6 +26,7 @@ export const CONNECT_ALLOWLIST = [
 // baked into library error messages, XML namespaces, our own canonical address.
 // None of them is a fetch target, and the FETCH_LITERAL check still applies.
 export const INERT_HOSTS = [
+  ['webgpureport.org', 'WebLLM WebGPU support error message; never a fetch target'],
   ['react.dev', 'React minified-error decoder URL inside thrown Error messages'],
   ['tailwindcss.com', 'license banner comment at the top of the generated stylesheet'],
   ['bit.ly', 'Workbox console.warn documentation link (bit.ly/wb-precache)'],

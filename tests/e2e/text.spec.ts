@@ -13,6 +13,7 @@ const marked = (() => {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('./#text')
+  await page.getByText('Inspection details', { exact: true }).click()
 })
 
 test('decodes a zero-width payload out of a pasted paragraph', async ({ page }) => {
@@ -28,6 +29,7 @@ test('decodes a zero-width payload out of a pasted paragraph', async ({ page }) 
 
 test('strips the carriers and leaves the words', async ({ page }) => {
   await page.getByLabel('Text to inspect').fill(marked)
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
 
   const cleaned = await page.evaluate(() => {
     const output = document.querySelector('output')
@@ -47,6 +49,7 @@ test('keeps an emoji joiner, because it is holding a family together', async ({ 
   // The tool's own promise: a zero-width joiner between two emoji is not a
   // watermark, and removing it would turn one family into three people.
   await page.getByLabel('Text to inspect').fill('The team 👨‍👩‍👧 shipped it.')
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
 
   const cleaned = await page.evaluate(() => document.querySelector('output')?.textContent ?? '')
   expect(cleaned).toContain('👨‍👩‍👧')
@@ -57,7 +60,7 @@ test('the plain preset turns on both style passes together', async ({ page }) =>
     .getByLabel('Text to inspect')
     .fill('In order to proceed we utilize the report. I hope this helps!')
 
-  await page.getByRole('button', { name: 'Make it plain' }).click()
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
 
   const cleaned = await page.evaluate(() => document.querySelector('output')?.textContent ?? '')
   expect(cleaned).toContain('To proceed we use the report.')
@@ -69,6 +72,7 @@ test('strips a ChatGPT tracking parameter without being asked', async ({ page })
   await page
     .getByLabel('Text to inspect')
     .fill('Source: https://example.com/report?utm_source=chatgpt.com')
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
 
   const cleaned = await page.evaluate(() => document.querySelector('output')?.textContent ?? '')
   expect(cleaned).toBe('Source: https://example.com/report')

@@ -36,6 +36,8 @@
     "check:imports": "node scripts/check-imports.mjs"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "0.2.85",
+    "@mlc-ai/web-tokenizers": "0.1.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

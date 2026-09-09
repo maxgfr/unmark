@@ -1,11 +1,5 @@
-// Calling a model, from the one place in this project that is allowed to.
-//
-// The page's promise is that nothing is uploaded and nothing can be: a
-// Content-Security-Policy pinned to `connect-src 'self'`, a build gate that
-// fails on any outbound origin, and a README that records dropping an
-// in-browser paraphrase for exactly this reason. None of that changes. This
-// file lives in `src/cli`, the page never imports it, and `pnpm check:network`
-// walks `dist` and would fail if it ever did.
+// CLI model transports. Browser inference lives in src/text-model.
+// The shared verification loop has no provider dependencies.
 //
 // The default is loopback. `unmark rewrite` talks to Ollama on 127.0.0.1 and
 // nothing leaves the machine; `--model` opts into a remote provider and says so;
@@ -23,7 +17,10 @@
 
 import { spawn } from 'node:child_process'
 import process from 'node:process'
-import { briefToPrompt, verifyRewrite, type Brief, type RewriteVerdict } from '../core/rewrite.ts'
+import { briefToPrompt, type Brief } from '../core/rewrite.ts'
+
+import { rewriteLoop, type RewriteOutcome } from '../core/rewrite-loop.ts'
+export type { RewriteOutcome } from '../core/rewrite-loop.ts'
 
 const OLLAMA = 'http://127.0.0.1:11434'
 
@@ -36,15 +33,9 @@ export interface RewriteOptions {
   attempts?: number
   /** Overridden in tests. */
   endpoint?: string
-}
-
-export interface RewriteOutcome {
-  kind: 'prompt' | 'accepted' | 'rejected' | 'unavailable'
-  text: string
-  verdict?: RewriteVerdict | undefined
-  attempts: number
-  /** Anything the user should know before or after money was spent. */
-  notes: string[]
+  signal?: AbortSignal
+  timeoutMs?: number
+  onNote?: (note: string) => void
 }
 
 /** Run a command and collect stdout, returning undefined if it is not installed. */
@@ -101,45 +92,62 @@ export async function describeModel(id: string): Promise<ModelFacts | undefined>
 /** Roughly four characters per token. Enough to warn, never precise enough to bill. */
 const estimateTokens = (text: string) => Math.ceil(text.length / 4)
 
-async function askOllama(endpoint: string, prompt: string): Promise<string | undefined> {
+async function request(
+  url: string,
+  body: unknown,
+  signal: AbortSignal,
+  key?: string,
+): Promise<unknown> {
+  const response = await fetch(url, {
+    method: 'POST',
+    signal,
+    headers: {
+      'content-type': 'application/json',
+      ...(key ? { authorization: `Bearer ${key}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok)
+    throw new Error(`The model returned HTTP ${response.status}. Check the model and credentials.`)
   try {
-    const response = await fetch(`${endpoint}/api/generate`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: process.env['UNMARK_OLLAMA_MODEL'] ?? 'llama3.1',
-        prompt,
-        stream: false,
-        options: { temperature: 0.7 },
-      }),
-    })
-    if (!response.ok) return undefined
-    const parsed = (await response.json()) as { response?: string }
-    return parsed.response
+    return await response.json()
   } catch {
-    return undefined
+    throw new Error('The model returned invalid JSON.')
   }
 }
 
-async function askRemote(model: string, prompt: string): Promise<string | undefined> {
+async function askOllama(endpoint: string, prompt: string, signal: AbortSignal): Promise<string> {
+  const parsed = (await request(
+    `${endpoint}/api/generate`,
+    {
+      model: process.env['UNMARK_OLLAMA_MODEL'] ?? 'llama3.1',
+      prompt,
+      stream: false,
+      options: { temperature: 0.7 },
+    },
+    signal,
+  )) as { response?: unknown }
+  if (typeof parsed?.response !== 'string')
+    throw new Error('The local model returned no text. Start Ollama or use --print-prompt.')
+  return parsed.response
+}
+
+async function askRemote(model: string, prompt: string, signal: AbortSignal): Promise<string> {
   const base = process.env['UNMARK_API_BASE'] ?? 'https://openrouter.ai/api/v1'
   const key = process.env['UNMARK_API_KEY'] ?? process.env['OPENROUTER_API_KEY']
-  if (!key) return undefined
-
-  try {
-    const response = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
-    })
-    if (!response.ok) return undefined
-    const parsed = (await response.json()) as {
-      choices?: { message?: { content?: string } }[]
-    }
-    return parsed.choices?.[0]?.message?.content
-  } catch {
-    return undefined
-  }
+  if (!key) throw new Error('Set UNMARK_API_KEY, or use --print-prompt.')
+  const parsed = (await request(
+    `${base}/chat/completions`,
+    {
+      model,
+      messages: [{ role: 'user', content: prompt }],
+    },
+    signal,
+    key,
+  )) as { choices?: { message?: { content?: unknown } }[] }
+  const content = parsed?.choices?.[0]?.message?.content
+  if (typeof content !== 'string') throw new Error('The provider returned no text.')
+  return content
 }
 
 /**
@@ -155,6 +163,10 @@ export async function runRewrite(
   options: RewriteOptions = {},
 ): Promise<RewriteOutcome> {
   const notes: string[] = []
+  const note = (message: string) => {
+    notes.push(message)
+    options.onNote?.(message)
+  }
   const prompt = briefToPrompt(text, brief)
 
   if (options.printPrompt) {
@@ -162,74 +174,44 @@ export async function runRewrite(
   }
 
   if (options.model) {
-    notes.push(`Sending this document to ${options.model}. It leaves this machine.`)
+    note(`Sending this document to ${options.model}. It leaves this machine.`)
     const facts = await describeModel(options.model)
     // `briefToPrompt` already embeds the whole document, so counting the text
     // again doubled it: the context-length refusal fired at roughly half the
     // model's real capacity, turning jobs that would have worked into an
     // `unavailable`, and the price quoted was twice what it should have been.
     const tokens = estimateTokens(prompt)
-    if (facts?.contextLength && tokens > facts.contextLength) {
-      return {
-        kind: 'unavailable',
-        text: '',
-        attempts: 0,
-        notes: [
-          ...notes,
-          `The document needs about ${tokens} tokens and ${options.model} holds ${facts.contextLength}. Split it or pick a larger model.`,
-        ],
-      }
+    if (facts?.contextLength && tokens + estimateTokens(text) > facts.contextLength) {
+      note(
+        `The prompt and output need about ${tokens + estimateTokens(text)} tokens and ${options.model} holds ${facts.contextLength}. Split it or pick a larger model.`,
+      )
+      return { kind: 'unavailable', text: '', attempts: 0, notes }
     }
     if (facts?.inputPerMillion !== undefined && facts.outputPerMillion !== undefined) {
       const cost =
         (tokens / 1_000_000) * facts.inputPerMillion +
         (estimateTokens(text) / 1_000_000) * facts.outputPerMillion
-      notes.push(`Roughly $${cost.toFixed(4)} per attempt, before this is spent rather than after.`)
+      note(`Roughly $${cost.toFixed(4)} per attempt, before this is spent rather than after.`)
     } else {
-      notes.push('llm-models is not installed, so this job could not be priced first.')
+      note('llm-models is not installed, so this job could not be priced first.')
     }
   } else {
-    notes.push('Local only: 127.0.0.1. Nothing leaves this machine.')
+    note('Local only: 127.0.0.1. Nothing leaves this machine.')
   }
 
-  const attempts = Math.max(1, options.attempts ?? 3)
-  let last: RewriteVerdict | undefined
-  let candidate = ''
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    // Each retry is told what failed, so it is aimed rather than another roll
-    // of the dice.
-    const aimed =
-      last && last.failures.length > 0
-        ? `${prompt}\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED FOR:\n${last.failures
-            .map((failure) => `- ${failure.what}: ${failure.detail}`)
-            .join('\n')}`
-        : prompt
-
-    const answer = options.model
-      ? await askRemote(options.model, aimed)
-      : await askOllama(options.endpoint ?? OLLAMA, aimed)
-
-    if (answer === undefined) {
-      return {
-        kind: 'unavailable',
-        text: '',
-        attempts: attempt - 1,
-        notes: [
-          ...notes,
-          options.model
-            ? 'The provider did not answer. Set UNMARK_API_KEY, or use --print-prompt.'
-            : `No model answered on ${options.endpoint ?? OLLAMA}. Start Ollama, or use --print-prompt.`,
-        ],
-      }
-    }
-
-    candidate = answer.trim()
-    last = verifyRewrite(text, candidate, brief)
-    if (last.ok) {
-      return { kind: 'accepted', text: candidate, verdict: last, attempts: attempt, notes }
-    }
-  }
-
-  return { kind: 'rejected', text: candidate, verdict: last, attempts, notes }
+  const result = await rewriteLoop(
+    text,
+    brief,
+    (prompt, signal) =>
+      options.model
+        ? askRemote(options.model, prompt, signal)
+        : askOllama(options.endpoint ?? OLLAMA, prompt, signal),
+    {
+      ...(options.attempts !== undefined ? { attempts: options.attempts } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    },
+  )
+  for (const message of result.notes) note(message)
+  return { ...result, notes }
 }

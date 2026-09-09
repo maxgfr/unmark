@@ -48,10 +48,10 @@ says who marked the text. And it states plainly what it cannot remove.
   the code that calls a model. That code exists, in the terminal, where a
   network is expected and asked for; it is loopback-only unless told otherwise.
 - **Honesty over reassurance.** Robust pixel watermarks (SynthID, Tree-Ring,
-  StableSignature) survive this tool, and statistical text watermarks survive
-  every deterministic edit it makes. Both are stated on the screen that does the
-  removing, not in a footer. A rewrite reduces a score; it does not remove a
-  watermark, and no vendor's detector has been tested against.
+  StableSignature) survive this tool, and statistical text watermarks are not
+  checked by its deterministic edits. Both are stated on the screen that does the
+  removing, not in a footer. Rewriting has no guaranteed effect on a watermark.
+  No vendor detector is used; the separate lab measures a public test key.
 - **A refusal beats a plausible broken file.** An encrypted PDF is reported as
   unread rather than as clean. A signed one is left alone unless you force it. A
   fragmented video is refused rather than rebuilt on a guess.
@@ -63,3 +63,14 @@ says who marked the text. And it states plainly what it cannot remove.
 
 Plain, specific, and unhedged. Names what happened and what it means. No
 exclamation, no reassurance, no "we". Errors name the problem and the recovery.
+
+## Text workflow
+
+Paste, Clean text, copy. The source remains intact and every action can be undone.
+The button defaults to supported-mark removal plus typography and wording
+simplification. Advanced settings and inspection details are disclosed on demand.
+
+Deep clean is opt-in WebLLM inference on the visitor's WebGPU device, using one
+small Qwen2.5 model. Its files and runtime are served from this site's origin;
+only model files are cached. A rejected or unavailable rewrite leaves the basic
+cleaning result available. The browser never imports CLI provider transports.

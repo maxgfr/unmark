@@ -6,6 +6,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 // @ts-expect-error -- plain ESM shared with scripts/check-network.mjs, which is
 // run by node and so cannot import a .ts module.
 import { CSP } from './scripts/csp.mjs'
+// @ts-expect-error -- shared build plugin is plain ESM
+import { localWebLlm } from './scripts/local-webllm.mjs'
 
 // Project pages live under https://maxgfr.github.io/unmark/, so every asset URL
 // carries the prefix. Routing is tab state held in the URL hash, which keeps
@@ -46,8 +48,15 @@ export default defineConfig({
         // The models are megabytes and opt-in; precaching them would defeat the
         // point of making the download a deliberate choice. They live in the
         // Cache API instead, written only after the user says yes.
-        globIgnores: ['**/vendor/**'],
+        globIgnores: ['**/vendor/**', '**/text.worker-*.js'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            urlPattern: /\/assets\/text\.worker-[^/]+\.js$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'unmark-text-runtime', expiration: { maxEntries: 2 } },
+          },
+        ],
         navigateFallback: `${BASE}index.html`,
         cleanupOutdatedCaches: true,
       },
@@ -75,6 +84,7 @@ export default defineConfig({
       },
     }),
   ],
+  worker: { format: 'es', plugins: () => [localWebLlm()] },
   build: {
     target: 'es2022',
     cssMinify: 'lightningcss',

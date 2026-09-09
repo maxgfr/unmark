@@ -120,3 +120,12 @@ the palette. A default blue selection would be the loudest colour on the page.
 - Gradient text, glass, decorative blur.
 - A hero metric. The count of findings is not the point; the findings are.
 - Any reassurance the engine cannot support.
+
+## Text action hierarchy
+
+The first viewport pairs source and result on desktop and stacks source first
+on mobile. Clean text is the single primary action, in bone on ground. Copy
+and Undo are secondary. Deep clean is an unchecked option with download size
+and local-processing text. Advanced options and Inspection details are closed
+initially; all forensic findings remain reachable there. Results appear only
+after an explicit action and are invalidated when input or settings change.

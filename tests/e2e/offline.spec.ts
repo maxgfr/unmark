@@ -108,6 +108,7 @@ test.describe('offline', () => {
 
     // Booting is not the claim. Working is.
     await page.getByLabel('Text to inspect').fill('Attached\u200B\u200B\u200Bresults.')
+    await page.getByRole('button', { name: 'Clean text', exact: true }).click()
     const cleaned = await page.evaluate(() => document.querySelector('output')?.textContent ?? '')
     expect(cleaned).toContain('Attached')
     expect(cleaned).not.toContain('\u200B')

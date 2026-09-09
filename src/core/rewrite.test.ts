@@ -78,6 +78,22 @@ describe('buildBrief', () => {
 })
 
 describe('verifyRewrite', () => {
+  it.each([
+    ['Sales reached 10 units.', 'Sales reached 10 units. Profit reached 999 euros.'],
+    ['The balance was -10 euros.', 'The balance was 10 euros.'],
+    ['Run `rm -i example` carefully.', 'Run `rm -f example` carefully.'],
+    ['Snippet:\n\n```js\na()\n```\n\nAgain:\n\n```js\na()\n```', 'Snippet:\n\n```js\na()\n```'],
+    ['The report arrived.', 'The report arrived. See https://example.com/new.'],
+    ['The report arrived.', 'The report arrived on January 1, 2026.'],
+    ['The report arrived.', 'The report said "everything is fine".'],
+  ])('rejects added facts or damaged protected content: %s', (source, candidate) => {
+    expect(verifyRewrite(source, candidate, buildBrief(source)).ok).toBe(false)
+  })
+
+  it('preserves repeated and inline code when prose changes', () => {
+    const source = 'Run `a()` twice.\n\n```js\na()\n```\n\n```js\na()\n```'
+    expect(verifyRewrite(source, source.replace('Run', 'Call'), buildBrief(source)).ok).toBe(true)
+  })
   const brief = buildBrief(SLOP)
 
   it('rejects a rewrite that is really the same slop', () => {

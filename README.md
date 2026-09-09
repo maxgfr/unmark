@@ -91,9 +91,9 @@ That catalogue splits in two, and the split is the whole design:
 French guillemets and the apostrophe in _l'été_ are left alone — straightening
 those damages real text for nothing.
 
-Neither pass removes a watermark, and both are off by default. They still _run_
-on every inspection, so the report lists what they would do before you have
-guessed to turn anything on.
+Neither pass removes a statistical watermark. Both are off by default in the
+core and CLI. The page includes them in Clean text, with Advanced options to
+disable either pass. Inspection reports proposed changes without editing the source.
 
 **Files.** Provenance metadata across seventeen formats: PNG, JPEG, WebP, GIF,
 HEIC, AVIF, MP4/MOV, SVG, PDF, DOCX, PPTX, XLSX, ODT, EPUB, HTML, Markdown and
@@ -161,11 +161,18 @@ shipped CSP and the policy [`scripts/csp.mjs`](scripts/csp.mjs) declares. CI and
 the deploy workflow both run it, so a regression breaks the build instead of
 shipping.
 
-An in-browser paraphrase for statistical text watermarks was considered and
-dropped for exactly this reason: a CSP is static, so permitting it would have
-widened the promise for every visitor, including the ones who never used it. It
-lives in the terminal instead, where a network is already expected and where you
-opted in by typing the command — see **Crossing the deterministic ceiling**.
+The text tab has one primary action: **Clean text**. It removes supported marks
+and applies the typography and wording passes, leaving the original unchanged.
+**Advanced options** controls those passes; **Inspection details** keeps the full
+report available without making it the first thing a visitor must read.
+
+**Deep clean** adds an optional local rewrite with WebLLM and Qwen2.5 0.5B.
+The first use downloads about 294 MB of model files plus the worker runtime,
+all from this site. The files are cached; inference uses WebGPU in a worker.
+Unsupported browsers, cancelled jobs and rejected rewrites retain the basic
+cleaning result. No model is downloaded for basic cleaning.
+The same brief and content checks are used by the page and terminal.
+
 `pnpm check:imports` follows the import graph from the page's entry point and
 fails if it can reach `src/cli`, so the boundary is a build gate rather than a
 convention one careless import away from being untrue.
@@ -178,9 +185,9 @@ Stated here and in the interface, not buried:
   They are designed to survive re-encoding, resizing, cropping and inpainting.
   Nothing here removes them.
 - **Statistical text watermarks** — the SynthID-Text family lives in word choice,
-  not in characters. No deterministic edit touches them, so a clean report does
-  not mean unwatermarked text. `unmark rewrite` reduces the score; it does not
-  zero it, and nothing here is tested against any vendor's detector.
+  not in characters. A clean report does not mean unwatermarked text. Neither
+  cleaning nor rewriting guarantees removal. No Claude or Gemini detector is
+  used; the optional lab measures a public test key only.
 - **Encrypted PDFs.** Nothing is read, so nothing is reported. This used to be
   the most dangerous bug in the project: encrypted strings do not match the byte
   pass's patterns, so an encrypted PDF came out reported **clean**.
@@ -227,15 +234,17 @@ unmark rewrite draft.md                     # the loop, driven for you
 ```
 
 `verify` re-runs all three detection layers on the rewrite and **rejects** it when
-a flagged pattern came back, when a number or a citation went missing, or when a
-code fence was edited. Each failure is named, so the next attempt is aimed rather
+a phrase pattern persists or a structural metric worsens, when an extracted
+number, date, link or quotation is added or lost, or when protected code changes.
+Signed numbers and repeated blocks are checked. Name extraction is heuristic.
+These checks cannot establish complete semantic equivalence. Each failure is named, so the next attempt is aimed rather
 than another roll of the dice. Exit 1, so it composes.
 
-**The page has no rewrite at all**, and that is deliberate:
+**Where rewriting happens:**
 
 | Surface   | Where the model runs                                                        |
 | --------- | --------------------------------------------------------------------------- |
-| the page  | nowhere. `connect-src 'self'`, and a build gate that fails on any origin    |
+| the page  | WebLLM on your device, opt-in; all assets remain same-origin                |
 | the skill | you are the model — no key, no request from our code                        |
 | the CLI   | `127.0.0.1` by default. `--model <id>` for a provider, priced first, opt-in |
 
@@ -244,6 +253,28 @@ than another roll of the dice. Exit 1, so it composes.
 the document fits its context, and prints the cost **before** it is spent — but
 it is spawned as a process, never imported, so "one file, no install step" still
 holds and it degrades to a note when it is absent.
+
+## Small SynthID lab
+
+```bash
+uv run --locked scripts/synthid-lab/run.py
+# Optional quick smoke: add --samples 1
+```
+
+Requires uv and Node 22.18+ (the bridge reads the same TypeScript core as the app).
+The script pins Python dependencies, a public Qwen2.5 0.5B model revision and test
+keys. Ten paired generations compare unmarked text, marked text, a wrong key,
+basic cleaning, style cleaning and attempted rewrites. It runs on CPU and writes
+`.cache/synthid-report/report.md` and `report.json`. The initial model download is
+about 1 GB. Subsequent runs reuse the local model cache.
+
+Scores are mean g-values, not calibrated probabilities. Rejected or truncated
+rewrites are recorded as failures, even when their watermark score falls. This
+small experiment is not evidence about Claude, Gemini, or the quantised WebLLM
+model. See [Anthropic's explanation](https://www.anthropic.com/news/claude-text-watermark)
+and [the SynthID reference](https://github.com/google-deepmind/synthid-text).
+The [first recorded run](docs/synthid-lab-2026-09-10.md) reports all ten rejected
+rewrites alongside the measured scores; it does not count score reduction as success.
 
 ## Careful by default
 
@@ -277,7 +308,7 @@ one place it has always refused to.
 
 ```bash
 pnpm install
-pnpm assets    # fetch the pinned MI-GAN weights (checksummed)
+pnpm assets    # fetch pinned MI-GAN and text-model assets (checksummed)
 pnpm dev
 pnpm verify    # typecheck · lint · format · test · import gate · skill · build · privacy gate
 pnpm e2e       # Chromium, Firefox and WebKit, plus two phones with a real touchscreen
@@ -287,6 +318,15 @@ pnpm shoot     # screenshot and drive the built page in a real browser
 `src/core` is written without a single `node:` or DOM import, and typechecks in a
 project that has neither available — which is what makes "one implementation, two
 deliveries" a compile error rather than a convention.
+
+### Checking local text inference
+
+After `pnpm assets && pnpm build`, run
+`UNMARK_HEADED=1 node scripts/smoke-text-model.mjs` on a machine with WebGPU.
+It checks a real rewrite, a cached reload, and same-origin GET requests. The
+ordinary browser suite uses an isolated worker for cancellation and error cases.
+The model asset manifest maps the upstream `ndarray-cache.json` to the
+`tensor-cache.json` name expected by the pinned WebLLM runtime.
 
 ## Intended use
 
@@ -298,7 +338,7 @@ Not a tool for removing authorship marks from work that is not yours.
 ## License
 
 MIT. MI-GAN is MIT ([Picsart AI Research](https://github.com/Picsart-AI-Research/MI-GAN));
-IBM Plex Sans and JetBrains Mono are OFL.
+IBM Plex Sans and JetBrains Mono are OFL. Qwen2.5 and WebLLM are Apache-2.0.
 
 ## Manual skill invocation
 

@@ -88,9 +88,9 @@ can show the user before suggesting either.
 
 ## The rewrite loop
 
-For what no regex reaches: word choice, and the shape of an argument. This is
-the only thing here that removes a statistical-watermark signal, and it does not
-remove it — it reduces a score.
+Use rewriting for word choice and the shape of an argument. Its effect on a
+statistical watermark is unknown unless measured with the matching detector.
+Do not describe a rewrite as removing a watermark or reducing its score.
 
 **In an agent session, you are the model.** No API key, no network call:
 
@@ -104,12 +104,14 @@ node scripts/unmark.mjs verify new.md --against draft.md
 writer would actually change; every number, date, name, link and quotation that
 must survive; and every protected span to reproduce byte for byte.
 
-`verify` is the part that matters. It re-runs all three detection layers on your
+`verify` checks style, extracted facts and protected spans. It cannot prove
+semantic equivalence or watermark removal. It checks your
 rewrite and **rejects** it when:
 
 - a flagged pattern came back, or a new one arrived,
-- a fact, number, date, name or citation went missing,
-- a protected span was edited.
+- an extracted number, date, link or quotation was added or lost,
+- an extracted name went missing (name detection is heuristic),
+- a protected block or inline code span was edited or an occurrence lost.
 
 Exit code 1, with each failure named. **Read the failures and aim the next
 attempt at them.** Do not resubmit a rewrite that has not changed.
@@ -135,9 +137,9 @@ corrupt real text — only reach for it when the user asked for exactly that.
 inpainting need a canvas. Point the user at <https://maxgfr.github.io/unmark/>,
 which runs the same core plus the image pipeline, entirely in their browser.
 
-**It cannot promise a statistical watermark is gone.** A rewrite reduces a
-SynthID-Text confidence score; it does not zero it, and nothing here is tested
-against any vendor's detector. `verify` proves the rewrite cleared _our_ gates.
+**It cannot promise a statistical watermark is gone.** No vendor detector is
+used. The repository lab measures a public test key, and its results must not
+be extrapolated to Claude or Gemini. `verify` proves the rewrite cleared _our_ gates.
 It proves nothing about theirs. Say that plainly rather than letting a passing
 verify imply more than it means.
 

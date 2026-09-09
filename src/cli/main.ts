@@ -59,7 +59,7 @@ REWRITE (the tells no regex reaches: word choice, and the shape of the argument)
   --against <file>    the original a rewrite is checked against (verify only)
 
   With no --model, rewrite talks to Ollama on 127.0.0.1 and nothing leaves the
-  machine. The browser page has no rewrite at all: its Content-Security-Policy
+  machine. The browser optionally rewrites locally with WebLLM; its policy
   pins connect-src to 'self', and that is not negotiable for a feature.
 
 FORMATS
@@ -524,6 +524,7 @@ async function commandRewrite(target: string, options: Options): Promise<number>
     ...(options.model ? { model: options.model } : {}),
     ...(options.attempts ? { attempts: options.attempts } : {}),
     printPrompt: options.printPrompt,
+    onNote: (note) => process.stderr.write(`${dim(note)}\n`),
   })
 
   if (options.json) {
@@ -536,7 +537,7 @@ async function commandRewrite(target: string, options: Options): Promise<number>
     return 0
   }
 
-  for (const note of outcome.notes) process.stderr.write(`${dim(note)}\n`)
+  // Progress notes were emitted before requests, including on JSON output.
 
   if (outcome.kind === 'unavailable') return 1
 

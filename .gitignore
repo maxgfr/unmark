@@ -27,3 +27,6 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+
+# Local experiment environments and reports
+.cache/

@@ -23,7 +23,12 @@ const VENDOR = join(ROOT, 'public', 'vendor')
 // Each entry: where it lands under public/vendor/, where it comes from, its
 // SHA-256, and why the app needs it. Regenerate a checksum with:
 //   curl -sL <url> | shasum -a 256
+const textAssets = JSON.parse(
+  await readFile(new URL('./text-model-assets.json', import.meta.url), 'utf8'),
+)
+
 export const ASSETS = [
+  ...textAssets,
   {
     file: 'models/migan-pipeline-v2.onnx',
     url: 'https://huggingface.co/andraniksargsyan/migan/resolve/main/migan_pipeline_v2.onnx',

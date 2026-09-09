@@ -220,7 +220,15 @@ export function FindingsTable({
   )
 }
 
-export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
+export function CopyButton({
+  value,
+  label = 'Copy',
+  disabled = false,
+}: {
+  value: string
+  label?: string
+  disabled?: boolean
+}) {
   /** '' idle, 'done' after a copy, 'failed' when the clipboard refused. */
   const [state, setState] = useState<'' | 'done' | 'failed'>('')
   const clear = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -239,18 +247,28 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
     // refused. This had no catch at all, so the promise rejected into nothing:
     // an unhandled rejection in the console and a button that did not respond,
     // which reads as "the click missed" rather than "the browser said no".
-    void navigator.clipboard.writeText(value).then(
-      () => flash('done'),
-      () => flash('failed'),
-    )
+    if (!navigator.clipboard?.writeText) {
+      flash('failed')
+      return
+    }
+    void Promise.resolve()
+      .then(() => navigator.clipboard.writeText(value))
+      .then(
+        () => flash('done'),
+        () => flash('failed'),
+      )
   }, [value])
 
   return (
     <button
       type="button"
       onClick={copy}
-      disabled={value.length === 0}
-      title={state === 'failed' ? 'This browser would not give the page the clipboard' : undefined}
+      disabled={disabled || value.length === 0}
+      title={
+        state === 'failed'
+          ? 'Clipboard unavailable. Select the result and copy it manually.'
+          : undefined
+      }
       className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
         state === 'failed'
           ? 'border-[var(--color-signal)] text-[var(--color-signal)]'
@@ -258,7 +276,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
       }`}
     >
       {state === 'done' ? <IconCheck className="text-[var(--color-clean)]" /> : <IconCopy />}
-      {state === 'done' ? 'Copied' : state === 'failed' ? 'Copy blocked' : label}
+      {state === 'done' ? 'Copied' : state === 'failed' ? 'Select text to copy' : label}
     </button>
   )
 }

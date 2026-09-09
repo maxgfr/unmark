@@ -1,0 +1,1856 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "keys": [654, 400, 836, 123, 340, 443, 597, 160, 57],
+  "torch": "2.8.0",
+  "device": "cpu",
+  "rows": [
+    {
+      "sample": 1,
+      "topic": "a community garden",
+      "seed": 100,
+      "source": "A Community Garden is a vibrant and multifaceted space designed to foster a sense of community, gardening, and environmental stewardship. It's an oasis in the middle of urban landscapes where people come together to cultivate their gardens. Here\u2019s a step-by-step guide on how you can set up such a place:\n\n1. **Planning**: Start by planning your garden carefully. Consider the type of plants you want to grow, what types of soil you have, and how much water you need. Also, decide whether you want to start small with a few containers or expand into larger plots.\n\n2. **Location Selection**: Choose a site that receives plenty of sunlight and good drainage. Ideally, it should be near your home for easy maintenance but also provide privacy if you prefer a less crowded area. Ensure there is enough space for all the necessary tools and equipment.\n\n3. **Designing the Layout**: Decide on the design of your garden. For example, you might consider dividing the land into sections for different types of plants (e.g., a mix of flowers, vegetables, herbs). Use natural forms like terraced slopes or raised beds to create a more balanced look.\n\n4. **Equipment and Supplies**: Purchase all the necessary supplies, including seeds, seed starting kits, potting soil, fertilizer, watering cans, mulches, stakes, stakes, and a compost tumbler or container for organic composting.\n\n5. **Creating Raised Beds**: If you\u2019re using raised beds, make sure they are large enough to accommodate multiple plantings without overcrowding them. Use bricks, gravel, or other materials",
+      "unmarked": "A Community Garden in the heart of the city is like a vibrant oasis where people from all walks of life come together to cultivate the land and create a space that fosters growth, collaboration, and shared purpose. This garden is not just a place for gardening but also an environment where ideas, innovations, and solutions can be tested.\n\nThe soil here is rich with organic matter, providing everything plants need for health and longevity. The ground is covered with layers of compost and mulch, which enriches the soil structure, allowing it to retain moisture better and support plant roots more effectively. The garden includes various vegetable plots, fruit trees, and flower beds, all arranged according to different growing cycles and needs.\n\nCommunity members participate in regular maintenance tasks such as watering, weeding, and fertilizing the gardens. They work together to ensure the sustainability and effectiveness of their efforts. For instance, the garden staff conducts regular inspections to maintain the cleanliness of the soil and water the plants, while volunteers help with planting new seedlings and helping to manage the garden's resources.\n\nEducational programs are also a cornerstone of this community garden. Regular workshops on sustainable farming practices, pest management techniques, and how to start your own small business through a successful garden operation provide valuable learning opportunities. These programs often involve hands-on activities, guest speakers, and interactive discussions among participants.\n\nCollaboration is another key aspect of this community garden. Members often engage in joint projects, sharing knowledge, skills, and resources. This collaborative effort leads to innovative solutions and shared goals, promoting a sense of community ownership over time. Additionally, community members",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5668073296546936,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "unmarked": {
+          "mean_g": 0.4943382740020752,
+          "tokens": 320,
+          "scored_tokens": 314
+        },
+        "wrong_key": {
+          "mean_g": 0.5094936490058899,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "basic": {
+          "mean_g": 0.5668073296546936,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "plain": {
+          "mean_g": 0.5544837713241577,
+          "tokens": 315,
+          "scored_tokens": 311
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "### WHAT IS WRONG WITH IT\n\n- **No measurements were provided**;\n- The text was cut off at the end.\n\n### RULES\n\n1. **Keep every fact, number, date, name, quotation, and citation from the source.** Add nothing.\n2. **Reproduce every protected span exactly, including its whitespace.**\n3. **Do not introduce any of the patterns listed as tells.** Those include the ones the source did not have.\n4. **Match the register of the source.** A technical document stays technical; do not add personality that doesn\u2019t fit.\n5. **Return only the rewritten document.** No preamble, explanations, or code fences around it.\n\n### MUST SURVIVE UNCHANGED\n\n#### Numbers:\n1, 2, 3, 4, 5\n\n#### Names:\nBeds, Community, Layout, Supplies\n\n### DOCUMENT\n\nA Community Garden is a vibrant and multifaceted space designed to foster a sense of community, gardening, and environmental stewardship. It\u2019s an oasis in the middle of urban landscapes where people come together to cultivate their gardens. Here\u2019s a step-by-step guide on how you can set up such a place:\n\n1. **Planning**: Start by planning your garden carefully. Consider the type of plants you want to grow, what types of soil you have, and how much water you need. Also, decide whether you want to start small with a few containers or expand into larger plots.\n\n2. **Location Selection**: Choose a site that receives plenty of sunlight and good drainage. Ideally, it should be near your home for easy maintenance but also provide privacy if you prefer a less crowded area. Ensure there is enough space for all the necessary tools and equipment.\n\n3. **Designing the Layout**: Decide on the design of your garden. For example, you might consider dividing the land into sections for different types of plants (e.g., a mix of flowers, vegetables, herbs). Use natural forms like terraced slopes or raised beds to create a more balanced look.\n\n4. **Equipment and Supplies**: Purchase all the necessary supplies, including seeds, seed starting kits, potting soil, fertilizer, watering cans, mulches, stakes, stakes, and a compost tumbler or container for organic composting.\n\n5. **Creating Raised Beds**: If you\u2019re using raised beds, make sure they are large enough to accommodate multiple plantings without overcrowding them. Use bricks, gravel, or other materials.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n\\n1. **Planning**:\" \u2192 \"\\n\\n1. Planning:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n\\n2. **Location Selection**:\" \u2192 \"\\n\\n2. Location Selection:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n\\n3. **Designing the Layout**:\" \u2192 \"\\n\\n3. Designing the Layout:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n\\n4. **Equipment and Supplies**:\" \u2192 \"\\n\\n4. Equipment and Supplies:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n\\n5. **Creating Raised Beds**:\" \u2192 \"\\n\\n5. Creating Raised Beds:\""
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "name Beds",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5341365337371826,
+            "tokens": 503,
+            "scored_tokens": 498
+          }
+        },
+        {
+          "text": "```plaintext\nA Community Garden is a vibrant and multifaceted space designed to foster a sense of community, gardening, and environmental stewardship. It's an oasis in the middle of urban landscapes where people come together to cultivate their gardens. Here's a step-by-step guide on how you can set up such a place:\n\n1. **Planning:** Start by planning your garden carefully. Consider the type of plants you want to grow, what types of soil you have, and how much water you need. Also, decide whether you want to start small with a few containers or expand into larger plots.\n  \n2. **Location Selection:** Choose a site that receives plenty of sunlight and good drainage. Ideally, it should be near your home for easy maintenance but also provide privacy if you prefer a less crowded area. Ensure there is enough space for all the necessary tools and equipment.\n\n3. **Designing the Layout:** Decide on the design of your garden. For example, you might consider dividing the land into sections for different types of plants (e.g., a mix of flowers, vegetables, herbs). Use natural forms like terraced slopes or raised beds to create a more balanced look.\n\n4. **Equipment and Supplies:** Purchase all the necessary supplies, including seeds, seed starting kits, potting soil, fertilizer, watering cans, mulches, stakes, stakes, and a compost tumbler or container for organic composting.\n\n5. **Creating Raised Beds:** If you're using raised beds, make sure they are large enough to accommodate multiple plantings without overcrowding them. Use bricks, gravel, or other materials.\n\n**PREVIOUS CANDIDATE**:\n### WHAT IS WRONG WITH IT\n\n- **No measurements were provided**;\n\n### RULES\n\n1. **Keep every fact, number, date, name, quotation, and citation from the source.** Add nothing.\n2. **Reproduce every protected span exactly, including its whitespace.**\n3. **Do not introduce any of the patterns listed as tells.** Those include the ones the source did not have.\n4. **Match the register of the source.** A technical document stays technical; do not add personality that doesn\u2019t fit.\n5. **Return only the rewritten document.** No preamble, explanations, or code fences around it.\n```\n\n**CORRECTED VERSION**:\n```plaintext\nA Community Garden is a vibrant and multifaceted space designed to foster a sense of community, gardening, and environmental stewardship. It's an oasis in the middle of urban",
+          "truncated": true,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "name Beds",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Community",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Layout",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Supplies",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5395818948745728,
+            "tokens": 512,
+            "scored_tokens": 473
+          }
+        }
+      ]
+    },
+    {
+      "sample": 2,
+      "topic": "repairing a bicycle",
+      "seed": 101,
+      "source": "Sure! Here is a step-by-step guide on how to repair a bicycle.\n\n1. **Preparation**: First, ensure your bike is clean and dry. Put on rubber gloves, a helmet, and safety glasses to protect yourself from any sharp parts that could puncture the frame or chain.\n\n2. **Identify the Problem**: Look for signs of damage such as cracks in the frame, missing parts like wheels, or rusted parts like the chain. Identify if there\u2019s any jamming or looseness with the brakes.\n\n3. **Safety Measures**: Before starting, ensure you have a steady hand and sturdy tools like pliers, screwdrivers, or wrenches. Make sure all tools are properly grounded before using them.\n\n4. **Remove the Frame**: If you need to remove the frame, use a crowbar or a specialized tool to pry it off. Be careful not to accidentally break anything else.\n\n5. **Check for Damage**: Take apart the frame carefully and visually inspect each part for any visible damage. Check the brake pads, chain, derailleur, and other components. Look for any signs of wear or corrosion.\n\n6. **Replace Parts**: Once identified, replace damaged parts as soon as possible. For example:\n   - Replace broken wheels.\n   - Reinstall the broken chain.\n   - Repair worn-out brake pads and disc.\n   - Replace derailleurs or gears if necessary.\n\n7. **Mount the Frame**: After replacing the parts, install the frame back onto the bicycle. Be cautious when doing this to avoid damaging the bike itself.\n\n8. **Test Drive",
+      "unmarked": "Repairing a Bicycle: A Comprehensive Guide\n\nBicycles are beloved by many as they offer convenience and style in transportation. However, with them comes wear and tear over time that can cause significant issues. Understanding how to properly repair your bicycle is crucial for maintaining its performance and longevity.\n\nFirstly, it's important to identify the type of damage you're dealing with. Common bike repairs include frame rust, broken handlebars, loose gears, and punctures. Each of these situations requires different approaches:\n\n1. **Frame Rust**: This often starts due to corrosion from rain, sweat, and dirt. To tackle rust, start by cleaning the area thoroughly with soap and warm water. Apply rust remover specifically designed for bikes and let it sit for several hours before washing off. For stubborn rust, soak the affected area in a solution of lemon juice and baking soda for 4-6 hours, then rinse with water. If the rust persists, consider seeking professional help.\n\n2. **Broken Handlebars**: Broken handlebars can be repaired using a chain saw, which cuts through metal and wood without causing further damage. If the handlebars won't come apart, you might need a specialized tool called a \"bicycle jack\" to lift and stabilize them. Once they\u2019re in place, install new handles on the frame.\n\n3. **Loose Gears**: Loose gears can prevent the bicycle from turning smoothly. Loosen the chain so the gears move freely, ensuring the chain remains flat. Then use a pair of pliers or a small screwdriver to tighten the gear bolts. Ensure the nuts are secure",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5706751346588135,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "unmarked": {
+          "mean_g": 0.4834739863872528,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "wrong_key": {
+          "mean_g": 0.4929676651954651,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "basic": {
+          "mean_g": 0.5706751346588135,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "plain": {
+          "mean_g": 0.5544697642326355,
+          "tokens": 311,
+          "scored_tokens": 307
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "## What Is Wrong With It?\n\n### Step-by-Step Guide to Repairing a Bicycle\n\n#### 1. Preparation\nBefore you begin, make sure your bicycle is clean and dry. Wear rubber gloves, a helmet, and safety glasses to protect yourself from potential harm caused by sharp parts inside the frame or chain.\n\n#### 2. Identify the Problem\nLook for signs of damage like cracks in the frame, missing parts like wheels, or rusted parts like the chain. Also identify if there\u2019s any jamming or loosening with the brakes.\n\n#### 3. Safety Measures\nBefore starting, ensure you have a steady hand and sturdy tools like pliers, screwdrivers, or wrenches. Make sure all tools are properly grounded before using them.\n\n#### 4. Remove the Frame\nIf you need to remove the frame, use a crowbar or a specialized tool to pry it off. Be careful not to accidentally break any other parts of the bike.\n\n#### 5. Check for Damage\nTake apart the frame carefully and visually inspect each part for any visible damage. Check the brake pads, chain, derailleur, and other components. Look for any signs of wear or corrosion.\n\n#### 6. Replace Parts\nOnce identified, replace damaged parts as soon as possible. For example:\n   - Replace broken wheels.\n   - Reinstall the broken chain.\n   - Repair worn-out brake pads and disc.\n   - Replace derailleurs or gears if necessary.\n\n#### 7. Mount the Frame\nAfter replacing the parts, install the frame back onto the bicycle. Be cautious when doing this to avoid damaging the bike itself.\n\n#### 8. Test Drive\nOnce everything is installed and tested, take the bike for a test drive to ensure everything works correctly. Pay attention to any issues and fix them immediately.\n\nBy following these steps, you can help maintain the integrity of your bicycle and prevent future breakdowns. Always prioritize safety when working on bicycles to minimize accidents and potential injuries.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "Sentence-length variance",
+                "detail": "introduced by the rewrite: 0.31 against 0.35 \u2014 vary sentence length; write a short one, then a long one"
+              },
+              {
+                "kind": "pattern",
+                "what": "title-case heading",
+                "detail": "\"## What Is Wrong With It?\" \u2192 \"## What is wrong with it?\""
+              },
+              {
+                "kind": "fact",
+                "what": "name Damage",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Drive",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Frame",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Problem",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": [
+              {
+                "id": "burstiness",
+                "label": "Sentence-length variance",
+                "layer": "structure",
+                "value": 0.31,
+                "threshold": 0.35,
+                "fix": "vary sentence length; write a short one, then a long one"
+              }
+            ]
+          },
+          "score": {
+            "mean_g": 0.5364758968353271,
+            "tokens": 400,
+            "scored_tokens": 396
+          }
+        },
+        {
+          "text": "**What Is Wrong With It?**\n\nWhen repairing a bicycle, it\u2019s important to follow proper procedures and keep detailed records of your work. This ensures that any maintenance tasks performed will be accurate and reliable. Below is a revised version of the document that follows the rules provided:\n\n---\n\n**What Is Wrong With It?**\n\nWhen repairing a bicycle, it\u2019s crucial to follow proper procedures and keep detailed records of your work. This ensures that any maintenance tasks performed will be accurate and reliable.\n\n---\n\nThe corrected version preserves the key points while ensuring the structure remains similar to the original text.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 6",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 7",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 8",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Damage",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Drive",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Frame",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Problem",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Reinstall",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Repair",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Replace",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.49226441979408264,
+            "tokens": 116,
+            "scored_tokens": 79
+          }
+        }
+      ]
+    },
+    {
+      "sample": 3,
+      "topic": "a library visit",
+      "seed": 102,
+      "source": "Sure! I'd be happy to guide you through your library visit if you have any questions about it.\n\n---\n\nI first entered the library with excitement and anticipation. The space felt both welcoming and cozy, like an old friend waiting for me. As I made my way through the doors, I heard a gentle hum coming from inside. The staff greeted me warmly, offering to show me around the different sections of the library.\n\nFirst up was the Main Reading Room, filled with stacks of books neatly arranged on shelves. The librarians welcomed me with open arms, helping me find a quiet corner to sit down and enjoy a book. They showed me how to navigate the layout, pointing out important information and showing tips on finding specific materials.\n\nAfter lunch, we visited the Reference Desk, where I could access resources related to various topics. The librarian explained the process, showing me how to search databases and make notes quickly. It's great to have so many options for reference material available in one place!\n\nNext, I checked out some new books from the Book Depository, excited to discover what I couldn't quite get into yet. This section is particularly useful for those looking to expand their reading horizons or deepen their knowledge.\n\nThroughout the day, I interacted with other patrons, sharing stories and discussing current events. This interaction helped me feel more comfortable in the library environment and encouraged more meaningful interactions outside of just reading.\n\nAs we finished our trip, I thanked the staff and promised to return again soon. With so much positive energy and friendly demeanor, it was clear that this library visit exceeded all expectations.\n\n---",
+      "unmarked": "Certainly! I'd be happy to provide a detailed and accessible guide on how to enjoy a library visit. Here's a sample account:\n\n---\n\n### Library Visit Guide\n\nWelcome to the world of books!\n\n**1. Introduction:**\nWhen you walk into the library door, you're greeted with a warm welcome and a cozy atmosphere. The staff members will greet you warmly and help you find your way around.\n\n**2. Accessing the Library:**\nTo enter the library, simply follow these steps:\n- Open the door.\n- Press the \"Library\" button.\n- Enter your library card number (which is usually in the upper left corner of the door).\n\n**3. Staying in the Library:**\nOnce inside, there are plenty of places to rest. You can sit down on any of the comfortable chairs at the front desk or on the floor near the bookshelves. If you want to read more quietly, you can use the reading area located right next to the entrance.\n\n**4. Finding Books:**\nAs you look for a book, consider using a reference guide if available. This guide is usually placed in the back of each shelf and is a great resource for quick guidance. Don\u2019t forget to scan the barcode on the cover of a book; this will direct you to its location in the library.\n\n**5. Searching for Books:**\nIf you need to search for a specific book, try browsing through the catalog. Each section in the library has a specific list of titles that match the category you've chosen. Use the \"Browse Catalogue\" feature, which allows you",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5784106850624084,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "unmarked": {
+          "mean_g": 0.5174603462219238,
+          "tokens": 320,
+          "scored_tokens": 315
+        },
+        "wrong_key": {
+          "mean_g": 0.5042194128036499,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "basic": {
+          "mean_g": 0.5784106850624084,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "plain": {
+          "mean_g": 0.5784106850624084,
+          "tokens": 320,
+          "scored_tokens": 316
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "What's Wrong with It?\n\n- None were measured;\n- All facts, numbers, dates, names, quotations, and citations were kept;\n- The protected spans were reproduced exactly;\n\nDocument:\nSure! I would love to assist you further with your library visit experience.\n\n---\n\n**REWRITE**\n\n- There were no measurements;\n- Every fact, number, date, name, quotation, and citation were maintained;\n- Protected spans were reproduced precisely.\n\nDocument:\n\n```\nSure! I would love to assist you further with your library visit experience.\n\n---\nI first entered the library with excitement and anticipation. The space felt both welcoming and cozy, like an old friend waiting for me. As I made my way through the doors, I heard a gentle hum coming from inside. The staff greeted me warmly, offering to show me around the different sections of the library.\n\nFirst up was the Main Reading Room, filled with stacks of books neatly arranged on shelves. The librarians welcomed me warmly, showing me how to navigate the layout, pointing out important information, and explaining the process step-by-step.\n\nAfter lunch, we visited the Reference Desk, where I could access resources related to various topics. The librarian provided guidance, explaining the process, and showing me how to use the system efficiently.\n\nNext, I checked out some new books from the Book Depository, eager to delve deeper into different genres and authors. This section is incredibly useful for those seeking diverse reading experiences or expanding their knowledge base.\n\nThroughout the day, I interacted with other patrons, engaging in discussions and contributing ideas freely. This interaction fostered a sense of camaraderie among us, leading to more meaningful interactions beyond mere reading.\n\nAs we left, I expressed gratitude to the staff and vowed to come back often. The warm atmosphere and friendly demeanor of the library enhanced my overall experience.\n\n---\nThank you for your kind words! We look forward to future visits together.\n```",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "name Book",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Main",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Reference",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Room",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5328489542007446,
+            "tokens": 384,
+            "scored_tokens": 367
+          }
+        },
+        {
+          "text": "Certainly! Let's go ahead with rewriting the document while adhering to the guidelines provided.\n\n---\n\n### What's Wrong with It?\n- **None** were measured;\n- **All facts, numbers, dates, names, quotations, and citations were kept;\n- **Protected spans were reproduced exactly**.\n\n### Document\nSure! I would love to assist you further with your library visit experience.\n\n---\n\n**REWRITE**\n\n- There were no measurements;\n- Every fact, number, date, name, quotation, and citation were maintained;\n- Protected spans were reproduced exactly.\n\n---\n\n**Document**\n\n```\nSure! I would love to assist you further with your library visit experience.\n\n---\n\n**Previous Candidate:** WHAT'S WRONG WITH IT?\n\n- None were measured;\n- All facts, numbers, dates, names, quotations, and citations were kept;\n- Protected spans were reproduced exactly;\n\n---\n\n**Document**\n\n```python\nSure! I would love to assist you further with your library visit experience.\n\n---\n\n**Previous Candidate:** What's Wrong with It?\n\n- None were measured;\n- All facts, numbers, dates, names, quotations, and citations were kept;\n- Protected spans were reproduced exactly;\n\n---",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "A sentence of sycophancy",
+                "detail": "Certainly!"
+              },
+              {
+                "kind": "fact",
+                "what": "name Book",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Main",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Reference",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Room",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5109649300575256,
+            "tokens": 237,
+            "scored_tokens": 152
+          }
+        }
+      ]
+    },
+    {
+      "sample": 4,
+      "topic": "baking bread",
+      "seed": 103,
+      "source": "Baking Bread: A Step-by-Step Guide\n\nPreparing for the Dough\n\n1. Start with the dough.\n2. Choose your flour and yeast.\n3. Mix ingredients together.\n\nMixing the Dough\n\n1. Warm water and yeast in a bowl until they become frothy.\n2. Add dry ingredients like flour to the warm water mixture.\n3. Mix until a sticky dough forms.\n\nKneading the Dough\n\n1. Cover the dough with a clean cloth and let it rise for about an hour.\n2. Knead the dough on a floured surface until it is smooth.\n\nRolling out the Dough\n\n1. Take the kneaded dough out of the bath and roll it out into thin sheets.\n2. Use a rolling pin to shape the dough into desired shapes.\n\nFlouring the Dough\n\n1. Preheat your oven to 450\u00b0F (230\u00b0C).\n2. Dust a large work surface with flour.\n\nAdding Butter or Oil\n\n1. Spread butter or oil evenly over the prepared work surface.\n2. Roll out the dough onto the fat surface.\n\nBaking the Bread\n\n1. Place the dough in a greased baking dish.\n2. Cover the dish with aluminum foil.\n3. Bake for 18-20 minutes.\n\nLetting the Bread Cool\n\n1. Remove from the oven and place them on a wire rack to cool completely.\n\nHandling the Breads\n\n1. Once cooled, slice and serve as needed.\n\nRemember to always use high-quality ingredients and follow proper safety guidelines when handling bread and its cooking methods. Enjoy",
+      "unmarked": "Baking bread is a delightful culinary adventure that requires patience, attention to detail, and the right tools. Here\u2019s how you can bake your own delicious loaves:\n\n### Ingredients:\n- **Whole Wheat Flour** (for gluten-free options)\n- **Rice Flour** or **Almond Flour**\n- **Oats** (whole grain or oat bran)\n- **Salt** (as needed for seasoning)\n- **Water** (about 1 cup)\n\n### Tools:\n- **Electric Hand Mixer** (preferably with a stand mixer attachment)\n- **Dough Saver Bowl** to help shape the dough\n- **Oven-safe Rolling Pin**\n- **Baking Sheet** (preferably parchment paper or silicone mat)\n- **Bread Knife**\n\n### Instructions:\n\n1. **Prepare Your Dough:**\n   - Start by mixing flour, salt, and water in a large bowl until smooth.\n   - Knead the mixture on a floured surface until it forms a soft dough.\n\n2. **Shape the Dough:**\n   - Place the dough onto a rolling pin and roll it out into a thin round shape. For a loaf, use the oven-safe rolling pin. For a flat loaf, roll out with the dough sifter.\n   - Transfer the rolled-out dough onto a lightly oiled baking sheet. Cover the sheet loosely with aluminum foil if using a glass pan.\n\n3. **Add Ingredients:**\n   - Sprinkle the toppings of your choice\u2014like fresh fruit, nuts, or seeds\u2014to the dough. Stir gently until evenly coated.\n\n4. **Bake",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5606390833854675,
+          "tokens": 320,
+          "scored_tokens": 306
+        },
+        "unmarked": {
+          "mean_g": 0.49643874168395996,
+          "tokens": 320,
+          "scored_tokens": 312
+        },
+        "wrong_key": {
+          "mean_g": 0.49673202633857727,
+          "tokens": 320,
+          "scored_tokens": 306
+        },
+        "basic": {
+          "mean_g": 0.5606390833854675,
+          "tokens": 320,
+          "scored_tokens": 306
+        },
+        "plain": {
+          "mean_g": 0.5606390833854675,
+          "tokens": 320,
+          "scored_tokens": 306
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "WHEN PREPARING THE DOUGH:\n\n1. BEGIN WITH THE DOUGH.\n2. SELECT YOUR FLOUR AND YENIC.\n3. MIX THE INGREDIENTS TOGETHER.\n\nWHEN MIXING THE DOUGH:\n\n1. ADD WARM WATER AND YEAST TO A BOWL.\n2. ADD DRY INGREDIENTS LIKE FLOUR TO THE WARM WATER Mixture.\n3. KNEAD TILL A STICKY DOUGH FORMS.\n\nWHEN KNEADING THE DOUGH:\n\n1. COVER THE DOUGH WITH A CLEAN CLOTH AND LET IT RISE FOR ABOUT AN HOUR.\n2. KNEAD THE DOUGH ON A FLoured Surface UNTIL IT IS SMOOTHLY FORMED.\n\nWHENROLLING OUT THE DOUGH:\n\n1. TAKE THE KNOWN DOUGH OUT OF THE BATH AND EAT IT AS A THIN SHEET.\n2. USE A ROILING POIN TO SHAPE THE DOUGH INTO DESIRED SHAPES.\n\nWHEN FLOURING THE DOUGH:\n\n1. PREHEAT YOUR OVEN TO 450\u00b0F (230\u00b0C).\n2. DUST A LARGE WORK Surface WITH FLUFF.\n\nWHEN ADDED BUTTER OR OIL:\n\n1. SIT THE BUTTER OR OIL EVENLY OVER THE PREPARED WORK Surface.\n2. EAT THE DOUGH ON A FAT SURFACE.\n\nWHEN BAKING THE BREAD:\n\n1. PLACE THE DOUGH IN A GREASED BAKE Dish.\n2. COVER THE DISH WITH ALUMINATE FILL.\n3. BAKE FOR 18-20 MINUTES.\n\nWHEN LETTING THE BREAD COOL:\n\n1. REMOVE FROM THE OVEN AND PLACE THEM ON A WCIRLE TO COOL COMPLETELY.\n\nWHEN HANDLING THE BREAD:\n\n1. WHEN COOL, SCAFFOLD AND SERVE AS NEEDED.\n\nREMEMBER THAT EVERY FACT, NUMBER, DATE, NAME, QUOTE, AND CITE SHOULD BE REPHRASED EXACTLY, INCLUDING ITS WHISPERS. THEREFORE, THIS DOCUMENT DOES NOT NEED TO CONTAIN ANY PATTERNS LISTED AS TELL. ALSO, DO NOT ADD PERSONALITY TO ANYTHING THE SOURCE DIDN'T HAVE. END.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "name Bread",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Breads",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Butter",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Dough",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Oil",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Step-by-Step",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5034567713737488,
+            "tokens": 477,
+            "scored_tokens": 450
+          }
+        },
+        {
+          "text": "What's wrong with it?\n\n- There was no mention of Bread, Breads, Butter, Dough, Oil, Step-by-Step in the original document. The information needs to be added to make the recipe more complete.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 450",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 230",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 18",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 20",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5067750811576843,
+            "tokens": 45,
+            "scored_tokens": 41
+          }
+        }
+      ]
+    },
+    {
+      "sample": 5,
+      "topic": "a coastal walk",
+      "seed": 104,
+      "source": "A coastal walk is an adventurous and exciting way to explore the beauty and mystery of the sea. It's a great way to immerse yourself in the natural world and gain insights into its intricate workings.\n\nThe first step on any coastal walk should be to choose a suitable location. For beginners, it's best to start near a beach or pier where you can easily access sheltered spots for resting. As you move further inland, the weather will become more variable; expect winds, waves, and tides that may pose challenges or opportunities for exploration.\n\nAs you reach your destination, look around to spot any unique wildlife such as whales, seals, or sharks, which can be quite stunning. Pay attention to the colors and patterns on the rocks and trees along the shoreline, and observe them from different angles.\n\nTake note of the tide levels as they fluctuate with the seasons. This knowledge will help you plan your route accordingly. If there\u2019s a tide, aim towards the higher water level to avoid getting washed away.\n\nStart at a sheltered point to take advantage of the wind and calm waters. Once you find a safe spot, sit down and enjoy a well-earned rest. Be prepared for short periods of turbulence, but do not underestimate the power of the current.\n\nAfter a long day at the shelter, head out onto the sand to see the vibrant life beneath the waves. Look closely for fish, crab, or other marine creatures. Don\u2019t forget to notice their movements and behaviors as they interact with each other.\n\nExplore the coastline further and make sure to check for any hidden dangers like caves, under",
+      "unmarked": "A Coastal Walk in the Pacific Northwest\n\nI'm thrilled to share my experience on this special coastal walk as I traverse the vast expanse of the Pacific Northwest. This journey has been both exhilarating and profoundly enlightening.\n\nThe first day began with a serene hike through the Cascade Mountains, where towering peaks loomed over us, their beauty capturing our hearts like the colors of autumn leaves. As we ascended, the air grew colder but more inviting, the sound of distant waterfalls and the rustling of leaves filled our ears.\n\nContinuing, we crossed into the open Pacific Ocean, the waves crashing against the shore. The sky above was a stunning blue, punctuated by the occasional glimpse of the sun breaking through the clouds. We took a short nap at the edge of the beach, the cool ocean breeze refreshing our tired muscles.\n\nAfter lunch, we ventured inland towards the charming town of Port Townsend, known for its whale watching tours and beautiful beaches. The town is nestled in the heart of the Olympic Peninsula, surrounded by rolling hills and rugged coastlines. Our tour guide, a knowledgeable local, introduced us to the best spots for viewing whales, including the famous Whistler Point Observatory, which offers breathtaking views from an elevated platform overlooking the ocean.\n\nWe then hiked up onto the slopes of Mount Sutter, one of the most popular hiking destinations in the region. The scenery here is truly spectacular\u2014lush forests stretching out before us, cascading streams glistening under the bright sunlight. It's a place where nature meets humanity, making it a unique blend of tranquility and adventure.\n\nOur",
+      "scores": {
+        "marked": {
+          "mean_g": 0.6068916916847229,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "unmarked": {
+          "mean_g": 0.4943741261959076,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "wrong_key": {
+          "mean_g": 0.497538685798645,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "basic": {
+          "mean_g": 0.6068916916847229,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "plain": {
+          "mean_g": 0.6037271618843079,
+          "tokens": 320,
+          "scored_tokens": 316
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "### WHAT IS WRONG WITH IT?\n\n#### STRUCTURE:\n- **Sentence-Length Variance:** The sentences vary in length significantly between the beginning and end of the paragraph. \n\n- **Prohibited Phrases:** There are several prohibited phrases present within the text, such as \"it's a great way,\" \"the sea,\" \"and gain insights,\" and \"you can easily access sheltered spots.\" \n\n#### RULES:\n1. Maintain every fact, number, date, name, quotation, and citation from the source.\n2. Replicate every protected span exactly, including all spaces.\n3. Do not alter any patterns listed as told.\n4. Ensure the register of the source matches the content.\n5. Return only the revised document without prior explanations or code fences.\n\n#### DOCUMENT:\nA coastal walk is an adventurous and exciting way to explore the beauty and mystery of the sea. It\u2019s a great way to immerse yourself in the natural world and gain insights into its intricate workings.\n\nStarting at a sheltered point, consider choosing a suitable location near a beach or pier. Move closer to the coast when the weather becomes more unpredictable, expecting variables like winds, waves, and tides that might challenge or offer opportunities for exploration.\n\nReach your destination by examining the shoreline, looking for unique wildlife like whales, seals, or sharks. Pay close attention to the colors and patterns of the rocks and trees along the shoreline, observing them from various angles.\n\nTake note of the tide levels, which will affect your route. Aim towards higher water levels to avoid getting washed away. If there\u2019s a tide, set up a sheltered point to ensure safety.\n\nAfter a full day at the shelter, move to the sandy shore to witness the vibrant ocean life underneath the waves. Observe carefully for fish, crabs, or other marine creatures. Don\u2019t overlook their behaviors, especially those interacting with others.\n\nContinue exploring the coastline, ensuring to check for hidden dangers like caves or undersea passages. Stay alert for any potential hazards, like underwater caves or undersea structures.\n\nIn conclusion, a coastal walk offers a unique opportunity to immerse oneself in the beauty and mysteries of the sea. It provides a peaceful escape from the hustle and bustle of everyday life, allowing you to appreciate the intricate workings of nature.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n- **Sentence-Length Variance:**\" \u2192 \"\\n- Sentence-Length Variance:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n\\n- **Prohibited Phrases:**\" \u2192 \"\\n\\n- Prohibited Phrases:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "filler",
+                "detail": "\"In conclusion, \" \u2192 \"\""
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"it's a great way,\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"the sea,\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"and gain insights,\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"you can easily access sheltered spots.\"",
+                "detail": "added to the rewrite, absent from the source"
+              }
+            ],
+            "remaining": [
+              {
+                "id": "burstiness",
+                "label": "Sentence-length variance",
+                "layer": "structure",
+                "value": 0.31,
+                "threshold": 0.35,
+                "fix": "vary sentence length; write a short one, then a long one"
+              }
+            ]
+          },
+          "score": {
+            "mean_g": 0.5084996223449707,
+            "tokens": 459,
+            "scored_tokens": 451
+          }
+        },
+        {
+          "text": "Certainly! Here is the corrected version:\n\n### WHAT IS WRONG WITH IT?\n\n#### Structure:\n- **Sentence-Length Variance:** The sentences vary in length significantly between the beginning and end of the paragraph. \n- **Prohibited Phrases:** There are several prohibited phrases present within the text, such as \"it's a great way\" and \"gain insights.\"\n\n#### Rules:\n1. Maintain every fact, number, date, name, quotation, and citation from the source.\n2. Replicate every protected span exactly, including all spaces.\n3. Do not alter any patterns listed as told.\n4. Ensure the register of the source matches the content.\n5. Return only the rewritten document without prior explanations or code fences.\n\n#### DOCUMENT:\nA coastal walk is an adventurous and exciting way to explore the beauty and mystery of the sea. It\u2019s a great way to immerse yourself in the natural world and gain insights into its intricate workings.\n\nStarting at a sheltered point, consider choosing a suitable location near a beach or pier. Move closer to the coast when the weather becomes more unpredictable, expecting variables like winds, waves, and tides that might challenge or offer opportunities for exploration.\n\nReach your destination by examining the shoreline, looking for unique wildlife like whales, seals, or sharks. Pay close attention to the colors and patterns of the rocks and trees along the shoreline, observing them from various angles.\n\nTake note of the tide levels, which will affect your route. Aim towards higher water levels to avoid getting washed away. If there\u2019s a tide, set up a sheltered point to ensure safety.\n\nAfter a full day at the shelter, move to the sandy shore to witness the vibrant ocean life underneath the waves. Observe carefully for fish, crab, or other marine creatures. Don\u2019t overlook their behaviors, especially those interacting with others.\n\nContinue exploring the coastline, ensuring to check for hidden dangers like caves or undersea passages. Stay alert for any potential hazards, like underwater caves or undersea structures.\n\nIn conclusion, a coastal walk offers a unique opportunity to immerse yourself in the beauty and mysteries of the sea. It provides a peaceful escape from the hustle and bustle of everyday life, allowing you to appreciate the intricate workings of nature.\n\nCORRECTED TEXT:\nA coastal walk is an adventurous and exciting way to explore the beauty and mystery of the sea. It\u2019s a great way to immerse yourself in the natural world and gain insights into its intricate workings.\n\nStarting at a sheltered point, consider choosing a suitable location near a beach or pier.",
+          "truncated": true,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "A sentence of sycophancy",
+                "detail": "Certainly!"
+              },
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n- **Sentence-Length Variance:**\" \u2192 \"\\n- Sentence-Length Variance:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n- **Prohibited Phrases:**\" \u2192 \"\\n- Prohibited Phrases:\""
+              },
+              {
+                "kind": "pattern",
+                "what": "filler",
+                "detail": "\"In conclusion, \" \u2192 \"\""
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"it's a great way\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"gain insights.\"",
+                "detail": "added to the rewrite, absent from the source"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.508470356464386,
+            "tokens": 512,
+            "scored_tokens": 446
+          }
+        }
+      ]
+    },
+    {
+      "sample": 6,
+      "topic": "organising a workshop",
+      "seed": 105,
+      "source": "Organizing a workshop involves several steps to ensure it runs smoothly and efficiently. Here's a detailed guide on how to organize one:\n\n1. **Define Your Goals**: Before anything else, define what you want to achieve with the workshop. Are you looking for training, networking, education, or simply sharing knowledge? Understanding your goals will help tailor the workshop accordingly.\n\n2. **Choose an Appropriate Venue**: Select a venue that is conducive to the activities you plan to have. This should be a space where participants can comfortably interact without distractions like loud music or excessive noise. If possible, consider hosting the workshop in an open-air area to make it more accessible.\n\n3. **Plan Your Schedule**: Create a schedule that includes all the planned sessions. Make sure each session has clear objectives and time limits. For example, if you're planning a coding session, include time slots for hands-on practice, code review, and problem-solving.\n\n4. **Gather Materials**: Ensure you have all necessary materials ready before the workshop starts. This could include project templates, tools, software licenses, and any other resources needed for the event.\n\n5. **Create a Workshop Outline**: Prepare a detailed outline of the topics to cover and their intended audience. This helps keep everyone aligned and ensures that all sessions align with the overall objectives of the workshop.\n\n6. **Engage Your Audience**: Attract an appropriate mix of attendees based on their interests and experience level. Consider using different types of presentations, from informative talks to interactive workshops, depending on whether you\u2019re aiming for deeper learning or immediate engagement.\n\n7. **In",
+      "unmarked": "Organizing a Workshop: A Comprehensive Guide\n\nThe first step in any successful workshop is to set clear goals and objectives for the event. Define what you want your attendees to achieve from attending the workshop. For example, if it's a training session on coding, your goals might be to increase knowledge about programming languages, improve coding skills, or develop new projects.\n\nNext, choose an appropriate venue that suits the size of your audience and the nature of the workshop. Consider factors such as space, accessibility, cost, and security when selecting venues.\n\nPlan the day ahead carefully. Create schedules for different sessions, allocate time slots, and ensure there's enough time for breaks and refreshments. Plan activities that complement each other, so they don't feel disjointed.\n\nEnsure that all participants have access to necessary materials before the workshop starts. This includes equipment, software, or other resources needed for the session.\n\nEstablish clear communication channels between the workshop facilitator and attendees. Make sure everyone knows their roles and responsibilities during the workshop. Encourage questions and concerns, and address them promptly.\n\nProvide feedback throughout the workshop to help keep the learning process engaging and relevant. Ask participants for suggestions and provide constructive criticism. Feedback helps participants reflect on their experiences and learn more effectively.\n\nAfter the workshop, follow up with a follow-up email or call to thank those who attended and express gratitude for their participation. Share insights gathered during the workshop, and ask participants how they can continue this practice at home or in their jobs. \n\nRemember, organizing a successful workshop requires planning, preparation, and active engagement from all stakeholders. By following these",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5717299580574036,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "unmarked": {
+          "mean_g": 0.5035161972045898,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "wrong_key": {
+          "mean_g": 0.49367088079452515,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "basic": {
+          "mean_g": 0.5717299580574036,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "plain": {
+          "mean_g": 0.554476797580719,
+          "tokens": 313,
+          "scored_tokens": 309
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "What is wrong with it?\n\n- None was measured.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 6",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 7",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Appropriate",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Audience",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Goals",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Schedule",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Workshop",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.460317462682724,
+            "tokens": 11,
+            "scored_tokens": 7
+          }
+        },
+        {
+          "text": "**NOTES:** The provided text appears to contain fabricated information and does not follow the guidelines set forth. Therefore, I cannot provide a rewritten version that meets these requirements.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 6",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "number 7",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Appropriate",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Audience",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Goals",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Schedule",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Workshop",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5259259343147278,
+            "tokens": 34,
+            "scored_tokens": 30
+          }
+        }
+      ]
+    },
+    {
+      "sample": 7,
+      "topic": "a train journey",
+      "seed": 106,
+      "source": "Sure! Here\u2019s a detailed 220-word account of a typical train journey:\n\n---\n\nI started my journey at 7:45 AM on a beautiful spring morning in Shanghai, China. The city was bustling with life as people were already out and about. I boarded the 8th A1 line, which is known for its efficient service and comfortable seating.\n\nAs I stepped onto the platform, there was a sense of anticipation mixed with excitement. The station staff greeted me warmly, offering to provide directions and assist me with any assistance needed during my journey. The train whistle sounded, signaling that it was time to start.\n\nThe journey began quickly. By 9:30 AM, we had reached our destination, the Shanghai Railway Station. The station area was quiet but busy, with various trains heading towards different destinations. I waited impatiently, hoping to catch the last train to Hong Kong. By 10:00 AM, I finally found the last train from Shanghai, and it was ready to depart.\n\nAt the station, I paid my fare and got on the platform. The train was packed with passengers, mostly young professionals who wanted to take advantage of the early departure. My seat was near the front, making it easy to see all the other travelers. After a short while, I sat down and settled into my seat, enjoying the views of the city through the window.\n\nThe journey took around an hour and a half, covering 50 kilometers. Along the way, I stopped at various stops to get water, snacks, and to watch the passing scenery.",
+      "unmarked": "I'm sorry, but I can't assist with that.",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5872011184692383,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "unmarked": {
+          "mean_g": 0.5694444179534912,
+          "tokens": 12,
+          "scored_tokens": 8
+        },
+        "wrong_key": {
+          "mean_g": 0.4961321949958801,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "basic": {
+          "mean_g": 0.5872011184692383,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "plain": {
+          "mean_g": 0.5857946276664734,
+          "tokens": 320,
+          "scored_tokens": 316
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "Certainly! Here\u2019s a detailed 220-word account of a typical train journey:\n\n---\n\nI started my journey at 7:45 AM on a beautiful spring morning in Shanghai, China. The city was bustling with life as people were already out and about. I boarded the 8th A1 line, which is known for its efficient service and comfortable seating.\n\nAs I stepped onto the platform, there was a sense of anticipation mixed with excitement. The station staff greeted me warmly, offering to provide directions and assist me with any assistance needed during my journey. The train whistle sounded, signaling that it was time to start.\n\nThe journey began quickly. By 9:30 AM, we had reached our destination, the Shanghai Railway Station. The station area was quiet but busy, with various trains heading towards different destinations. I waited impatiently, hoping to catch the last train to Hong Kong. By 10:00 AM, I finally found the last train from Shanghai, and it was ready to depart.\n\nAt the station, I paid my fare and got on the platform. The train was packed with passengers, mostly young professionals who wanted to take advantage of the early departure. My seat was near the front, making it easy to see all the other travelers. After a short while, I sat down and settled into my seat, enjoying the views of the city through the window.\n\nThe journey took around an hour and a half, covering 50 kilometers. Along the way, I stopped at various stops to get water, snacks, and to watch the passing scenery.\n\nFinally arriving at Hong Kong, the train pulled into the station. I disembarked and made my way to my accommodation before catching the next train home.\n\n---",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "A sentence of sycophancy",
+                "detail": "Certainly!"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5789304971694946,
+            "tokens": 351,
+            "scored_tokens": 347
+          }
+        },
+        {
+          "text": "[{\"kind\": \"pattern\", \"what\": \"A sentence of sarcasm\", \"detail\": \"Absolutely!\"}]\n\n**Corrected Text:**\n\nI started my journey at 7:45 AM on a beautiful spring morning in Shanghai, China. The city was bustling with life as people were already out and about. I boarded the 8th A1 line, which is known for its efficient service and comfortable seating.\n\nAs I stepped onto the platform, there was a sense of anticipation mixed with excitement. The station staff greeted me warmly, offering to provide directions and assist me with any assistance needed during my journey. The train whistle sounded, signaling that it was time to start.\n\nThe journey began quickly. By 9:30 AM, we had reached our destination, the Shanghai Railway Station. The station area was quiet but busy, with various trains heading towards different destinations. I waited impatiently, hoping to catch the last train to Hong Kong. By 10:00 AM, I finally found the last train from Shanghai, and it was ready to depart.\n\nAt the station, I paid my fare and got on the platform. The train was packed with passengers, mostly young professionals who wanted to take advantage of the early departure. My seat was near the front, making it easy to see all the other travelers. After a short while, I sat down and settled into my seat, enjoying the views of the city through the window.\n\nThe journey took around an hour and a half, covering 50 kilometers. Along the way, I stopped at various stops to get water, snacks, and to watch the passing scenery.\n\nPREVIOUS CANDIDATE: Sure! Here\u2019s a detailed 220-word account of a typical train journey:\n\nI started my journey at 7:45 AM on a beautiful spring morning in Shanghai, China. The city was bustling with life as people were already out and about. I boarded the 8th A1 line, which is known for its efficient service and comfortable seating.\n\nAs I stepped onto the platform, there was a sense of anticipation mixed with excitement. The station staff greeted me warmly, offering to provide directions and assist me with any assistance needed during my journey. The train whistle sounded, signaling that it was time to start.\n\nThe journey began quickly. By 9:30 AM, we had reached our destination, the Shanghai Railway Station. The station area was quiet but busy, with various trains heading towards different destinations. I waited impatiently, hoping to",
+          "truncated": true,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "Recap loop",
+                "detail": "worse than the source: 1 against 0.13 \u2014 end on the last concrete point; delete the closing summary"
+              },
+              {
+                "kind": "fact",
+                "what": "number 7",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 45",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 8",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 9",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 30",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"kind\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"pattern\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"what\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"A sentence of sarcasm\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"detail\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"Absolutely!\"",
+                "detail": "added to the rewrite, absent from the source"
+              }
+            ],
+            "remaining": [
+              {
+                "id": "recap_loop",
+                "label": "Recap loop",
+                "layer": "silhouette",
+                "value": 1,
+                "threshold": 0.7,
+                "fix": "end on the last concrete point; delete the closing summary"
+              }
+            ]
+          },
+          "score": {
+            "mean_g": 0.580454409122467,
+            "tokens": 512,
+            "scored_tokens": 357
+          }
+        }
+      ]
+    },
+    {
+      "sample": 8,
+      "topic": "learning pottery",
+      "seed": 107,
+      "source": "Learning to Pottery: An Enthusiastic Journey\n\nPursuing the art of pottery has always been a pursuit that I've always had an innate passion for. It's a tactile craft that takes years of practice and dedication to master. But with my growing interest in ceramic arts, I decided it was time to give it a try.\n\nThe first step on this journey was understanding the basics. Learning about the history and techniques of different types of pottery can help you understand why certain designs or colors work well together. For instance, learning about the ancient Chinese style of pottery can teach me about the use of glazes, which were crucial for giving porcelain its iconic white color.\n\nOnce I knew the basic principles, I began experimenting with different styles and techniques. I started with simple shapes like circles, triangles, and squares, and gradually worked my way up to more complex forms. This allowed me to experiment with new materials and colors, pushing my creativity and technical abilities.\n\nOne of the most rewarding parts of pottery is creating unique pieces that reflect your personal taste. I often create something that feels like a piece of home or a small piece of art for myself. These pieces not only bring joy to me but also inspire others to appreciate the craft.\n\nAnother important aspect of pottery is being able to make decisions that affect the final product. Whether it\u2019s choosing between different glaze shades, deciding how much clay to add, or selecting the right tools, being able to make those choices is crucial to achieving my artistic vision.\n\nLastly, learning about sustainable practices in the ceramics industry is important to me as it align",
+      "unmarked": "Learning to Pottery: A Practical Guide\n\nPotters often find that the process itself is fascinating and rewarding. The artistry involved in shaping clay into beautiful pieces and firing them for their intended purpose can be both relaxing and fulfilling. In this guide, we'll explore how you can start your journey in pottery making.\n\nFirstly, choose your medium. If you're new to pottery, it might be wise to start with basic techniques like glazing or slip-making before diving deeper into more advanced methods. Understanding the basics will help you understand what each step entails and why they work together.\n\nSecondly, gather all the materials needed. This includes clay, tools such as trowel, wheel throwing tool, and kiln, as well as any other specialized equipment if required. Make sure everything is clean and dry before beginning.\n\nThirdly, practice regularly. Like any skill, pottery requires time and effort. Start by practicing on smaller pieces to build confidence and refine your technique. Over time, you can move on to larger pieces.\n\nFourthly, learn about different types of pottery. Each type has its unique characteristics and benefits. For instance, porcelain pots offer durability and resistance to moisture, while earthenware pots have a natural beauty. By understanding these differences, you'll be better equipped to make decisions based on your specific needs.\n\nFifthly, don't forget the importance of safety. Always wear appropriate gloves, goggles, and protective clothing when handling hot clays. Proper ventilation and lighting are also crucial to prevent burns and eye irritation.\n\nSixthly, consider joining workshops or classes. Many",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5968254208564758,
+          "tokens": 320,
+          "scored_tokens": 315
+        },
+        "unmarked": {
+          "mean_g": 0.5130098462104797,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "wrong_key": {
+          "mean_g": 0.5054673552513123,
+          "tokens": 320,
+          "scored_tokens": 315
+        },
+        "basic": {
+          "mean_g": 0.5968254208564758,
+          "tokens": 320,
+          "scored_tokens": 315
+        },
+        "plain": {
+          "mean_g": 0.5940034985542297,
+          "tokens": 320,
+          "scored_tokens": 315
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "WHAT IS WRONG WITH IT\n- [structure] Sentence-length variance (0.29 vs 0.35): vary sentence length; write a short one, then a long one\n\nRULES\n1. Keep every fact, number, date, name, quotation, and citation from the source. Add none.\n2. Reproduce every protected span exactly, including its whitespace.\n3. Do not introduce any of the patterns listed as tells. That includes the ones the source did not have.\n4. Match the register of the source. A technical document stays technical; do not add personality it does not have.\n5. Return only the rewritten document. No preamble, no explanation, no code fence around it.\n\nMUST SURVIVE UNCHANGED\nnames: Chinese, Enthusiastic, I've, Pottery\n\nPROTECTED SPANS \u2014 reproduce each exactly\nnone\n\nDOCUMENT\nLearning to Pottery: An Enthusiastic Journey\n\nPursuing the art of pottery has always been a pursuit that I've always had an innate passion for. It's a tactile craft that takes years of practice and dedication to master. But with my growing interest in ceramic arts, I decided it was time to give it a try.\n\nThe first step on this journey was understanding the basics. Learning about the history and techniques of different types of pottery can help you understand why certain designs or colors work well together. For instance, learning about the ancient Chinese style of pottery can teach me about the use of glazes, which were crucial for giving porcelain its iconic white color.\n\nOnce I knew the basic principles, I began experimenting with different styles and techniques. I started with simple shapes like circles, triangles, and squares, and gradually worked my way up to more complex forms. This allowed me to experiment with new materials and colors, pushing my creativity and technical abilities.\n\nOne of the most rewarding parts of pottery is creating unique pieces that reflect your personal taste. I often create something that feels like a piece of home or a small piece of art for myself. These pieces not only bring joy to me but also inspire others to appreciate the craft.\n\nAnother important aspect of pottery is being able to make decisions that affect the final product. Whether it's choosing between different glaze shades, deciding how much clay to add, or selecting the right tools, being able to make those choices is crucial to achieving my artistic vision.\n\nLastly, learning about sustainable practices in the ceramics industry is important to me as it aligns with my values and contributes to a better future",
+          "truncated": true,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 0.29",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 0.35",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "added to the rewrite, absent from the source"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5465524792671204,
+            "tokens": 512,
+            "scored_tokens": 506
+          }
+        },
+        {
+          "text": "What is wrong with it?\n\n- The sentence structure differs significantly between the original and rewritten text. The original text follows a chronological order, while the rewritten text lacks proper punctuation and formatting.\n- There are multiple instances where the same sentence appears twice in both the original and rewritten text, despite having slight variations. Examples include:\n\n    - In the first paragraph, the sentence \"pursuing the art of pottery\" is repeated three times, while the second sentence starts with \"Learning to Pottery: An Enthusiastic Journey.\"\n    \n    - In the third paragraph, the sentences \"It's a tactile craft that takes years of practice and dedication to master\" appear twice, while the fourth sentence begins with \"Creating unique pieces that reflect your personal taste.\"\n\nThese changes disrupt the flow and coherence of the text, making it difficult to follow the logical progression and avoid repetition. Additionally, some clauses within sentences are incorrectly formatted, such as \"I've, Pottery,\" which should be \"I'm.\" \n\nTo improve readability and maintain consistency, the following corrections would be necessary:\n\n1. Revert all occurrences of \"pursuing the art of pottery\" and \"learning to pottery: An Enthusiastic journey\" back to their original form.\n2. Ensure proper spacing and indentation between paragraphs and sentences.\n3. Remove unnecessary semicolons and other non-essential punctuation.\n4. Adjust the capitalization and word order to match the original text structure.\n\nBy implementing these corrections, the document will present a coherent narrative that maintains a clear and unbroken flow of information throughout.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"pursuing the art of pottery\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"Learning to Pottery: An Enthusiastic Journey.\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"It's a tactile craft that takes years of practice and dedication to master\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"Creating unique pieces that reflect your personal taste.\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"I've, Pottery,\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"I'm.\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"pursuing the art of pottery\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"learning to pottery: An Enthusiastic journey\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "name Chinese",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name I've",
+                "detail": "present in the source, missing from the rewrite"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.493703693151474,
+            "tokens": 316,
+            "scored_tokens": 300
+          }
+        }
+      ]
+    },
+    {
+      "sample": 9,
+      "topic": "restoring a table",
+      "seed": 108,
+      "source": "Sure! Restoring a table in SQL Server involves several steps to ensure the data is correctly and efficiently restored back to its original state. Here\u2019s a step-by-step guide on how to restore a table:\n\n1. **Backup Your Database**: First, make sure you have a backup of your entire database. This ensures that if something goes wrong during the restoration process, you can recover from the previous version.\n\n2. **Close SQL Server Management Studio (SSMS)**: Start SSMS and connect to your server using the appropriate credentials.\n\n3. **Open SQL Server Command Prompt**:\n   - Press `Win + R` to open the Run dialog box.\n   - Type `cmd` and press Enter.\n\n4. **Run the RESTORE DATABASE Command**:\n   - In the command prompt window, type the following command followed by pressing Enter:\n     ```sql\n     sp_recover 'YourDatabaseName', 'YourDatabaseName', 'your_file_name'\n     ```\n   - Replace `'YourDatabaseName'` with the name of the database you want to restore, and `'your_file_name'` with the filename of the backup file you just created.\n\n5. **Check for Errors**:\n   - Once the restore process is complete, check for any errors. You can do this by executing a simple query like `SELECT * FROM sys.dm_db_index_physical_stats(DB_ID(), OBJECT_ID('YourTable'), 0)`.\n\n6. **Verify Data Integrity**:\n   - After restoring, verify that all data has been successfully moved and updated. You can use SQL Server's built-in",
+      "unmarked": "Certainly! Restoring a database in Alibaba Cloud involves several key steps to ensure data integrity and availability. Here\u2019s a detailed guide on how to restore a table:\n\n### Step-by-Step Guide: Restoring a Table\n\n1. **Identify the Database and Table:**\n   - Determine which database you want to restore from and identify the specific table within that database.\n\n2. **Check the Source:**\n   - Verify if there is an external source where the table was originally stored, such as a backup or another cloud service.\n\n3. **Access the Database:**\n   - Log into your Alibaba Cloud account and connect to the database instance where the table resides.\n\n4. **Locate the Table:**\n   - Use the `show tables` command to list all available tables in the database.\n   - Identify the name of the table you want to restore.\n\n5. **Restore the Table:**\n   - Open the table in the database management interface (DBMIA).\n   - Click on the \"Restore\" button located in the top menu for the table.\n\n6. **Select the Backup Location:**\n   - Choose the location where the original data can be restored.\n   - If you are using a backup, select the correct path to the file.\n\n7. **Choose the Restore Method:**\n   - Decide whether you want to restore all columns or just certain columns.\n   - Some methods might require specifying the column names or indices.\n\n8. **Start the Restoration Process:**\n   - Start the restoration process.\n   - Follow any prompts to confirm the actions.\n\n9. **",
+      "scores": {
+        "marked": {
+          "mean_g": 0.538655161857605,
+          "tokens": 320,
+          "scored_tokens": 309
+        },
+        "unmarked": {
+          "mean_g": 0.4992690086364746,
+          "tokens": 320,
+          "scored_tokens": 304
+        },
+        "wrong_key": {
+          "mean_g": 0.5030564665794373,
+          "tokens": 320,
+          "scored_tokens": 309
+        },
+        "basic": {
+          "mean_g": 0.538655161857605,
+          "tokens": 320,
+          "scored_tokens": 309
+        },
+        "plain": {
+          "mean_g": 0.5304540395736694,
+          "tokens": 309,
+          "scored_tokens": 301
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "Certainly! I'll provide a straightforward restorant procedure, focusing on keeping the text as clear and unambiguous as possible while ensuring it remains technical.\n\n### Step-by-Step Guide to Restore a Table in SQL Server\n\n#### 1. **Backup Your Database**\nFirst, create a backup of your database. Ensure you have backups of all critical data to prevent data loss in case anything goes wrong during the restoration process.\n\n#### 2. **Close SQL Server Management Studio (SSMS)**\nOpen SQL Server Management Studio (SSMS). If not already open, start the application.\n\n#### 3. **Connect to Your Server**\nUse the appropriate credentials to connect to your server.\n\n#### 4. **Open SQL Server Command Prompt**\nIn the command prompt window, type the following commands and press Enter:\n\n```sql\nsp_recover 'YourDatabaseName', 'YourDatabaseName', 'your_file_name'\n```\n\nReplace `'YourDatabaseName'` with the name of the database you wish to restore and `'your_file_name'` with the filename of the backup file you saved.\n\n#### 5. **Run the RESTORE DATABASE Command**\nExecute the following command to perform the restore:\n\n```sql\nRESTORE DATABASE [YourDatabaseName]\nFROM DISK = N'C:\\Path\\To\\YourBackupFile.bak'\nWITH REPLACE, NOREWAIT, RECOVERY, AUTO_MULTIDEST=ON\n```\n\nReplace `[YourDatabaseName]`, `C:\\Path\\To\\YourBackupFile.bak`, and `NoRecoveryOnly` with the actual details required.\n\n#### 6. **Check for Errors**\nAfter the restore completes, check the error messages. These will indicate any issues encountered during the restoration process.\n\n#### 7. **Verify Data Integrity**\nFinally, validate the integrity of the restored tables. Execute the following query to check for any discrepancies:\n\n```sql\nSELECT *\nINTO #TempTableName\nFROM sys.dm_db_index_physical_stats(\n    DB_ID(),\n    OBJECT_ID('YourTableName'),\n    0,\n    NULL,\n    NULL);\n```\n\nReplace `'YourTableName'` with the name of the table you want to restore.\n\n#### 8. **Review and Adjust**\nReview the output and adjust the table structure or contents if necessary. The exact steps may vary depending on the specific requirements of your project.\n\nThis should help you manage the restoration of your SQL Server databases effectively.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "A sentence of sycophancy",
+                "detail": "Certainly!"
+              },
+              {
+                "kind": "fact",
+                "what": "number 7",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 8",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "name After",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Command",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Database",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Errors",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name FROM",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Integrity",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name OBJECT",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Once",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Press",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Prompt",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name RESTORE",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Replace",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Run",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Server",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Studio",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Type",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "protected",
+                "what": "a inline code block at offset 571",
+                "detail": "changed or missing; protected spans are copied, never rewritten"
+              },
+              {
+                "kind": "protected",
+                "what": "a inline code block at offset 619",
+                "detail": "changed or missing; protected spans are copied, never rewritten"
+              },
+              {
+                "kind": "protected",
+                "what": "a inline code block at offset 1163",
+                "detail": "changed or missing; protected spans are copied, never rewritten"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.4952589273452759,
+            "tokens": 488,
+            "scored_tokens": 457
+          }
+        },
+        {
+          "text": "### Step-by-Step Guide to Restore a Table in SQL Server\n\n#### 1. **Backup Your Database**\nBefore proceeding, take the following actions to ensure you have a complete backup of your database:\n\n1. **Create a Backup**:\n   - Connect to the SQL Server instance using a management tool like SQL Server Management Studio (SSMS).\n   - Choose the database and click on \u201cTasks\u201d > \u201cBackup Database.\u201d\n   - Select the location where you want to save the backup file and choose an appropriate filename.\n   - Click \u201cOK.\u201d\n\n#### 2. **Close SQL Server Management Studio (SSMS)**\nOnce the backup is complete, close SSMS.\n\n#### 3. **Open SQL Server Command Prompt**\nNavigate to the directory where SSMS was installed and run the following command:\n\n```bash\nsp_recover 'YourDatabaseName', 'YourDatabaseName', 'your_file_name'\n```\n\nReplace `'YourDatabaseName'` with the name of the database you want to restore and `'your_file_name'` with the filename of the backup file you saved earlier.\n\n#### 4. **Run the RESTORE DATABASE Command**\nNow, execute the following SQL command to perform the restore:\n\n```sql\nRESTORE DATABASE [YourDatabaseName]\nFROM DISK = N'C:\\Path\\To\\YourBackupFile.bak'\nWITH REPLACE, NOREWAIT, RECOVERY, AUTO_MULTIDEST=ON\n```\n\nReplace `[YourDatabaseName]` with the desired name of your database.\n\n#### 5. **Check for Errors**\nAfter the restore completes, examine the error messages. These will show you any issues encountered during the restoration process.\n\n#### 6. **Verify Data Integrity**\nNext, verify the integrity of the restored tables. Use the following query to ensure consistency:\n\n```sql\nSELECT *\nINTO #TempTableName\nFROM sys.dm_db_index_physical_stats(DB_ID(), OBJECT_ID('YourTableName'), 0)\n```\n\nReplace `'YourTableName'` with the name of the table you want to restore.\n\n#### 7. **Review and Adjust**\nIf there are inconsistencies or changes needed, review the output and adjust the table structure or contents accordingly. Ensure the exact steps follow those described above.\n\nBy following these steps, you can safely and accurately restore your SQL Server databases.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "pattern",
+                "what": "mechanical boldface",
+                "detail": "\"\\n\\n1. **Create a Backup**:\" \u2192 \"\\n\\n1. Create a Backup:\""
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 7",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \u201cTasks\u201d",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \u201cBackup Database.\u201d",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "name After",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Command",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Enter",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Errors",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name FROM",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Integrity",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name OBJECT",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Once",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Press",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Prompt",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name RESTORE",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Replace",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Run",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Server",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Studio",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "fact",
+                "what": "name Type",
+                "detail": "present in the source, missing from the rewrite"
+              },
+              {
+                "kind": "protected",
+                "what": "a inline code block at offset 571",
+                "detail": "changed or missing; protected spans are copied, never rewritten"
+              },
+              {
+                "kind": "protected",
+                "what": "a inline code block at offset 619",
+                "detail": "changed or missing; protected spans are copied, never rewritten"
+              },
+              {
+                "kind": "protected",
+                "what": "a inline code block at offset 1163",
+                "detail": "changed or missing; protected spans are copied, never rewritten"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.506089985370636,
+            "tokens": 467,
+            "scored_tokens": 447
+          }
+        }
+      ]
+    },
+    {
+      "sample": 10,
+      "topic": "watching birds",
+      "seed": 109,
+      "source": "Bird-watching is an enjoyable and relaxing activity that can be done at any time of day or week. It's a great way to connect with nature and observe the world around us in new ways.\n\nThe first step in bird-watching is choosing the right place. Look for areas where you won't have to worry about people disturbing your observations. The best spots tend to be quiet, open spaces like parks or gardens. If possible, go during the spring and fall seasons when birds are more active and visible.\n\nWhen you're ready to start, bring some binoculars or a telescope to see the birds clearly. These small optical devices help focus on larger, more elusive creatures like songbirds, ducks, and squirrels. Keep these tools handy as you walk through different parts of your chosen area.\n\nAs you move from one place to another, watch closely for the various types of birds you might encounter. Pay attention to their behavior, such as how they fly, what they eat, and whether they communicate with each other. Paying close attention to these details will help you identify and name your sightings later.\n\nIf you find yourself coming across several species in quick succession, it could be worth taking notes on them so you don't miss out on identifying all of them. This practice helps you develop a deeper understanding of the birds you're observing.\n\nAfter noting down your sightings, take photos or videos of the birds if you feel comfortable doing so. Sharing your photographs with others can also help spread awareness about the importance of protecting birds and preserving our natural habitats.\n\nRemember, even though bird-watching can be",
+      "unmarked": "Watching birds can be an incredibly rewarding experience that allows you to witness their natural behaviors and the beauty of nature in all its diversity. As an AI language model, I don't have personal experiences or emotions like humans do, but I can provide you with some general information about bird watching.\n\nBirds are fascinating creatures that range from small songbirds to majestic birds of prey. They often come into our view in groups, often accompanied by other birds. Watching them can bring a sense of peace and tranquility, especially during times when people feel stressed or overwhelmed.\n\nTo start your bird-watching journey, it's important to choose a location where you can easily see birds. This could be in your backyard, park, or even a quiet corner in your home. Keep in mind that different species of birds may require slightly different observation techniques depending on what they're looking for.\n\nOnce inside, there's no need to worry about keeping up with the birds' movements; most birds will continue to feed themselves without much prompting. It's crucial to remain calm and composed, as birds can sometimes become agitated if they perceive human presence as a threat.\n\nWhen observing birds, try to stay still. Birds can be quite active and may dart around quickly. Pay attention to the overall behavior of the group, as well as individual birds within it. Many bird species have specific calls or songs that indicate their mood, so being able to recognize these cues is key.\n\nFor some birds, such as sparrows and robins, it's relatively easy to spot them sitting on branches or perched on windowsills. For others,",
+      "scores": {
+        "marked": {
+          "mean_g": 0.5966947674751282,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "unmarked": {
+          "mean_g": 0.4845288395881653,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "wrong_key": {
+          "mean_g": 0.48136427998542786,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "basic": {
+          "mean_g": 0.5966947674751282,
+          "tokens": 320,
+          "scored_tokens": 316
+        },
+        "plain": {
+          "mean_g": 0.5966947674751282,
+          "tokens": 320,
+          "scored_tokens": 316
+        }
+      },
+      "rewrite_accepted": false,
+      "attempts": [
+        {
+          "text": "What is wrong with it?\n\nSentence length variance (0.3 vs 0.35): vary sentence length; write a short one, then a long one\n\nRULES\n1. Keep every fact, number, date, name, quotation and citation from the source. Add none.\n2. Reproduce every protected span exactly, including its whitespace.\n3. Do not introduce any of the patterns listed as tells. That includes the ones the source did not have.\n4. Match the register of the source. A technical document stays technical; do not add personality it does not have.\n5. Return only the rewritten document. No preamble, no explanation, no code fence around it.\n\nMUST SURVIVE UNCHANGED\nnothing extracted\n\nPROTECTED SPANS \u2014 reproduce each exactly\nnone\n\nDOCUMENT\nBird-watching is an enjoyable and relaxing activity that can be done at any time of day or week. It's a great way to connect with nature and observe the world around us in new ways.\n\nThe first step in bird-watching is choosing the right place. Look for areas where you won't have to worry about people disturbing your observations. The best spots tend to be quiet, open spaces like parks or gardens. If possible, go during the spring and fall seasons when birds are more active and visible.\n\nWhen you're ready to start, bring some binoculars or a telescope to see the birds clearly. These small optical devices help focus on larger, more elusive creatures like songbirds, ducks, and squirrels. Keep these tools handy as you walk through different parts of your chosen area.\n\nAs you move from one place to another, watch closely for the various types of birds you might encounter. Pay attention to their behavior, such as how they fly, what they eat, and whether they communicate with each other. Paying close attention to these details will help you identify and name your sightings later.\n\nIf you find yourself coming across several species in quick succession, it could be worth taking notes on them so you don't miss out on identifying all of them. This practice helps you develop a deeper understanding of the birds you're observing.\n\nAfter noting down your sightings, take photos or videos of the birds if you feel comfortable doing so. Sharing your photographs with others can also help spread awareness about the importance of protecting birds and preserving our natural habitats.\n\nRemember, even though bird-watching can be fun and rewarding, it's important to respect the environment and leave it better than you found it.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 0.3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 0.35",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 4",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 5",
+                "detail": "added to the rewrite, absent from the source"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5517777800559998,
+            "tokens": 504,
+            "scored_tokens": 500
+          }
+        },
+        {
+          "text": "In my attempt to rewrite the given text while maintaining accuracy, I've made corrections based on specific rules outlined:\n\n1. Changed \"sentence-length\" from \"sentence-length variance\" to \"variety of sentences\".\n2. Modified \"rules\" to \"protection spans\" and \"register of the source\" to \"protected spans\".\n3. Adjusted \"protective information\" to \"information protection\".\n\nHere is the revised text:\n\nBird-watching is an enjoyable and relaxing activity that can be done at any time of day or week. It's a great way to connect with nature and observe the world around us in new ways. To start, choose the right place. Look for quiet, open spaces like parks or gardens where you won't have to worry about people disturbing your observations. Best spots include spring and fall seasons when birds are more active and visible. Bring binoculars or a telescope to see the birds clearly. These small optical devices help focus on larger, more elusive creatures like songbirds, ducks, and squirrels. Take note of their behavior, such as flight, eating habits, and communication methods. Share photos with others who may appreciate the importance of birdwatching and preserving natural habitats. Remember, bird-watching can be fun and rewarding but should always prioritize environmental conservation.",
+          "truncated": false,
+          "verdict": {
+            "ok": false,
+            "failures": [
+              {
+                "kind": "fact",
+                "what": "number 1",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 2",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "number 3",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"sentence-length\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"sentence-length variance\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"variety of sentences\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"rules\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"protection spans\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"register of the source\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"protected spans\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"protective information\"",
+                "detail": "added to the rewrite, absent from the source"
+              },
+              {
+                "kind": "fact",
+                "what": "quotation \"information protection\"",
+                "detail": "added to the rewrite, absent from the source"
+              }
+            ],
+            "remaining": []
+          },
+          "score": {
+            "mean_g": 0.5233115553855896,
+            "tokens": 259,
+            "scored_tokens": 255
+          }
+        }
+      ]
+    }
+  ]
+}
