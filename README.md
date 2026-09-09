@@ -299,3 +299,21 @@ Not a tool for removing authorship marks from work that is not yours.
 
 MIT. MI-GAN is MIT ([Picsart AI Research](https://github.com/Picsart-AI-Research/MI-GAN));
 IBM Plex Sans and JetBrains Mono are OFL.
+
+## Manual skill invocation
+
+These skills run when explicitly invoked: `unmark`. Use `$name` in Codex or `/name` in Claude Code and OpenCode (with the plugin namespace when installed as a Claude plugin).
+
+The skill bundle disables implicit selection in Codex and Claude Code. OpenCode V2 reads `metadata.opencode/autoinvoke: "false"`. For OpenCode V1, merge these entries into `permission.skill` in `~/.config/opencode/opencode.json` or the project configuration; retain unrelated permissions:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "unmark": "deny"
+    }
+  }
+}
+```
+
+On OpenCode 1.18.30, these rules hide the skills from the agent and reject skill-tool loading, while explicit `/name` commands remain available. Installation with `skills add` does not apply this OpenCode V1 configuration.

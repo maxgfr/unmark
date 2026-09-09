@@ -1,6 +1,9 @@
 ---
 name: unmark
 description: Inspect, decode, or remove hidden marks from text and files, including invisible Unicode, EXIF/C2PA/XMP metadata, PDF/DOCX history, and AI-style signals. Use image editing for visible pixel watermarks.
+disable-model-invocation: true
+metadata:
+  opencode/autoinvoke: 'false'
 ---
 
 # unmark
