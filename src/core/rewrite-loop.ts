@@ -20,13 +20,14 @@ export async function rewriteLoop(
     timeoutMs?: number
     signal?: AbortSignal
     onProgress?: (message: string) => void
+    makePrompt?: typeof briefToPrompt
   } = {},
 ): Promise<RewriteOutcome> {
   const attempts = options.attempts ?? 3
   if (!Number.isInteger(attempts) || attempts < 1) {
     throw new Error('Rewrite attempts must be a positive whole number.')
   }
-  const prompt = briefToPrompt(text, brief)
+  const prompt = (options.makePrompt ?? briefToPrompt)(text, brief)
   let verdict: RewriteVerdict | undefined
   let candidate = ''
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -76,6 +77,11 @@ export async function rewriteLoop(
     text: candidate,
     verdict,
     attempts,
-    notes: ['The rewrite did not pass the content checks.'],
+    notes: [
+      'The AI rewrite was not used.',
+      ...[
+        ...new Set(verdict?.failures.map((failure) => `${failure.what}: ${failure.detail}.`)),
+      ].slice(0, 3),
+    ],
   }
 }

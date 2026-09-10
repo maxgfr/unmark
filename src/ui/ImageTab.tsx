@@ -386,6 +386,7 @@ export function ImageTab() {
         setHovered(undefined)
         setHeavyPrompt('')
         setAiNote('')
+        setAiPrompt(false)
         // Do not change the kind of file someone brought you: a photograph
         // arrives lossy and leaves lossy, and a screenshot stays a PNG.
         setFormat(defaultFormat(stripped.format))
@@ -813,8 +814,18 @@ export function ImageTab() {
           title={loaded ? loaded.name : 'Drop an image'}
           aside={
             raster ? (
-              <span className="tnum font-mono">
-                {raster.width}×{raster.height}
+              <span className="flex flex-wrap items-center gap-3">
+                <span className="tnum font-mono">
+                  {raster.width}×{raster.height}
+                </span>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => picker.current?.click()}
+                  className="py-1 hover:text-[var(--color-bone)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Change image
+                </button>
               </span>
             ) : undefined
           }
@@ -921,6 +932,9 @@ export function ImageTab() {
               </p>
             </div>
           )}
+          {working && !raster ? (
+            <output className="mt-3 block text-sm text-[var(--color-muted)]">Reading image…</output>
+          ) : undefined}
           <input
             ref={picker}
             type="file"

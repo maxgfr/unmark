@@ -20,25 +20,8 @@ import { ooxmlFlavour, readZip, sniffZip, zipDocumentKind } from './zip.ts'
 import { cleanHtml, cleanMarkdown, cleanSvg, type TextCleanResult } from './markup.ts'
 import { decodeUtf8, encode, type ContainerResult } from './types.ts'
 
-export type ContainerFormat =
-  | 'PNG'
-  | 'JPEG'
-  | 'WebP'
-  | 'GIF'
-  | 'PDF'
-  | 'HEIC'
-  | 'AVIF'
-  | 'MP4'
-  | 'DOCX'
-  | 'PPTX'
-  | 'XLSX'
-  | 'ODT'
-  | 'EPUB'
-  | 'SVG'
-  | 'HTML'
-  | 'Markdown'
-  | 'Text'
-  | 'unknown'
+import type { ContainerFormat } from './formats.ts'
+export type { ContainerFormat } from './formats.ts'
 
 /**
  * Options that are about the container rather than about the text inside it.

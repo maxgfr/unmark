@@ -3,6 +3,7 @@
 // take the rest of the batch down with it.
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { cleanContainer, type ContainerFormat } from '../core/container/index.ts'
+import { FILE_ACCEPT, FORMAT_LABELS } from '../core/container/formats.ts'
 import type { Finding } from '../core/report.ts'
 import { FindingsTable, Limits, Section } from './parts.tsx'
 import { decodeUtf8 } from '../core/container/types.ts'
@@ -50,44 +51,6 @@ interface Opened {
   /** Set when the finding names a part rather than a position. */
   where?: string
 }
-
-/**
- * What the file picker will let you choose.
- *
- * Every format `cleanContainer` handles, which is not what this was: it listed
- * thirteen extensions and left out HEIC, AVIF, MP4/MOV, PPTX, XLSX and EPUB —
- * six the engine fully supports, and the six the README goes into most detail
- * about. A MOV's `©xyz` location atom and the iPhone `keys` table, a
- * presentation's `docProps/thumbnail.jpeg`: all reachable, none openable
- * through the button. Drag-and-drop worked, because the drop handler never
- * consults this, so the capability existed by an undiscoverable path while the
- * masthead advertised seventeen formats.
- */
-const ACCEPTED = [
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.webp',
-  '.gif',
-  '.heic',
-  '.heif',
-  '.avif',
-  '.mp4',
-  '.m4v',
-  '.mov',
-  '.svg',
-  '.pdf',
-  '.docx',
-  '.pptx',
-  '.xlsx',
-  '.odt',
-  '.epub',
-  '.html',
-  '.htm',
-  '.md',
-  '.markdown',
-  '.txt',
-].join(',')
 
 // Both of these used to live here, privately. The Image tab needs them too,
 // and a second copy that formats megabytes differently is how two panels come
@@ -244,14 +207,17 @@ export function FilesTab() {
   // the same task as the click is what broke this outside Chromium — see
   // ui/download.ts.
   const download = useCallback((entry: Entry) => {
-    saveBlob(new Blob([entry.output as BlobPart]), cleanedName(entry.name))
+    saveBlob(
+      new Blob([entry.output as BlobPart]),
+      entry.format === 'unknown' ? entry.name : cleanedName(entry.name),
+    )
   }, [])
 
   return (
     <div className="flex flex-col gap-8">
       <Section
         title="Drop files"
-        aside={entries.length > 0 ? `${entries.length} inspected` : undefined}
+        aside={entries.length > 0 ? `${entries.length} loaded` : undefined}
       >
         <div
           onDragOver={(event) => {
@@ -281,10 +247,7 @@ export function FilesTab() {
             </button>
             .
           </p>
-          <p className="mt-2 font-mono text-xs text-[var(--color-muted)]">
-            PNG · JPEG · WebP · GIF · HEIC · AVIF · MP4/MOV · SVG · PDF · DOCX · PPTX · XLSX · ODT ·
-            EPUB · HTML · Markdown · text
-          </p>
+          <p className="mt-2 font-mono text-xs text-[var(--color-muted)]">{FORMAT_LABELS}</p>
           <p className="mt-3 text-xs text-[var(--color-muted)]">
             Read in this tab with the File API. Nothing is uploaded.
           </p>
@@ -292,7 +255,7 @@ export function FilesTab() {
             ref={picker}
             type="file"
             multiple
-            accept={ACCEPTED}
+            accept={FILE_ACCEPT}
             onChange={(event) => {
               void accept([...(event.target.files ?? [])])
               event.target.value = ''
@@ -325,7 +288,7 @@ export function FilesTab() {
                 className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-rule)] px-2.5 py-1 text-xs text-[var(--color-bone)] transition-colors duration-150 hover:border-[var(--color-rule-bright)] hover:bg-[var(--color-panel)]"
               >
                 <IconDownload />
-                Download cleaned
+                {entry.format === 'unknown' ? 'Download original' : 'Download cleaned'}
               </button>
               <button
                 type="button"
@@ -338,20 +301,26 @@ export function FilesTab() {
             </span>
           }
         >
-          <FindingsTable
-            findings={[...entry.findings, ...entry.preserved]}
-            onLocate={(row) => {
-              setOpen((current) =>
-                current?.id === entry.id && current.offset === row.offset
-                  ? undefined
-                  : {
-                      id: entry.id,
-                      offset: row.offset,
-                      ...(row.where ? { where: row.where } : {}),
-                    },
-              )
-            }}
-          />
+          {entry.format === 'unknown' ? (
+            <p className="text-sm text-[var(--color-muted)]">
+              Unsupported format. This file was not inspected or changed.
+            </p>
+          ) : (
+            <FindingsTable
+              findings={[...entry.findings, ...entry.preserved]}
+              onLocate={(row) => {
+                setOpen((current) =>
+                  current?.id === entry.id && current.offset === row.offset
+                    ? undefined
+                    : {
+                        id: entry.id,
+                        offset: row.offset,
+                        ...(row.where ? { where: row.where } : {}),
+                      },
+                )
+              }}
+            />
+          )}
           {/* Under the table rather than inside a row: the window is sixty-four
               bytes wide and a row is one line tall, and threading it through the
               shared table would put a file-shaped concern into the component the

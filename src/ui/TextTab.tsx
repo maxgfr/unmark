@@ -138,9 +138,11 @@ export function TextTab() {
         setResult({
           text: outcome.text,
           summary:
-            mode === 'ultra'
-              ? 'Ultra complete. Rewritten locally and cleaned again. Content checks passed; review the meaning before sharing.'
-              : 'Rewritten locally. Content checks passed; review the meaning before sharing.',
+            outcome.text === basic.text
+              ? 'The model kept the text unchanged. Cleaned text is ready.'
+              : mode === 'ultra'
+                ? 'Ultra complete. Rewritten locally and cleaned again. Content checks passed; review the meaning before sharing.'
+                : 'Rewritten locally. Content checks passed; review the meaning before sharing.',
         })
         setStatus('')
       } else {

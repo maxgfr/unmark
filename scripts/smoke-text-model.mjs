@@ -27,9 +27,11 @@ try {
       await page.evaluate(async () => !!(await navigator.gpu?.requestAdapter())),
       'A real WebGPU adapter is required',
     )
-    await page
-      .getByLabel('Text to inspect')
-      .fill('The team completed the report. They sent it to the client.')
+    const source =
+      pass === 'cold'
+        ? 'The team completed the report. They sent it to the client.'
+        : 'bonjour c cool'
+    await page.getByLabel('Text to inspect').fill(source)
     await page.getByText('Advanced options', { exact: true }).click()
     await page.getByLabel('Cleaning mode').selectOption(mode)
     const start = requests.length
@@ -54,8 +56,20 @@ try {
     }
     const status = await page.locator('[aria-live]').textContent()
     console.log(pass, status)
-    assert(status.includes(mode === 'ultra' ? 'Ultra complete.' : 'Rewritten locally.'), status)
-    assert((await page.locator('output').textContent()).trim().length > 0)
+    assert(
+      status.includes(mode === 'ultra' ? 'Ultra complete.' : 'Rewritten locally.') ||
+        status.includes('The model kept the text unchanged.'),
+      status,
+    )
+    const output = (await page.locator('output').textContent()).trim()
+    assert(output.length > 0)
+    assert.equal(await page.getByLabel('Text to inspect').inputValue(), source)
+    if (pass !== 'cold') {
+      assert(
+        /^bonjour[,.!]? c(?:'est)? cool[.!]?$/i.test(output),
+        `Unexpected French rewrite: ${output}`,
+      )
+    }
     const modelRequests = requests.slice(start).filter(({ url }) => url.includes('/vendor/text/'))
     if (pass !== 'cold') assert.deepEqual(modelRequests, [])
     console.log(pass, 'model asset requests:', modelRequests.length)

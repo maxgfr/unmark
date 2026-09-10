@@ -371,3 +371,20 @@ test.describe('the image download', () => {
     await expect(panel.getByRole('radio', { name: 'PNG', exact: true })).toBeEnabled()
   })
 })
+
+test('a loaded image can be replaced through the visible file chooser', async ({ page }) => {
+  await page.goto('./#image')
+  const buffer = await makePhoto(page)
+  await page.setInputFiles('input[type=file]', {
+    name: 'first.jpg',
+    mimeType: 'image/jpeg',
+    buffer,
+  })
+  await expect(page.getByRole('heading', { name: 'first.jpg', exact: true })).toBeVisible()
+  const pending = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Change image', exact: true }).click()
+  const chooser = await pending
+  await chooser.setFiles({ name: 'second.jpg', mimeType: 'image/jpeg', buffer })
+  await expect(page.getByRole('heading', { name: 'second.jpg', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'first.jpg', exact: true })).toHaveCount(0)
+})

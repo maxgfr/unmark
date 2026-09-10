@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite'
+import { execFileSync } from 'node:child_process'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -13,6 +14,22 @@ import { localWebLlm } from './scripts/local-webllm.mjs'
 // carries the prefix. Routing is tab state held in the URL hash, which keeps
 // deep links working without a 404 fallback.
 const BASE = '/unmark/'
+
+// Package version describes the engine API; a build identifies the actual code shipped.
+const buildInfo = (() => {
+  const builtAt = new Date().toISOString()
+  try {
+    return {
+      revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      builtAt,
+      dirty:
+        !process.env['CI'] &&
+        execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim() !== '',
+    }
+  } catch {
+    return { revision: 'local', builtAt, dirty: false }
+  }
+})()
 
 // Asserted in the README, enforced by the browser. Injected at build time only:
 // the dev server needs a websocket for HMR, and production is the artifact that
@@ -32,6 +49,7 @@ const contentSecurityPolicy = (): Plugin => ({
 
 export default defineConfig({
   base: BASE,
+  define: { __BUILD_INFO__: JSON.stringify(buildInfo) },
   plugins: [
     contentSecurityPolicy(),
     react(),

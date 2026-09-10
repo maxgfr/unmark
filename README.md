@@ -171,7 +171,11 @@ The first use downloads about 294 MB of model files plus the worker runtime,
 all from this site. The files are cached; inference uses WebGPU in a worker.
 Unsupported browsers, cancelled jobs and rejected rewrites retain the basic
 cleaning result. No model is downloaded for basic cleaning.
-The same brief and content checks are used by the page and terminal.
+The page uses a concise prompt tailored to the small model, while sharing the
+content checks with the terminal. Rejected candidates now name the failed checks.
+This 0.5B model is a lightweight local option, with limited rewriting quality;
+passing the checks does not guarantee that the meaning is unchanged.
+See the [real-model regression results](docs/local-rewrite-check.md).
 
 Choose **Ultra** under **Advanced options → Cleaning mode** for the automatic
 preset: supported-mark removal, typography and wording simplification, a local
@@ -183,7 +187,8 @@ limits as Deep; review the meaning before sharing.
 
 To check Ultra against a real WebGPU device, run
 `UNMARK_HEADED=1 UNMARK_MODE=ultra node scripts/smoke-text-model.mjs` after fetching
-assets and building. This verifies cold, cached and offline runs.
+assets and building. This verifies cold, cached and offline runs, including the
+short French regression `bonjour c cool`.
 
 `pnpm check:imports` follows the import graph from the page's entry point and
 fails if it can reach `src/cli`, so the boundary is a build gate rather than a

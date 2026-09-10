@@ -2,6 +2,7 @@ import TextWorker from './text.worker.ts?worker'
 import { buildBrief } from '../core/rewrite.ts'
 import { rewriteLoop, type Generate } from '../core/rewrite-loop.ts'
 import { ultraClean } from '../core/ultra.ts'
+import { localRewritePrompt } from './prompt.ts'
 
 let worker: Worker | undefined
 let nextId = 0
@@ -74,7 +75,7 @@ export async function deepClean(
         }
         current.postMessage({ id, prompt })
       })
-    const options = { timeoutMs: 180_000, signal, onProgress }
+    const options = { timeoutMs: 180_000, signal, onProgress, makePrompt: localRewritePrompt }
     return mode === 'ultra'
       ? await ultraClean(text, generate, options)
       : await rewriteLoop(text, buildBrief(text), generate, { ...options, attempts: 2 })

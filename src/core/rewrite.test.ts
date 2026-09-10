@@ -263,3 +263,26 @@ describe('the gate passes the right answer', () => {
     expect(Array.isArray(verdict.remaining)).toBe(true)
   })
 })
+
+it('rejects editing commentary in place of a French document even without extractable facts', () => {
+  const source = 'Le projet avance bien. Nous avons terminé la première étape.'
+  const result = verifyRewrite(
+    source,
+    'The document should remain as is, without any changes or modifications.',
+    buildBrief(source),
+  )
+  expect(result.ok).toBe(false)
+  expect(result.failures.some((failure) => failure.kind === 'response')).toBe(true)
+})
+
+it('rejects echoed report instructions for a short message', () => {
+  const source = 'bonjour c cool'
+  expect(
+    verifyRewrite(
+      source,
+      'WHAT IS WRONG WITH IT\nRULES\nMUST SURVIVE UNCHANGED',
+      buildBrief(source),
+    ).ok,
+  ).toBe(false)
+  expect(verifyRewrite(source, 'Bonjour, c cool', buildBrief(source)).ok).toBe(true)
+})

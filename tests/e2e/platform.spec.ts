@@ -7,6 +7,8 @@
 // run. These do that, and they run in Chromium, Firefox and WebKit.
 
 import { expect, test } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
+import { FILE_ACCEPT, SUPPORTED_FORMATS } from '../../src/core/container/formats.ts'
 
 test.describe('platform support', () => {
   test.beforeEach(async ({ page }) => {
@@ -110,4 +112,21 @@ test.describe('layout', () => {
       expect(overflow).toBeLessThanOrEqual(1)
     })
   }
+})
+
+test('build information identifies the code and agrees with the file picker', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('./#files')
+  const info = page.getByLabel('Build information')
+  await expect(info).toBeVisible()
+  const revision = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim()
+  await expect(info).toContainText(revision)
+  await expect(info).toHaveAttribute('title', /^Built \d{4}-\d{2}-\d{2}T/)
+  await expect(
+    info.locator('div').filter({ has: page.locator('dt', { hasText: /^formats$/ }) }),
+  ).toHaveText(`formats${SUPPORTED_FORMATS.length}`)
+  await expect(info).toContainText('processingon-device')
+  await expect(page.locator('input[type=file]')).toHaveAttribute('accept', FILE_ACCEPT)
 })

@@ -111,6 +111,10 @@ for (const mode of ['deep', 'ultra'] as const) {
         )
         if (scenario !== 'accepted')
           await expect(page.getByText(/Basic cleaning is ready/)).toBeVisible()
+        if (scenario === 'rejected')
+          await expect(
+            page.getByText(/number 10: present in the source, missing from the rewrite/),
+          ).toBeVisible()
       }
       await expect(page.getByLabel('Text to inspect')).toHaveValue(
         scenario === 'edit' ? 'Another document.' : 'Sales reached 10 units.',
@@ -233,3 +237,39 @@ test('Ultra removes marks reintroduced by a rewrite and retries altered numbers'
   await expect(page.locator('output')).toHaveText('The team sold 10 units.')
   await expect(page.getByText(/Ultra complete/)).toBeVisible()
 })
+
+for (const mode of ['deep', 'ultra'] as const) {
+  for (const response of [
+    'bonjour c cool',
+    'The document should remain as is, without any changes or modifications.',
+  ]) {
+    test(`${mode} distinguishes unchanged text from model commentary: ${response}`, async ({
+      page,
+    }) => {
+      await page.evaluate(() =>
+        Object.defineProperty(navigator, 'gpu', {
+          value: { requestAdapter: async () => ({}) },
+          configurable: true,
+        }),
+      )
+      await page.context().route('**/assets/text.worker-*.js', (route) =>
+        route.fulfill({
+          contentType: 'text/javascript',
+          body: `self.onmessage = ({data}) => self.postMessage({id:data.id,kind:'answer',text:${JSON.stringify(response)}})`,
+        }),
+      )
+      await page.getByLabel('Text to inspect').fill('bonjour c cool')
+      await page.getByText('Advanced options', { exact: true }).click()
+      await page.getByLabel('Cleaning mode').selectOption(mode)
+      await page.getByRole('button', { name: 'Clean text', exact: true }).click()
+      await expect(page.locator('output')).toHaveText('bonjour c cool')
+      await expect(
+        page.getByText(
+          response === 'bonjour c cool'
+            ? 'The model kept the text unchanged. Cleaned text is ready.'
+            : /editing instructions or commentary: returned instead of just the edited text/,
+        ),
+      ).toBeVisible()
+    })
+  }
+}

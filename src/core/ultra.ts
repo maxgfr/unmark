@@ -1,5 +1,5 @@
 import { cleanText, PLAIN, type TextOptions } from './text/index.ts'
-import { buildBrief } from './rewrite.ts'
+import { buildBrief, type briefToPrompt } from './rewrite.ts'
 import { rewriteLoop, type Generate, type RewriteOutcome } from './rewrite-loop.ts'
 
 /** Full deterministic cleanup without destructive multilingual normalisation. */
@@ -13,6 +13,7 @@ export async function ultraClean(
     signal?: AbortSignal
     onProgress?: (message: string) => void
     timeoutMs?: number
+    makePrompt?: typeof briefToPrompt
   } = {},
 ): Promise<RewriteOutcome> {
   const baseline = cleanText(text, ULTRA_OPTIONS).output

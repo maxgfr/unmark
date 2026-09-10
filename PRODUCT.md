@@ -82,3 +82,14 @@ Paranoid removal and confusable-letter conversion stay off; leaving Ultra restor
 the visitor's custom settings. Failed rewrites leave the deterministic result.
 The same small model and short-passage limits apply; checks do not prove semantic
 identity or removal of statistical watermarks.
+
+Build information shows the actual Git revision and UTC build time, with a format
+count sourced from the supported-format catalog. On-device processing describes
+the privacy model; it is not an upload counter. Unsupported files are explicitly
+uninspected and can only be downloaded as originals. A loaded image offers a
+visible Change image action.
+
+The browser prompt is short and asks for minimal edits in the source language.
+Model commentary is rejected; unchanged output is reported as such. Failures name
+the content check and retain the cleaned source. Qwen2.5 0.5B remains a lightweight
+local option with limited rewriting quality, including French.

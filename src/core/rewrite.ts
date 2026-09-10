@@ -19,9 +19,8 @@
 // rejection names what failed, so the next attempt is aimed rather than another
 // roll of the dice.
 //
-// Nothing here opens a socket. Calling a model is the CLI's job (src/cli), and
-// keeping that boundary is what lets the page keep saying `connect-src 'self'`
-// and mean it.
+// Nothing here opens a socket. Remote transports live in src/cli; the browser
+// uses a same-origin local model worker. Both share this validation gate.
 
 import { humanise } from './text/humanise.ts'
 import {
@@ -239,7 +238,7 @@ export function buildBrief(text: string): Brief {
 
 const round = (value: number) => Math.round(value * 100) / 100
 
-export type FailureKind = 'pattern' | 'fact' | 'protected' | 'empty'
+export type FailureKind = 'pattern' | 'fact' | 'protected' | 'empty' | 'response'
 
 export interface Failure {
   kind: FailureKind
@@ -274,7 +273,7 @@ function missing(before: readonly string[], after: readonly string[]): string[] 
  * Three ways to fail, and all three are things a fluent rewrite does by
  * accident. The verdict is not advisory: a caller loops on it.
  */
-export function verifyRewrite(_original: string, rewrite: string, brief: Brief): RewriteVerdict {
+export function verifyRewrite(original: string, rewrite: string, brief: Brief): RewriteVerdict {
   const failures: Failure[] = []
 
   if (rewrite.trim().length === 0) {
@@ -283,6 +282,21 @@ export function verifyRewrite(_original: string, rewrite: string, brief: Brief):
       failures: [{ kind: 'empty', what: 'the rewrite', detail: 'nothing came back' }],
       remaining: [],
     }
+  }
+
+  // These are editing instructions or commentary, not a rewritten document.
+  // Check the source too: quoting such a sentence in an actual document is valid.
+  const responsePatterns = [
+    /WHAT IS WRONG WITH IT|MUST SURVIVE UNCHANGED|CORRECT THESE FAILURES/,
+    /^the (?:document|text) should remain as is\b/i,
+    /^(?:no (?:changes|modifications) (?:are )?(?:needed|required)|here is (?:the|your) (?:rewritten|edited) (?:document|text))\b/i,
+  ]
+  if (responsePatterns.some((pattern) => pattern.test(rewrite) && !pattern.test(original))) {
+    failures.push({
+      kind: 'response',
+      what: 'editing instructions or commentary',
+      detail: 'returned instead of just the edited text',
+    })
   }
 
   // 1. Patterns. Both the ones the brief named and any the rewrite introduced —

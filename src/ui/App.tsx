@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { VERSION } from '../core/index.ts'
+import { SUPPORTED_FORMATS } from '../core/container/formats.ts'
+import { BUILD_INFO } from './build.ts'
 import { TextTab } from './TextTab.tsx'
 import { FilesTab } from './FilesTab.tsx'
 import { ImageTab } from './ImageTab.tsx'
@@ -84,16 +85,19 @@ export function App() {
           </p>
         </div>
 
-        {/* A report states its own parameters. This is the masthead spec block,
-            not a stat row: three facts about the build, set as a definition list. */}
-        <dl className="hidden border-l border-[var(--color-rule)] pl-6 font-mono text-xs lg:block">
+        <dl
+          aria-label="Build information"
+          title={`Built ${BUILD_INFO.builtAt}`}
+          className="hidden border-l border-[var(--color-rule)] pl-6 font-mono text-xs lg:block"
+        >
           {[
-            ['build', VERSION],
-            ['formats', '17'],
-            ['uploads', 'none'],
+            ['build', `${BUILD_INFO.revision.slice(0, 7)}${BUILD_INFO.dirty ? '-dev' : ''}`],
+            ['built UTC', BUILD_INFO.builtAt.slice(0, 16).replace('T', ' ')],
+            ['formats', String(SUPPORTED_FORMATS.length)],
+            ['processing', 'on-device'],
           ].map(([term, value]) => (
             <div key={term} className="flex gap-6 py-0.5">
-              <dt className="w-16 text-[var(--color-muted)]">{term}</dt>
+              <dt className="w-20 text-[var(--color-muted)]">{term}</dt>
               <dd className="tnum text-[var(--color-bone)]">{value}</dd>
             </div>
           ))}

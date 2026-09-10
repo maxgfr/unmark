@@ -63,9 +63,10 @@ That is true after a paste and wrong before one: on a first visit it buried the
 textarea under an empty findings panel you had to scroll past to reach. Do the
 thing, then read the result.
 
-The header carries a masthead spec block on wide screens — build, format count,
-uploads — set right against the lede. A report states its own parameters, and it
-gives the top band something to be other than empty.
+The header carries a masthead spec block on wide screens: the Git revision, UTC
+build time, supported-format count and on-device processing. Build identity is
+injected by Vite; the format count shares the file picker’s catalog. These are
+release and capability details, not activity counters.
 
 The writing-style panel is grouped into its three layers — phrase, structure,
 silhouette — with one line under each heading saying what that layer reads. A

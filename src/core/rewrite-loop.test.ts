@@ -56,3 +56,15 @@ describe('rewrite loop', () => {
     expect(result.kind).toBe('unavailable')
   })
 })
+
+it('explains which content checks refused the rewrite', async () => {
+  const result = await rewriteLoop(
+    source,
+    buildBrief(source),
+    async () => 'Sales reached 99 units.',
+    { attempts: 1 },
+  )
+  expect(result.notes.join(' ')).toContain('number 10')
+  expect(result.notes.join(' ')).toContain('missing from the rewrite')
+  expect(result.notes.join(' ')).not.toContain('did not pass the content checks')
+})
