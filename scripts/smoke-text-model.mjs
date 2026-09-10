@@ -19,10 +19,29 @@ try {
   const errors = []
   page.on('request', (request) => requests.push({ url: request.url(), method: request.method() }))
   page.on('pageerror', (error) => errors.push(error.message))
+  // The first pass downloads through the settings panel, not through Clean
+  // text: it checks the panel's own download, its storage count and that the
+  // cold rewrite which follows needs no further model requests.
+  await page.goto(`${base}#text`)
+  await page.getByText('Advanced options', { exact: true }).click()
+  const status = page.getByLabel('Local model status')
+  // The device row starts as "Checking WebGPU…"; the adapter query is async.
+  await status.getByText('WebGPU with shader-f16 available').waitFor({ timeout: 30000 })
+  const downloadStart = requests.length
+  await page.getByRole('button', { name: /Download model|Load model/ }).click()
+  await page.getByRole('button', { name: 'Release model memory', exact: true }).waitFor({
+    timeout: 600000,
+  })
+  assert.match(await status.textContent(), /Loaded · ready to rewrite/)
+  assert.match(await status.textContent(), /Downloaded · \d+ MB cached for offline use/)
+  console.log(
+    'download model asset requests:',
+    requests.slice(downloadStart).filter(({ url }) => url.includes('/vendor/text/')).length,
+  )
   for (const pass of ['cold', 'french', 'spanish', 'german', 'cached', 'offline']) {
     await page.goto(`${base}#text`)
     if (pass === 'offline') await context.setOffline(true)
-    if (pass !== 'cold') await page.reload()
+    await page.reload()
     assert(
       await page.evaluate(async () => !!(await navigator.gpu?.requestAdapter())),
       'A real WebGPU adapter is required',
@@ -85,7 +104,7 @@ try {
     if (pass === 'spanish') assert.match(output, /El equipo|el informe/)
     if (pass === 'german') assert.match(output, /Wir haben|die Ergebnisse/)
     const modelRequests = requests.slice(start).filter(({ url }) => url.includes('/vendor/text/'))
-    if (pass !== 'cold') assert.deepEqual(modelRequests, [])
+    assert.deepEqual(modelRequests, [], `${pass}: the panel download should have cached every file`)
     console.log(pass, 'model asset requests:', modelRequests.length)
   }
   assert.deepEqual(errors, [])
@@ -93,7 +112,9 @@ try {
     requests.every(({ url, method }) => url.startsWith(new URL(base).origin) && method === 'GET'),
     'Unexpected outbound or non-GET request',
   )
-  console.log('Real WebGPU rewrite, cached and offline reloads, and same-origin checks passed.')
+  console.log(
+    'Panel download, real WebGPU rewrites, cached and offline reloads, and same-origin checks passed.',
+  )
 } finally {
   await browser.close()
   await server.close()

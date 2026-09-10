@@ -74,6 +74,14 @@ Deep clean is opt-in WebLLM inference on the visitor's WebGPU device, using one
 small Qwen3.5 0.8B model (4-bit/f16, requiring shader-f16). Its files and runtime are served from this site's origin;
 only model files are cached. A rejected or unavailable rewrite leaves the basic
 cleaning result available. The browser never imports CLI provider transports.
+The Local AI model panel under Advanced options reports the model, download
+size, runtime, device support, cached files and memory state, with actions to
+download ahead of time, release memory and delete the cached files; the cache
+check reads the runtime's own stores and never loads the runtime. The download
+figure counts the 15 files the runtime fetches, not the 18 pinned: the model
+config names four tokenizer files and the runtime stops at the first that
+works, so three are served and allowlisted but never downloaded. Deleting
+removes all 18, since an older runtime could have cached the other three.
 
 Ultra is an opt-in preset in the same mode selector as Standard and Deep. It
 applies all safe deterministic passes, tries a local rewrite up to three times,

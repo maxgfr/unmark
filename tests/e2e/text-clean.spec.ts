@@ -1,4 +1,10 @@
 import { expect, test } from '@playwright/test'
+import {
+  cacheScopeOf,
+  MODEL_BASE,
+  MODEL_FILES,
+  RUNTIME_FILES,
+} from '../../src/text-model/manifest.ts'
 
 test.use({ serviceWorkers: 'block' })
 
@@ -96,7 +102,7 @@ for (const mode of ['deep', 'ultra'] as const) {
       await page.getByLabel('Cleaning mode').selectOption(mode)
       await page.getByRole('button', { name: 'Clean text', exact: true }).click()
       if (scenario === 'cancel' || scenario === 'edit') {
-        await expect(page.getByText('Test model running')).toBeVisible()
+        await expect(page.locator('[aria-live]').getByText('Test model running')).toBeVisible()
         if (scenario === 'cancel') {
           await page.getByRole('button', { name: 'Cancel', exact: true }).click()
           await expect(page.locator('output')).toHaveText('Sales reached 10 units.')
@@ -328,4 +334,147 @@ test('WebGPU without half precision keeps basic cleaning and never downloads the
   await page.getByRole('button', { name: 'Clean text', exact: true }).click()
   await expect(page.locator('output')).toHaveText('bonjour c cool')
   expect(requests).toEqual([])
+})
+
+// The local model panel under Advanced options: what is on this device, and
+// the three things a visitor can do about it. The worker is mocked; the Cache
+// API is real, which is the part worth testing.
+const entriesFor = (files: readonly string[]) =>
+  files.map((file) => ({
+    scope: cacheScopeOf(file),
+    url: new URL(`${MODEL_BASE}${file}`, 'http://localhost:4179/unmark/').href,
+  }))
+
+test('the model panel reports the model, device, storage and memory, then downloads on demand', async ({
+  page,
+}) => {
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
+      configurable: true,
+    }),
+  )
+  await page.context().route('**/assets/text.worker-*.js', (route) =>
+    route.fulfill({
+      contentType: 'text/javascript',
+      body: `
+      self.onmessage = ({data}) => {
+        self.postMessage({kind:'progress',text:'Fetching param cache[3/18]'});
+        setTimeout(() => self.postMessage({id:data.id,kind:data.kind === 'prepare' ? 'ready' : 'answer',text:''}), 300);
+      }`,
+    }),
+  )
+  await page.getByText('Advanced options', { exact: true }).click()
+  const status = page.getByLabel('Local model status')
+  await expect(status).toContainText('Qwen3.5 0.8B')
+  await expect(status).toContainText('443 MB · 15 files')
+  await expect(status).toContainText('WebLLM 0.2.85')
+  await expect(status).toContainText('WebGPU with shader-f16 available')
+  await expect(status).toContainText('Not downloaded')
+  await expect(status).toContainText('Not loaded')
+  await expect(status).toContainText('4,096 token context')
+  await expect(page.getByRole('button', { name: 'Delete downloaded files' })).toHaveCount(0)
+
+  await page.getByLabel('Text to inspect').fill('Some text.')
+  await page.getByRole('button', { name: 'Download model', exact: true }).click()
+  await expect(status).toContainText('Fetching param cache[3/18]')
+  // The worker is busy with the download; a rewrite cannot start under it.
+  await expect(page.getByRole('button', { name: 'Clean text', exact: true })).toBeDisabled()
+  await expect(status).toContainText('Loaded · ready to rewrite')
+  await expect(page.getByText(/The model is downloaded and loaded/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clean text', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Download model', exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Release model memory', exact: true }).click()
+  await expect(status).toContainText('Not loaded')
+  await expect(page.getByText(/Model released from memory/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Download model', exact: true })).toBeEnabled()
+})
+
+test('a download can be cancelled from the panel and leaves the tab usable', async ({ page }) => {
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
+      configurable: true,
+    }),
+  )
+  await page.context().route('**/assets/text.worker-*.js', (route) =>
+    route.fulfill({
+      contentType: 'text/javascript',
+      body: `self.onmessage = () => self.postMessage({kind:'progress',text:'Fetching param cache[1/18]'})`,
+    }),
+  )
+  await page.getByText('Advanced options', { exact: true }).click()
+  await page.getByRole('button', { name: 'Download model', exact: true }).click()
+  await expect(page.getByLabel('Local model status')).toContainText('Fetching param cache[1/18]')
+  await page.getByRole('button', { name: 'Cancel download', exact: true }).click()
+  await expect(page.getByLabel('Local model status')).toContainText('Not loaded')
+  await expect(page.getByText(/Download cancelled/)).toBeVisible()
+  await page.getByLabel('Text to inspect').fill('Some text.')
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
+  await expect(page.locator('output')).toHaveText('Some text.')
+})
+
+test('the panel counts cached model files and deletes them from every WebLLM store', async ({
+  page,
+}) => {
+  const entries = entriesFor(RUNTIME_FILES)
+  const seed = async (count: number) =>
+    page.evaluate(
+      (items) =>
+        Promise.all(
+          items.map(async ({ scope, url }) =>
+            (await caches.open(scope)).put(url, new Response('x')),
+          ),
+        ),
+      entries.slice(0, count),
+    )
+  // Seeded in the same document: Playwright's WebKit keeps no Cache API
+  // entries across a navigation, and the panel re-reads the disk on disclosure.
+  await seed(2)
+  await page.getByText('Advanced options', { exact: true }).click()
+  await expect(page.getByLabel('Local model status')).toContainText('Partial · 2 of 15 files')
+  await page.getByText('Advanced options', { exact: true }).click()
+
+  // Everything the runtime fetches, plus the three served files an older
+  // runtime could have cached: deleting must clear all of them.
+  await seed(entries.length)
+  await page.evaluate(
+    (items) =>
+      Promise.all(
+        items.map(async ({ scope, url }) => (await caches.open(scope)).put(url, new Response('x'))),
+      ),
+    entriesFor(MODEL_FILES.filter((file) => !RUNTIME_FILES.includes(file))),
+  )
+  await page.getByText('Advanced options', { exact: true }).click()
+  await expect(page.getByLabel('Local model status')).toContainText(
+    'Downloaded · 443 MB cached for offline use',
+  )
+  await page.getByRole('button', { name: 'Delete downloaded files', exact: true }).click()
+  await expect(page.getByLabel('Local model status')).toContainText('Not downloaded')
+  await expect(page.getByText(/Deleted 18 cached files/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete downloaded files' })).toHaveCount(0)
+  const left = await page.evaluate(async (items) => {
+    const found = await Promise.all(
+      items.map(
+        async ({ scope, url }) => (await (await caches.open(scope)).match(url)) !== undefined,
+      ),
+    )
+    return found.filter(Boolean).length
+  }, entriesFor(MODEL_FILES))
+  expect(left).toBe(0)
+})
+
+test('the panel names the missing GPU feature and keeps its actions off without one', async ({
+  page,
+}) => {
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: async () => ({ features: new Set() }) },
+      configurable: true,
+    }),
+  )
+  await page.getByText('Advanced options', { exact: true }).click()
+  await expect(page.getByText(/needs WebGPU with shader-f16/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Download model', exact: true })).toBeDisabled()
 })

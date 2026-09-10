@@ -41,34 +41,49 @@ const engine = new MLCEngine({
 let tokenizer: Tokenizer | undefined
 let loaded = false
 
-self.onmessage = async (event: MessageEvent<{ id: number; prompt: string }>) => {
-  const { id, prompt } = event.data
+async function loadTokenizer(): Promise<Tokenizer> {
+  if (tokenizer) return tokenizer
+  // Share the pinned WebLLM Cache API store so preflight also works offline.
+  const cache = await caches.open('webllm/model')
+  const url = new URL('tokenizer.json', root).href
+  let response = await cache.match(url)
+  if (!response) {
+    response = await fetch(url)
+    if (!response.ok)
+      throw new Error('The tokenizer could not be downloaded. Retry when connected.')
+    await cache.put(url, response.clone())
+  }
+  tokenizer = await Tokenizer.fromJSON(await response.arrayBuffer())
+  return tokenizer
+}
+
+async function loadModel(): Promise<void> {
+  if (loaded) return
+  await engine.reload(MODEL_ID)
+  loaded = true
+}
+
+type Job = { id: number; kind: 'prepare' } | { id: number; prompt: string }
+
+self.onmessage = async (event: MessageEvent<Job>) => {
+  const { id } = event.data
   try {
-    if (!tokenizer) {
-      // Share the pinned WebLLM Cache API store so preflight also works offline.
-      const cache = await caches.open('webllm/model')
-      const url = new URL('tokenizer.json', root).href
-      let response = await cache.match(url)
-      if (!response) {
-        response = await fetch(url)
-        if (!response.ok)
-          throw new Error('The tokenizer could not be downloaded. Retry when connected.')
-        await cache.put(url, response.clone())
-      }
-      const data = await response.arrayBuffer()
-      tokenizer = await Tokenizer.fromJSON(data)
+    if ('kind' in event.data) {
+      await loadTokenizer()
+      await loadModel()
+      self.postMessage({ kind: 'ready', id, text: '' })
+      return
     }
+    const { prompt } = event.data
+    const encoder = await loadTokenizer()
     // Reserve output and chat-template tokens; never let WebLLM slide away
     // the beginning of a document to make a too-long prompt fit.
-    if ((tokenizer?.encode(prompt).length ?? Infinity) + OUTPUT_TOKENS + 128 > CONTEXT_TOKENS) {
+    if (encoder.encode(prompt).length + OUTPUT_TOKENS + 128 > CONTEXT_TOKENS) {
       throw new Error(
         'This passage is too long for Deep clean. Try a shorter passage; basic cleaning is ready.',
       )
     }
-    if (!loaded) {
-      await engine.reload(MODEL_ID)
-      loaded = true
-    }
+    await loadModel()
     const reply = await engine.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,

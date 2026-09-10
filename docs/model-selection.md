@@ -26,8 +26,12 @@ Availability was checked on the date above. This is a choice among verified
 compatible options, not a claim that no newer model exists anywhere.
 
 The asset manifest pins the complete model and WASM runtime by upstream commit,
-byte size and SHA-256. Downloads total **453,205,372 bytes**. Downloads are not
-resident memory. WebGPU **shader-f16** is required; unsupported devices retain
+byte size and SHA-256, totalling **453,205,372 bytes** served. A visitor
+downloads **443,112,645 bytes** of that: the model config names four tokenizer
+files and the runtime stops at the first that works, so `vocab.json`,
+`merges.txt` and `tokenizer_config.json` are served and allowlisted but never
+fetched. A real headed load on 10 September 2026 fetched 15 files and no others.
+Downloads are not resident memory. WebGPU **shader-f16** is required; unsupported devices retain
 basic cleaning without downloading weights. Context is 4,096 tokens, output is
 capped at 1,024 tokens, and recurrent history is limited to one entry.
 
@@ -53,8 +57,10 @@ Headed Chromium on the development Mac, Ultra mode, assets served from localhost
 
 The repeatable hardware check is
 `UNMARK_HEADED=1 UNMARK_MODE=ultra node scripts/smoke-text-model.mjs` after building
-and fetching assets. It verifies French grammar, Spanish and German, then cached
-and offline French reloads, with only same-origin GET requests.
+and fetching assets. It downloads through the settings panel and checks the panel's
+own storage and memory rows, then verifies French grammar, Spanish and German, then
+cached and offline French reloads, with only same-origin GET requests and no further
+model downloads after the panel's.
 
 ## Language preservation
 

@@ -9,7 +9,8 @@ import {
 import { editsOf, type Row } from '../core/report.ts'
 import { CopyButton, Section, Toggle } from './parts.tsx'
 import { TextDetails } from './TextDetails.tsx'
-import { MODEL_BYTES, MODEL_LABEL } from '../text-model/manifest.ts'
+import { ModelPanel } from './ModelPanel.tsx'
+import { useModelState } from './useModelState.ts'
 
 const EXAMPLE = `Quarterly results are attached.${encodeStego('recipient-4417', 'zero-width')} In order to proceed, read the report.`
 const button =
@@ -27,8 +28,12 @@ export function TextTab() {
   const deep = mode !== 'standard'
   const activeOptions = mode === 'ultra' ? PLAIN : options
   const [supported, setSupported] = useState<boolean>()
+  // Bumped each time Advanced options opens, so the model panel re-reads the disk.
+  const [opened, setOpened] = useState(0)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  // A download started from the model panel owns the worker until it lands.
+  const preparing = useModelState().phase === 'loading' && !busy
   const [selected, setSelected] = useState<number>()
   const field = useRef<HTMLTextAreaElement>(null)
   const active = useRef<AbortController | undefined>(undefined)
@@ -67,15 +72,16 @@ export function TextTab() {
     setHistory([])
     setOptions((current) => ({ ...current, [name]: value }))
   }
+  const checkSupport = () => {
+    void import('../text-model/client.ts').then(async ({ canDeepClean }) =>
+      setSupported(await canDeepClean()),
+    )
+  }
   const chooseMode = (value: CleaningMode) => {
     invalidate()
     setHistory([])
     setMode(value)
-    if (value !== 'standard') {
-      void import('../text-model/client.ts').then(async ({ canDeepClean }) =>
-        setSupported(await canDeepClean()),
-      )
-    }
+    if (value !== 'standard') checkSupport()
   }
   const locate = (row: Row) => {
     if (!settled) return
@@ -224,7 +230,7 @@ export function TextTab() {
               onClick={() => {
                 void clean()
               }}
-              disabled={!input || !settled || busy}
+              disabled={!input || !settled || busy || preparing}
               className="rounded-md bg-[var(--color-bone)] px-5 py-2.5 text-sm font-medium text-[var(--color-ground)] transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? 'Cleaning…' : 'Clean text'}
@@ -242,7 +248,14 @@ export function TextTab() {
                 ? 'Removes supported marks, then rewrites locally. Review the meaning before sharing.'
                 : 'Removes supported marks with the selected options. Your original stays above.'}
           </p>
-          <details className="mt-5 border-t border-[var(--color-rule)] pt-3">
+          <details
+            className="mt-5 border-t border-[var(--color-rule)] pt-3"
+            onToggle={(event) => {
+              if (!event.currentTarget.open) return
+              checkSupport()
+              setOpened((count) => count + 1)
+            }}
+          >
             <summary className="cursor-pointer text-sm text-[var(--color-muted)]">
               <span>Advanced options</span>
               {deep ? (
@@ -273,13 +286,6 @@ export function TextTab() {
                       ? 'Optional AI rewrite for short passages, with checks for changes in language and content. Supported marks are removed even when this is off.'
                       : 'Removes supported marks using the settings below. No AI model needed.'}
                 </p>
-                {deep ? (
-                  <p className="mt-2 text-xs text-[var(--color-muted)]">
-                    {supported === false
-                      ? 'This model needs WebGPU with shader-f16. Clean text will use basic cleaning.'
-                      : `${MODEL_LABEL}. Model files: ${(MODEL_BYTES / 1_000_000).toFixed(0)} MB, plus the local runtime. Download starts when you press Clean text; files are cached for reuse. Your text is never uploaded.`}
-                  </p>
-                ) : undefined}
               </div>
               {mode === 'ultra' ? (
                 <p className="text-xs text-[var(--color-muted)]">
@@ -322,20 +328,7 @@ export function TextTab() {
                   </Toggle>
                 </>
               )}
-              {deep ? (
-                <button
-                  type="button"
-                  className={`${button} self-start`}
-                  disabled={busy}
-                  onClick={async () => {
-                    const { releaseTextModel } = await import('../text-model/client.ts')
-                    releaseTextModel()
-                    setStatus('Model released from memory. Downloaded files remain cached.')
-                  }}
-                >
-                  Release model memory
-                </button>
-              ) : undefined}
+              <ModelPanel busy={busy} supported={supported} refresh={opened} onNote={setStatus} />
             </div>
           </details>
         </Section>

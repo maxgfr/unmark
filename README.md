@@ -167,8 +167,12 @@ and applies the typography and wording passes, leaving the original unchanged.
 report available without making it the first thing a visitor must read.
 
 **Deep clean** adds an optional local rewrite with WebLLM and Qwen3.5 0.8B (4-bit/f16).
-The first use downloads about 453 MB of model files plus the worker runtime,
+The first use downloads about 443 MB of model files plus the worker runtime,
 all from this site. The files are cached; inference uses WebGPU with shader-f16 in a worker.
+**Advanced options → Local AI model** shows the model, its download size and file
+count, the runtime, whether this device can run it, what is downloaded and what
+is in memory, and lets you download it ahead of time, release it from memory or
+delete the cached files.
 Unsupported browsers, cancelled jobs and rejected rewrites retain the basic
 cleaning result. No model is downloaded for basic cleaning.
 The page uses a concise prompt tailored to the small model, while sharing the
