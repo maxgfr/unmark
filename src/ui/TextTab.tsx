@@ -14,6 +14,7 @@ import { MODEL_BYTES } from '../text-model/manifest.ts'
 const EXAMPLE = `Quarterly results are attached.${encodeStego('recipient-4417', 'zero-width')} In order to proceed, read the report.`
 const button =
   'rounded-md border border-[var(--color-rule)] px-3 py-2 text-sm transition-colors hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40'
+type CleaningMode = 'standard' | 'deep' | 'ultra'
 type Result = { text: string; summary: string }
 type Snapshot = { input: string; result: Result | undefined }
 
@@ -22,7 +23,9 @@ export function TextTab() {
   const [result, setResult] = useState<Result>()
   const [history, setHistory] = useState<Snapshot[]>([])
   const [options, setOptions] = useState<TextOptions>({ ...PLAIN })
-  const [deep, setDeep] = useState(false)
+  const [mode, setMode] = useState<CleaningMode>('standard')
+  const deep = mode !== 'standard'
+  const activeOptions = mode === 'ultra' ? PLAIN : options
   const [supported, setSupported] = useState<boolean>()
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -32,7 +35,10 @@ export function TextTab() {
   const revision = useRef(0)
   const deferred = useDeferredValue(input)
   const settled = deferred === input
-  const report = useMemo(() => inspectTextDocument(deferred, options), [deferred, options])
+  const report = useMemo(
+    () => inspectTextDocument(deferred, activeOptions),
+    [deferred, activeOptions],
+  )
 
   useEffect(
     () => () => {
@@ -61,11 +67,11 @@ export function TextTab() {
     setHistory([])
     setOptions((current) => ({ ...current, [name]: value }))
   }
-  const chooseDeep = (value: boolean) => {
+  const chooseMode = (value: CleaningMode) => {
     invalidate()
     setHistory([])
-    setDeep(value)
-    if (value) {
+    setMode(value)
+    if (value !== 'standard') {
       void import('../text-model/client.ts').then(async ({ canDeepClean }) =>
         setSupported(await canDeepClean()),
       )
@@ -112,21 +118,29 @@ export function TextTab() {
     setStatus('')
     if (!deep || !basic.text.trim()) return
     if (supported === false) {
-      setStatus('Deep clean needs WebGPU. Basic cleaning is ready.')
+      setStatus('AI rewriting needs WebGPU. Basic cleaning is ready.')
       return
     }
     setBusy(true)
     setStatus('Loading the local model…')
     try {
       const { deepClean } = await import('../text-model/client.ts')
-      const outcome = await deepClean(basic.text, controller.signal, (message) => {
-        if (revision.current === ownRevision) setStatus(message)
-      })
+      const outcome = await deepClean(
+        mode === 'ultra' ? input : basic.text,
+        controller.signal,
+        (message) => {
+          if (revision.current === ownRevision) setStatus(message)
+        },
+        mode === 'ultra' ? 'ultra' : 'deep',
+      )
       if (revision.current !== ownRevision || controller.signal.aborted) return
       if (outcome.kind === 'accepted') {
         setResult({
           text: outcome.text,
-          summary: 'Rewritten locally. Content checks passed; review the meaning before sharing.',
+          summary:
+            mode === 'ultra'
+              ? 'Ultra complete. Rewritten locally and cleaned again. Content checks passed; review the meaning before sharing.'
+              : 'Rewritten locally. Content checks passed; review the meaning before sharing.',
         })
         setStatus('')
       } else {
@@ -135,7 +149,7 @@ export function TextTab() {
     } catch (error) {
       if (revision.current === ownRevision && !controller.signal.aborted) {
         setStatus(
-          `${error instanceof Error ? error.message : 'Deep clean failed.'} Basic cleaning is ready.`,
+          `${error instanceof Error ? error.message : 'AI rewriting failed.'} Basic cleaning is ready.`,
         )
       }
     } finally {
@@ -150,7 +164,7 @@ export function TextTab() {
     active.current?.abort()
     active.current = undefined
     setBusy(false)
-    setStatus('Deep clean cancelled. Basic cleaning is ready.')
+    setStatus('AI rewriting cancelled. Basic cleaning is ready.')
   }
 
   return (
@@ -220,26 +234,43 @@ export function TextTab() {
             ) : undefined}
           </div>
           <p className="mt-3 text-xs text-[var(--color-muted)]">
-            {deep
-              ? 'Removes supported marks, then rewrites locally. Review the meaning before sharing.'
-              : 'Removes supported marks with the selected options. Your original stays above.'}
+            {mode === 'ultra'
+              ? 'Full cleanup, local AI rewrite and final checks. Your original stays above.'
+              : deep
+                ? 'Removes supported marks, then rewrites locally. Review the meaning before sharing.'
+                : 'Removes supported marks with the selected options. Your original stays above.'}
           </p>
           <details className="mt-5 border-t border-[var(--color-rule)] pt-3">
             <summary className="cursor-pointer text-sm text-[var(--color-muted)]">
               <span>Advanced options</span>
               {deep ? (
-                <span className="ml-2 text-xs text-[var(--color-bone)]">Deep clean on</span>
+                <span className="ml-2 text-xs text-[var(--color-bone)]">
+                  {mode === 'ultra' ? 'Ultra on' : 'Deep clean on'}
+                </span>
               ) : undefined}
             </summary>
             <div className="mt-3 flex flex-col gap-4">
               <div>
-                <Toggle
-                  checked={deep}
-                  onChange={chooseDeep}
-                  hint="Optional AI rewrite for short passages. Supported marks are removed even when this is off."
-                >
-                  Deep clean
-                </Toggle>
+                <label className="flex flex-wrap items-center gap-3 text-sm">
+                  <span>Cleaning mode</span>
+                  <select
+                    value={mode}
+                    onChange={(event) => chooseMode(event.target.value as CleaningMode)}
+                    className="min-h-10 max-w-full rounded-md border border-[var(--color-rule-bright)] bg-[var(--color-panel)] px-3 py-2 text-[var(--color-bone)]"
+                    aria-describedby="cleaning-mode-help"
+                  >
+                    <option value="standard">Standard — clean text</option>
+                    <option value="deep">Deep — add an AI rewrite</option>
+                    <option value="ultra">Ultra — full cleanup and AI rewrite</option>
+                  </select>
+                </label>
+                <p id="cleaning-mode-help" className="mt-2 text-xs text-[var(--color-muted)]">
+                  {mode === 'ultra'
+                    ? 'Automatically simplifies typography and wording, rewrites short passages with up to three attempts, then removes any reintroduced marks and checks the result. Review the meaning before sharing.'
+                    : mode === 'deep'
+                      ? 'Optional AI rewrite for short passages. Supported marks are removed even when this is off.'
+                      : 'Removes supported marks using the settings below. No AI model needed.'}
+                </p>
                 {deep ? (
                   <p className="mt-2 text-xs text-[var(--color-muted)]">
                     {supported === false
@@ -248,37 +279,47 @@ export function TextTab() {
                   </p>
                 ) : undefined}
               </div>
-              <p className="text-xs text-[var(--color-muted)]">
-                Supported marks are always removed. Adjust the optional changes below.
-              </p>
-              <Toggle
-                checked={options.typography === true}
-                onChange={(value) => toggle('typography', value)}
-                hint="Simplify dashes, quotes and ellipses; preserve code."
-              >
-                Simplify typography
-              </Toggle>
-              <Toggle
-                checked={options.humanise === true}
-                onChange={(value) => toggle('humanise', value)}
-                hint="Shorten supported English filler phrases; preserve quotations."
-              >
-                Simplify wording
-              </Toggle>
-              <Toggle
-                checked={options.confusables === true}
-                onChange={(value) => toggle('confusables', value)}
-                hint="Converts Cyrillic and Greek lookalikes to Latin; can change multilingual text."
-              >
-                Normalise confusable letters
-              </Toggle>
-              <Toggle
-                checked={options.paranoid === true}
-                onChange={(value) => toggle('paranoid', value)}
-                hint="Also removes legitimate emoji and script joiners. Can damage text."
-              >
-                Paranoid mode
-              </Toggle>
+              {mode === 'ultra' ? (
+                <p className="text-xs text-[var(--color-muted)]">
+                  Cleanup preserves emoji and script joiners, multilingual letters and code.
+                  Destructive options stay off. If rewriting fails, the cleaned text remains
+                  available.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-[var(--color-muted)]">
+                    Supported marks are always removed. Adjust the optional changes below.
+                  </p>
+                  <Toggle
+                    checked={options.typography === true}
+                    onChange={(value) => toggle('typography', value)}
+                    hint="Simplify dashes, quotes and ellipses; preserve code."
+                  >
+                    Simplify typography
+                  </Toggle>
+                  <Toggle
+                    checked={options.humanise === true}
+                    onChange={(value) => toggle('humanise', value)}
+                    hint="Shorten supported English filler phrases; preserve quotations."
+                  >
+                    Simplify wording
+                  </Toggle>
+                  <Toggle
+                    checked={options.confusables === true}
+                    onChange={(value) => toggle('confusables', value)}
+                    hint="Converts Cyrillic and Greek lookalikes to Latin; can change multilingual text."
+                  >
+                    Normalise confusable letters
+                  </Toggle>
+                  <Toggle
+                    checked={options.paranoid === true}
+                    onChange={(value) => toggle('paranoid', value)}
+                    hint="Also removes legitimate emoji and script joiners. Can damage text."
+                  >
+                    Paranoid mode
+                  </Toggle>
+                </>
+              )}
               {deep ? (
                 <button
                   type="button"

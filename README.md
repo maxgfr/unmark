@@ -173,6 +173,18 @@ Unsupported browsers, cancelled jobs and rejected rewrites retain the basic
 cleaning result. No model is downloaded for basic cleaning.
 The same brief and content checks are used by the page and terminal.
 
+Choose **Ultra** under **Advanced options → Cleaning mode** for the automatic
+preset: supported-mark removal, typography and wording simplification, a local
+rewrite with up to three attempts, and another cleanup before each candidate's
+content checks. Failed checks keep the cleaned source. Ultra keeps destructive
+joiner removal and multilingual lookalike conversion off, and restores your
+custom settings when you switch back. It uses the same model and short-passage
+limits as Deep; review the meaning before sharing.
+
+To check Ultra against a real WebGPU device, run
+`UNMARK_HEADED=1 UNMARK_MODE=ultra node scripts/smoke-text-model.mjs` after fetching
+assets and building. This verifies cold, cached and offline runs.
+
 `pnpm check:imports` follows the import graph from the page's entry point and
 fails if it can reach `src/cli`, so the boundary is a build gate rather than a
 convention one careless import away from being untrue.

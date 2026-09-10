@@ -74,3 +74,11 @@ Deep clean is opt-in WebLLM inference on the visitor's WebGPU device, using one
 small Qwen2.5 model. Its files and runtime are served from this site's origin;
 only model files are cached. A rejected or unavailable rewrite leaves the basic
 cleaning result available. The browser never imports CLI provider transports.
+
+Ultra is an opt-in preset in the same mode selector as Standard and Deep. It
+applies all safe deterministic passes, tries a local rewrite up to three times,
+and cleans each candidate before checking facts, quotations and protected code.
+Paranoid removal and confusable-letter conversion stay off; leaving Ultra restores
+the visitor's custom settings. Failed rewrites leave the deterministic result.
+The same small model and short-passage limits apply; checks do not prove semantic
+identity or removal of statistical watermarks.
