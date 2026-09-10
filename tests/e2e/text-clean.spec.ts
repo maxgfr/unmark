@@ -64,6 +64,7 @@ test('unsupported WebGPU leaves basic cleaning usable without downloading a mode
     if (request.url().includes('/vendor/text/')) requests.push(request.url())
   })
   await page.getByLabel('Text to inspect').fill('In order to proceed.')
+  await page.getByText('Advanced options', { exact: true }).click()
   await page.getByText('Deep clean', { exact: true }).click()
   await expect(page.getByText(/WebGPU is unavailable/)).toBeVisible()
   await page.getByRole('button', { name: 'Clean text', exact: true }).click()
@@ -90,6 +91,7 @@ for (const scenario of ['accepted', 'rejected', 'cancel', 'edit', 'error'] as co
       }),
     )
     await page.getByLabel('Text to inspect').fill('Sales reached 10 units.')
+    await page.getByText('Advanced options', { exact: true }).click()
     await page.getByText('Deep clean', { exact: true }).click()
     await page.getByRole('button', { name: 'Clean text', exact: true }).click()
     if (scenario === 'cancel' || scenario === 'edit') {
@@ -114,3 +116,62 @@ for (const scenario of ['accepted', 'rejected', 'cancel', 'edit', 'error'] as co
     )
   })
 }
+
+test('advanced settings stay out of the default workflow and show when Deep is enabled', async ({
+  page,
+}) => {
+  await expect(page.getByRole('checkbox')).toHaveCount(0)
+  await page.getByText('Advanced options', { exact: true }).click()
+  await page.getByText('Deep clean', { exact: true }).click()
+  await page.getByText('Advanced options', { exact: true }).click()
+  await expect(page.getByText('Deep clean on', { exact: true })).toBeVisible()
+  await expect(page.getByRole('checkbox')).toHaveCount(0)
+})
+
+test('Deep does not rewrite or download a model when cleaning removes all content', async ({
+  page,
+}) => {
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: async () => ({}) },
+      configurable: true,
+    }),
+  )
+  const requests: string[] = []
+  page.on('request', (request) => {
+    if (/text\.worker-|\/vendor\/text\//.test(request.url())) requests.push(request.url())
+  })
+  await page.getByLabel('Text to inspect').fill('\u200B')
+  await page.getByText('Advanced options', { exact: true }).click()
+  await page.getByText('Deep clean', { exact: true }).click()
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
+  await expect(page.locator('output')).toHaveText('')
+  await expect(page.getByText('All content was removed by the selected options.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clean text', exact: true })).toBeEnabled()
+  expect(requests).toEqual([])
+})
+
+test('copies cleaned multilingual text while preserving code, emoji and the source', async ({
+  page,
+}) => {
+  const original =
+    'Résumé\u200B 👨‍👩‍👧 — prêt. می\u200Cروم\n`const value = "—"`\nhttps://example.com/report?id=42&utm_source=chatgpt.com'
+  const cleaned =
+    'Résumé 👨‍👩‍👧 - prêt. می\u200Cروم\n`const value = "—"`\nhttps://example.com/report?id=42'
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText: async (value: string) => {
+          document.documentElement.dataset['copied'] = value
+        },
+      },
+      configurable: true,
+    }),
+  )
+  await page.getByLabel('Text to inspect').fill(original)
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
+  await expect(page.locator('output')).toHaveText(cleaned)
+  await page.getByRole('button', { name: 'Copy cleaned text' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-copied', cleaned)
+  await expect(page.getByLabel('Text to inspect')).toHaveValue(original)
+})
