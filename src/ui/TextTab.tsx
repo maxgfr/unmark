@@ -236,7 +236,7 @@ export function TextTab() {
                 <Toggle
                   checked={deep}
                   onChange={chooseDeep}
-                  hint="Rewrite short passages on this device. Review the meaning."
+                  hint="Optional AI rewrite for short passages. Supported marks are removed even when this is off."
                 >
                   Deep clean
                 </Toggle>
