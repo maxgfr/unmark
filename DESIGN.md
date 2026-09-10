@@ -125,7 +125,8 @@ the palette. A default blue selection would be the loudest colour on the page.
 
 The first viewport pairs source and result on desktop and stacks source first
 on mobile. Clean text is the single primary action, in bone on ground. Copy
-and Undo are secondary. Deep clean is an unchecked option with download size
-and local-processing text. Advanced options and Inspection details are closed
-initially; all forensic findings remain reachable there. Results appear only
-after an explicit action and are invalidated when input or settings change.
+is secondary; Undo sits beside Clear in the source header. Deep clean is an
+unchecked option inside Advanced options, with download size and local-processing
+text. Its active state remains visible when that panel is closed. Advanced options
+and Inspection details are closed initially; all forensic findings remain reachable
+there. Results appear only after an explicit action and are invalidated when input or settings change.

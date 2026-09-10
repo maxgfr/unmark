@@ -28,6 +28,7 @@ try {
     await page
       .getByLabel('Text to inspect')
       .fill('The team completed the report. They sent it to the client.')
+    await page.getByText('Advanced options', { exact: true }).click()
     await page.getByText('Deep clean', { exact: true }).click()
     const start = requests.length
     await page.getByRole('button', { name: 'Clean text', exact: true }).click()

@@ -110,7 +110,7 @@ export function TextTab() {
     }
     setResult(basic)
     setStatus('')
-    if (!deep) return
+    if (!deep || !basic.text.trim()) return
     if (supported === false) {
       setStatus('Deep clean needs WebGPU. Basic cleaning is ready.')
       return
@@ -159,27 +159,38 @@ export function TextTab() {
         <Section
           title="Paste the text"
           aside={
-            input ? (
-              <button
-                type="button"
-                onClick={() => {
-                  remember()
-                  invalidate()
-                  setInput('')
-                }}
-                className="hover:text-[var(--color-bone)]"
-              >
-                Clear
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => changeInput(EXAMPLE)}
-                className="hover:text-[var(--color-bone)]"
-              >
-                Load a marked example
-              </button>
-            )
+            <div className="flex items-center gap-4">
+              {history.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={undo}
+                  className="py-1 hover:text-[var(--color-bone)]"
+                >
+                  Undo
+                </button>
+              ) : undefined}
+              {input ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    remember()
+                    invalidate()
+                    setInput('')
+                  }}
+                  className="hover:text-[var(--color-bone)]"
+                >
+                  Clear
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => changeInput(EXAMPLE)}
+                  className="hover:text-[var(--color-bone)]"
+                >
+                  Load a marked example
+                </button>
+              )}
+            </div>
           }
         >
           <textarea
@@ -207,37 +218,39 @@ export function TextTab() {
                 Cancel
               </button>
             ) : undefined}
-            {history.length > 0 ? (
-              <button type="button" onClick={undo} className={button}>
-                Undo
-              </button>
-            ) : undefined}
           </div>
           <p className="mt-3 text-xs text-[var(--color-muted)]">
-            Removes supported marks and simplifies typography and wording. Your original stays
-            above.
+            {deep
+              ? 'Removes supported marks, then rewrites locally. Review the meaning before sharing.'
+              : 'Removes supported marks with the selected options. Your original stays above.'}
           </p>
-          <div className="mt-4">
-            <Toggle
-              checked={deep}
-              onChange={chooseDeep}
-              hint="Rewrite short passages on this device. Review the meaning."
-            >
-              Deep clean
-            </Toggle>
-            {deep ? (
-              <p className="mt-2 text-xs text-[var(--color-muted)]">
-                {supported === false
-                  ? 'WebGPU is unavailable in this browser. Clean text will use basic cleaning.'
-                  : `Model files: ${(MODEL_BYTES / 1_000_000).toFixed(0)} MB, plus the local runtime. Download starts when you press Clean text; files are cached for reuse. Your text is never uploaded.`}
-              </p>
-            ) : undefined}
-          </div>
           <details className="mt-5 border-t border-[var(--color-rule)] pt-3">
             <summary className="cursor-pointer text-sm text-[var(--color-muted)]">
-              Advanced options
+              <span>Advanced options</span>
+              {deep ? (
+                <span className="ml-2 text-xs text-[var(--color-bone)]">Deep clean on</span>
+              ) : undefined}
             </summary>
-            <div className="mt-3 flex flex-col gap-3">
+            <div className="mt-3 flex flex-col gap-4">
+              <div>
+                <Toggle
+                  checked={deep}
+                  onChange={chooseDeep}
+                  hint="Optional AI rewrite for short passages. Supported marks are removed even when this is off."
+                >
+                  Deep clean
+                </Toggle>
+                {deep ? (
+                  <p className="mt-2 text-xs text-[var(--color-muted)]">
+                    {supported === false
+                      ? 'WebGPU is unavailable in this browser. Clean text will use basic cleaning.'
+                      : `Model files: ${(MODEL_BYTES / 1_000_000).toFixed(0)} MB, plus the local runtime. Download starts when you press Clean text; files are cached for reuse. Your text is never uploaded.`}
+                  </p>
+                ) : undefined}
+              </div>
+              <p className="text-xs text-[var(--color-muted)]">
+                Supported marks are always removed. Adjust the optional changes below.
+              </p>
               <Toggle
                 checked={options.typography === true}
                 onChange={(value) => toggle('typography', value)}
