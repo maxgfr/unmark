@@ -272,7 +272,7 @@ for (const mode of ['deep', 'ultra'] as const) {
       await expect(
         page.getByText(
           response === 'bonjour c cool'
-            ? 'The model kept the text unchanged. Cleaned text is ready.'
+            ? /returned your text unchanged/
             : /editing instructions or commentary: returned instead of just the edited text/,
         ),
       ).toBeVisible()

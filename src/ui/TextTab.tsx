@@ -145,7 +145,12 @@ export function TextTab() {
           text: outcome.text,
           summary:
             outcome.text === basic.text
-              ? 'The model kept the text unchanged. Cleaned text is ready.'
+              ? // "kept the text unchanged" read as success, so a rewrite that
+                // did nothing looked like a rewrite that found nothing to do.
+                // Say which it was: this model corrects clear grammar and
+                // agreement errors, and regularly leaves short or informal
+                // writing exactly as it found it.
+                'The AI rewrite returned your text unchanged. This small local model corrects clear grammar and spelling errors best in full sentences, and often leaves short or informal writing as it is.'
               : mode === 'ultra'
                 ? 'Ultra complete. Rewritten locally and cleaned again. Content checks passed; review the meaning before sharing.'
                 : 'Rewritten locally. Content checks passed; review the meaning before sharing.',

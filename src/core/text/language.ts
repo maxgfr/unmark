@@ -76,6 +76,14 @@ function iso1(code: string): string | undefined {
   }
 }
 
+/** franc-min's winner as a 639-1 code, but only when it clearly leads. */
+function confidentFranc(sample: string): string | undefined {
+  const [winner, runnerUp] = francAll(sample, { minLength: 10 })
+  if (!winner || winner[0] === 'und') return undefined
+  if (winner[1] - (runnerUp?.[1] ?? 0) < FRANC_LEAD) return undefined
+  return iso1(winner[0])
+}
+
 function identify(text: string): Passage {
   const sample = text.slice(0, SAMPLE)
   const ranked = detectAll(sample)
@@ -88,22 +96,30 @@ function identify(text: string): Passage {
   // TinyLD's score is not a calibrated probability. Require a clear lead.
   if (first.accuracy >= SURE && first.accuracy - (second?.accuracy ?? 0) >= LEAD) {
     plausible.add(first.lang)
+    // High confidence is not agreement, and a lead over nothing is not a lead.
+    // On a short informal line TinyLD returns a single result at accuracy
+    // 1.000 — there is no runner-up to subtract, so the lead test is satisfied
+    // by a detector that had almost nothing to go on. "wsh comment sa va" comes
+    // back as Polish at full confidence while franc-min calls it French, also
+    // at full confidence, and with no runner-up the passage looked
+    // unambiguously Polish. That reached the prompt as "Write only in Polish",
+    // and a model told to write Polish without translating can only copy the
+    // input back — the rewrite silently doing nothing.
+    //
+    // So a confident disagreement is recorded rather than discarded: the second
+    // detector's language joins `plausible`. The verdict survives, so a real
+    // translation is still caught, but the caller now sees two candidates and
+    // falls back to "keep the language of every passage" instead of naming one.
+    const other = confidentFranc(sample)
+    if (other) plausible.add(other)
     return { sure: first.lang, plausible }
   }
 
   // Short greetings score poorly. Trust weak evidence only when a second,
   // independent classifier agrees outright; otherwise leave it undetermined.
-  if (first.accuracy >= WEAK) {
-    const [winner, runnerUp] = francAll(sample, { minLength: 10 })
-    if (
-      winner &&
-      winner[0] !== 'und' &&
-      winner[1] - (runnerUp?.[1] ?? 0) >= FRANC_LEAD &&
-      iso1(winner[0]) === first.lang
-    ) {
-      plausible.add(first.lang)
-      return { sure: first.lang, plausible }
-    }
+  if (first.accuracy >= WEAK && confidentFranc(sample) === first.lang) {
+    plausible.add(first.lang)
+    return { sure: first.lang, plausible }
   }
 
   return { plausible }

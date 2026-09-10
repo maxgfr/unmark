@@ -84,7 +84,7 @@ try {
     console.log(pass, status)
     assert(
       status.includes(mode === 'ultra' ? 'Ultra complete.' : 'Rewritten locally.') ||
-        status.includes('The model kept the text unchanged.'),
+        status.includes('returned your text unchanged'),
       status,
     )
     const output = (await page.locator('output').textContent()).trim()
