@@ -66,7 +66,7 @@ test('unsupported WebGPU leaves basic cleaning usable without downloading a mode
   await page.getByLabel('Text to inspect').fill('In order to proceed.')
   await page.getByText('Advanced options', { exact: true }).click()
   await page.getByLabel('Cleaning mode').selectOption('deep')
-  await expect(page.getByText(/WebGPU is unavailable/)).toBeVisible()
+  await expect(page.getByText(/needs WebGPU with shader-f16/)).toBeVisible()
   await page.getByRole('button', { name: 'Clean text', exact: true }).click()
   await expect(page.locator('output')).toHaveText('To proceed.')
   expect(requests).toEqual([])
@@ -77,7 +77,7 @@ for (const mode of ['deep', 'ultra'] as const) {
     test(`Mode ${mode} ${scenario} with an isolated worker`, async ({ page }) => {
       await page.evaluate(() =>
         Object.defineProperty(navigator, 'gpu', {
-          value: { requestAdapter: async () => ({}) },
+          value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
           configurable: true,
         }),
       )
@@ -139,7 +139,7 @@ test('Deep does not rewrite or download a model when cleaning removes all conten
 }) => {
   await page.evaluate(() =>
     Object.defineProperty(navigator, 'gpu', {
-      value: { requestAdapter: async () => ({}) },
+      value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
       configurable: true,
     }),
   )
@@ -217,7 +217,7 @@ test('Ultra removes marks reintroduced by a rewrite and retries altered numbers'
 }) => {
   await page.evaluate(() =>
     Object.defineProperty(navigator, 'gpu', {
-      value: { requestAdapter: async () => ({}) },
+      value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
       configurable: true,
     }),
   )
@@ -248,7 +248,7 @@ for (const mode of ['deep', 'ultra'] as const) {
     }) => {
       await page.evaluate(() =>
         Object.defineProperty(navigator, 'gpu', {
-          value: { requestAdapter: async () => ({}) },
+          value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
           configurable: true,
         }),
       )
@@ -273,3 +273,59 @@ for (const mode of ['deep', 'ultra'] as const) {
     })
   }
 }
+
+for (const mode of ['deep', 'ultra'] as const) {
+  for (const recover of [false, true]) {
+    test(`${mode} rejects translations${recover ? ' and accepts a French retry' : ''}`, async ({
+      page,
+    }) => {
+      const source =
+        'Le projet avance bien. Nous avons terminé la première étape et nous préparons la suite.'
+      const translated =
+        'The project is progressing well. We have completed the first stage and are preparing the next one.'
+      const corrected =
+        'Le projet progresse bien. Nous avons achevé la première étape et préparons la suivante.'
+      await page.evaluate(() =>
+        Object.defineProperty(navigator, 'gpu', {
+          value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
+          configurable: true,
+        }),
+      )
+      await page.context().route('**/assets/text.worker-*.js', (route) =>
+        route.fulfill({
+          contentType: 'text/javascript',
+          body: `let attempts = 0; self.onmessage = ({data}) => self.postMessage({id:data.id,kind:'answer',text: ++attempts > 1 && ${recover} ? ${JSON.stringify(corrected)} : ${JSON.stringify(translated)}})`,
+        }),
+      )
+      await page.getByLabel('Text to inspect').fill(source)
+      await page.getByText('Advanced options', { exact: true }).click()
+      await page.getByLabel('Cleaning mode').selectOption(mode)
+      await page.getByRole('button', { name: 'Clean text', exact: true }).click()
+      await expect(page.locator('output')).toHaveText(recover ? corrected : source)
+      if (!recover) await expect(page.getByText(/Keep French/)).toBeVisible()
+      await expect(page.getByLabel('Text to inspect')).toHaveValue(source)
+    })
+  }
+}
+
+test('WebGPU without half precision keeps basic cleaning and never downloads the model', async ({
+  page,
+}) => {
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: async () => ({ features: new Set() }) },
+      configurable: true,
+    }),
+  )
+  const requests: string[] = []
+  page.on('request', (request) => {
+    if (/text\.worker-|\/vendor\/text\//.test(request.url())) requests.push(request.url())
+  })
+  await page.getByLabel('Text to inspect').fill('bonjour\u200B c cool')
+  await page.getByText('Advanced options', { exact: true }).click()
+  await page.getByLabel('Cleaning mode').selectOption('ultra')
+  await expect(page.getByText(/needs WebGPU with shader-f16/)).toBeVisible()
+  await page.getByRole('button', { name: 'Clean text', exact: true }).click()
+  await expect(page.locator('output')).toHaveText('bonjour c cool')
+  expect(requests).toEqual([])
+})

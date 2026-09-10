@@ -12,3 +12,11 @@ it('gives a short editing task for a short French message without report scaffol
   expect(prompt).not.toContain('WHAT IS WRONG WITH IT')
   expect(prompt).not.toContain('nothing extracted')
 })
+
+it('does not instruct translation when French is confused with Portuguese', () => {
+  const source = 'Merci pour votre retour. Nous corrigeons le bug et livrons un correctif demain.'
+  const prompt = localRewritePrompt(source, buildBrief(source))
+  expect(prompt).not.toContain('Write only in Portuguese')
+  expect(prompt).toContain('Keep the original language of every passage')
+  expect(prompt.endsWith(`Text:\n${source}`)).toBe(true)
+})

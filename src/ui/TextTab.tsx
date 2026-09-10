@@ -9,7 +9,7 @@ import {
 import { editsOf, type Row } from '../core/report.ts'
 import { CopyButton, Section, Toggle } from './parts.tsx'
 import { TextDetails } from './TextDetails.tsx'
-import { MODEL_BYTES } from '../text-model/manifest.ts'
+import { MODEL_BYTES, MODEL_LABEL } from '../text-model/manifest.ts'
 
 const EXAMPLE = `Quarterly results are attached.${encodeStego('recipient-4417', 'zero-width')} In order to proceed, read the report.`
 const button =
@@ -270,14 +270,14 @@ export function TextTab() {
                   {mode === 'ultra'
                     ? 'Automatically simplifies typography and wording, rewrites short passages with up to three attempts, then removes any reintroduced marks and checks the result. Review the meaning before sharing.'
                     : mode === 'deep'
-                      ? 'Optional AI rewrite for short passages. Supported marks are removed even when this is off.'
+                      ? 'Optional AI rewrite for short passages, with checks for changes in language and content. Supported marks are removed even when this is off.'
                       : 'Removes supported marks using the settings below. No AI model needed.'}
                 </p>
                 {deep ? (
                   <p className="mt-2 text-xs text-[var(--color-muted)]">
                     {supported === false
-                      ? 'WebGPU is unavailable in this browser. Clean text will use basic cleaning.'
-                      : `Model files: ${(MODEL_BYTES / 1_000_000).toFixed(0)} MB, plus the local runtime. Download starts when you press Clean text; files are cached for reuse. Your text is never uploaded.`}
+                      ? 'This model needs WebGPU with shader-f16. Clean text will use basic cleaning.'
+                      : `${MODEL_LABEL}. Model files: ${(MODEL_BYTES / 1_000_000).toFixed(0)} MB, plus the local runtime. Download starts when you press Clean text; files are cached for reuse. Your text is never uploaded.`}
                   </p>
                 ) : undefined}
               </div>

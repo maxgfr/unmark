@@ -22,6 +22,7 @@
 // Nothing here opens a socket. Remote transports live in src/cli; the browser
 // uses a same-origin local model worker. Both share this validation gate.
 
+import { changedLanguage } from './text/language.ts'
 import { humanise } from './text/humanise.ts'
 import {
   analyzeStyle,
@@ -238,7 +239,7 @@ export function buildBrief(text: string): Brief {
 
 const round = (value: number) => Math.round(value * 100) / 100
 
-export type FailureKind = 'pattern' | 'fact' | 'protected' | 'empty' | 'response'
+export type FailureKind = 'pattern' | 'fact' | 'protected' | 'empty' | 'response' | 'language'
 
 export interface Failure {
   kind: FailureKind
@@ -284,9 +285,13 @@ export function verifyRewrite(original: string, rewrite: string, brief: Brief): 
     }
   }
 
+  const language = changedLanguage(original, rewrite)
+  if (language) failures.push({ kind: 'language', what: 'source language', detail: language })
+
   // These are editing instructions or commentary, not a rewritten document.
   // Check the source too: quoting such a sentence in an actual document is valid.
   const responsePatterns = [
+    /^<think>/i,
     /WHAT IS WRONG WITH IT|MUST SURVIVE UNCHANGED|CORRECT THESE FAILURES/,
     /^the (?:document|text) should remain as is\b/i,
     /^(?:no (?:changes|modifications) (?:are )?(?:needed|required)|here is (?:the|your) (?:rewritten|edited) (?:document|text))\b/i,

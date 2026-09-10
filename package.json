@@ -38,8 +38,10 @@
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.85",
     "@mlc-ai/web-tokenizers": "0.1.6",
+    "franc-min": "^6.2.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "tinyld": "^1.3.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

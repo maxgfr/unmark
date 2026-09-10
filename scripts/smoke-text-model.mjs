@@ -19,7 +19,7 @@ try {
   const errors = []
   page.on('request', (request) => requests.push({ url: request.url(), method: request.method() }))
   page.on('pageerror', (error) => errors.push(error.message))
-  for (const pass of ['cold', 'cached', 'offline']) {
+  for (const pass of ['cold', 'french', 'spanish', 'german', 'cached', 'offline']) {
     await page.goto(`${base}#text`)
     if (pass === 'offline') await context.setOffline(true)
     if (pass !== 'cold') await page.reload()
@@ -27,10 +27,17 @@ try {
       await page.evaluate(async () => !!(await navigator.gpu?.requestAdapter())),
       'A real WebGPU adapter is required',
     )
-    const source =
-      pass === 'cold'
-        ? 'The team completed the report. They sent it to the client.'
-        : 'bonjour c cool'
+    const source = {
+      cold: 'The team completed the report. They sent it to the client.',
+      french:
+        'Nous avons préparer le dossier et nous sommes prêt à partir. Le client attend notre réponse demain.',
+      spanish:
+        'El equipo ha terminado el informe. Necesitamos revisar los resultados antes de enviar el documento al cliente.',
+      german:
+        'Wir haben den Bericht fertiggestellt. Morgen besprechen wir die Ergebnisse mit dem gesamten Team.',
+      cached: 'bonjour c cool',
+      offline: 'bonjour c cool',
+    }[pass]
     await page.getByLabel('Text to inspect').fill(source)
     await page.getByText('Advanced options', { exact: true }).click()
     await page.getByLabel('Cleaning mode').selectOption(mode)
@@ -64,12 +71,19 @@ try {
     const output = (await page.locator('output').textContent()).trim()
     assert(output.length > 0)
     assert.equal(await page.getByLabel('Text to inspect').inputValue(), source)
-    if (pass !== 'cold') {
+    if (pass === 'cached' || pass === 'offline') {
       assert(
         /^bonjour[,.!]? c(?:'est)? cool[.!]?$/i.test(output),
         `Unexpected French rewrite: ${output}`,
       )
     }
+    if (pass === 'french') {
+      assert.match(output, /Nous avons préparé le dossier/)
+      assert.match(output, /nous sommes prêts à partir/)
+      assert.match(output, /Le client attend notre réponse demain/)
+    }
+    if (pass === 'spanish') assert.match(output, /El equipo|el informe/)
+    if (pass === 'german') assert.match(output, /Wir haben|die Ergebnisse/)
     const modelRequests = requests.slice(start).filter(({ url }) => url.includes('/vendor/text/'))
     if (pass !== 'cold') assert.deepEqual(modelRequests, [])
     console.log(pass, 'model asset requests:', modelRequests.length)

@@ -71,7 +71,7 @@ The button defaults to supported-mark removal plus typography and wording
 simplification. Advanced settings and inspection details are disclosed on demand.
 
 Deep clean is opt-in WebLLM inference on the visitor's WebGPU device, using one
-small Qwen2.5 model. Its files and runtime are served from this site's origin;
+small Qwen3.5 0.8B model (4-bit/f16, requiring shader-f16). Its files and runtime are served from this site's origin;
 only model files are cached. A rejected or unavailable rewrite leaves the basic
 cleaning result available. The browser never imports CLI provider transports.
 
@@ -91,5 +91,9 @@ visible Change image action.
 
 The browser prompt is short and asks for minimal edits in the source language.
 Model commentary is rejected; unchanged output is reported as such. Failures name
-the content check and retain the cleaned source. Qwen2.5 0.5B remains a lightweight
-local option with limited rewriting quality, including French.
+the content check and retain the cleaned source. Qwen3.5 0.8B remains a lightweight
+local option with limited rewriting quality. The shared content gate rejects
+detected language changes, excluding quotations and code. Ambiguous short text
+can remain undetermined; the check does not guarantee language or meaning.
+The memory target is under 2 GB: the measured Chromium process RSS peak was
+1.93 GB on the development machine, not a universal browser memory guarantee.

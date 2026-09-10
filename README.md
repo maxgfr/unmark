@@ -166,16 +166,18 @@ and applies the typography and wording passes, leaving the original unchanged.
 **Advanced options** controls those passes; **Inspection details** keeps the full
 report available without making it the first thing a visitor must read.
 
-**Deep clean** adds an optional local rewrite with WebLLM and Qwen2.5 0.5B.
-The first use downloads about 294 MB of model files plus the worker runtime,
-all from this site. The files are cached; inference uses WebGPU in a worker.
+**Deep clean** adds an optional local rewrite with WebLLM and Qwen3.5 0.8B (4-bit/f16).
+The first use downloads about 453 MB of model files plus the worker runtime,
+all from this site. The files are cached; inference uses WebGPU with shader-f16 in a worker.
 Unsupported browsers, cancelled jobs and rejected rewrites retain the basic
 cleaning result. No model is downloaded for basic cleaning.
 The page uses a concise prompt tailored to the small model, while sharing the
 content checks with the terminal. Rejected candidates now name the failed checks.
-This 0.5B model is a lightweight local option, with limited rewriting quality;
+Language checks reject detected translations while excluding protected quotes and code.
+Short or ambiguous text may not provide enough evidence to detect a language change.
+This 0.8B model is a lightweight local option, with limited rewriting quality;
 passing the checks does not guarantee that the meaning is unchanged.
-See the [real-model regression results](docs/local-rewrite-check.md).
+See the [model choice, memory measurements and regression results](docs/model-selection.md).
 
 Choose **Ultra** under **Advanced options → Cleaning mode** for the automatic
 preset: supported-mark removal, typography and wording simplification, a local
@@ -342,8 +344,8 @@ After `pnpm assets && pnpm build`, run
 `UNMARK_HEADED=1 node scripts/smoke-text-model.mjs` on a machine with WebGPU.
 It checks a real rewrite, a cached reload, and same-origin GET requests. The
 ordinary browser suite uses an isolated worker for cancellation and error cases.
-The model asset manifest maps the upstream `ndarray-cache.json` to the
-`tensor-cache.json` name expected by the pinned WebLLM runtime.
+The model asset manifest pins every weight shard, tokenizer and runtime binary
+by immutable revision and SHA-256 hash.
 
 ## Intended use
 
@@ -355,7 +357,7 @@ Not a tool for removing authorship marks from work that is not yours.
 ## License
 
 MIT. MI-GAN is MIT ([Picsart AI Research](https://github.com/Picsart-AI-Research/MI-GAN));
-IBM Plex Sans and JetBrains Mono are OFL. Qwen2.5 and WebLLM are Apache-2.0.
+IBM Plex Sans and JetBrains Mono are OFL. Qwen3.5 and WebLLM are Apache-2.0.
 
 ## Manual skill invocation
 

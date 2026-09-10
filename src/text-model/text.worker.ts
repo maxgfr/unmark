@@ -1,8 +1,11 @@
 import { MLCEngine } from '@mlc-ai/web-llm'
 import { Tokenizer } from '@mlc-ai/web-tokenizers'
-import { MODEL_ID, MODEL_BASE, CONTEXT_TOKENS, OUTPUT_TOKENS } from './manifest.ts'
+import { MODEL_ID, MODEL_BASE, MODEL_FILES, CONTEXT_TOKENS, OUTPUT_TOKENS } from './manifest.ts'
+
+import { modelText } from './response.ts'
 
 const root = new URL(`${import.meta.env.BASE_URL}${MODEL_BASE}`, self.location.origin)
+const permitted = new Set(MODEL_FILES.map((file) => new URL(file, root).href))
 // Model requests are static downloads only. Even a dependency cannot put a
 // user's prompt into a URL or request body on this origin.
 const fetchAsset = globalThis.fetch.bind(globalThis)
@@ -13,9 +16,7 @@ globalThis.fetch = (input, init) => {
     request.method !== 'GET' ||
     url.origin !== root.origin ||
     url.search ||
-    !new RegExp(
-      `^${root.pathname}(?:model\\.wasm|mlc-chat-config\\.json|tensor-cache\\.json|tokenizer(?:_config)?\\.json|vocab\\.json|merges\\.txt|params_shard_[0-7]\\.bin)$`,
-    ).test(url.pathname)
+    !permitted.has(url.href)
   ) {
     return Promise.reject(new Error('Only local model assets may be downloaded.'))
   }
@@ -28,9 +29,10 @@ const engine = new MLCEngine({
     model_list: [
       {
         model_id: MODEL_ID,
+        required_features: ['shader-f16'],
         model: root.href,
         model_lib: new URL('model.wasm', root).href,
-        overrides: { context_window_size: CONTEXT_TOKENS },
+        overrides: { context_window_size: CONTEXT_TOKENS, max_history_size: 1 },
       },
     ],
   },
@@ -72,13 +74,14 @@ self.onmessage = async (event: MessageEvent<{ id: number; prompt: string }>) => 
       temperature: 0.3,
       max_tokens: OUTPUT_TOKENS,
       seed: 41,
+      extra_body: { enable_thinking: false },
     })
     const choice = reply.choices[0]
     if (choice?.finish_reason === 'length')
       throw new Error('The rewrite reached its length limit. Try a shorter passage.')
     const text = choice?.message.content
     if (typeof text !== 'string') throw new Error('The model returned no text.')
-    self.postMessage({ kind: 'answer', id, text })
+    self.postMessage({ kind: 'answer', id, text: modelText(text) })
   } catch (error) {
     self.postMessage({
       kind: 'error',

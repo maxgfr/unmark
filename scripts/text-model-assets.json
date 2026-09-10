@@ -1,107 +1,128 @@
 [
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/mlc-chat-config.json",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/mlc-chat-config.json",
-    "bytes": 2041,
-    "sha256": "6ac10b5805b22c82f1867d9be61530d03755e8741c2b7335f120ffa1c15ae8f1",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/mlc-chat-config.json",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/mlc-chat-config.json",
+    "bytes": 2358,
+    "sha256": "1ea93c2b8b396a3754516d0c4b6f4b6881c2930ca2cc6cb2cf00e511e6be86a9",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/tensor-cache.json",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/ndarray-cache.json",
-    "bytes": 102431,
-    "sha256": "bfb7adf1d3c1b8ea6606e6f126a126c575ce39381a4712ca65da992beb177e98",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/tensor-cache.json",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/tensor-cache.json",
+    "bytes": 167512,
+    "sha256": "bab74fa529512ca7641f6a4aea0baeab26742d28886e79aac11b09fa8738c0df",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/tokenizer.json",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/tokenizer.json",
-    "bytes": 7031645,
-    "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/tokenizer.json",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/tokenizer.json",
+    "bytes": 12807982,
+    "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/vocab.json",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/vocab.json",
-    "bytes": 2776833,
-    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/tokenizer_config.json",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/tokenizer_config.json",
+    "bytes": 16709,
+    "sha256": "49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/merges.txt",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/merges.txt",
-    "bytes": 1671839,
-    "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/vocab.json",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/vocab.json",
+    "bytes": 6722759,
+    "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/tokenizer_config.json",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/tokenizer_config.json",
-    "bytes": 7308,
-    "sha256": "5214600ee45ca2f887ce2eede8910378a0111ea99d657428bcbce94778e65a92",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/merges.txt",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/merges.txt",
+    "bytes": 3353259,
+    "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_0.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_0.bin",
-    "bytes": 68067328,
-    "sha256": "cb329fab0c8928aa483b43cf425b8dc19c9b669418c102c0411f45fb0a515b55",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_0.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_0.bin",
+    "bytes": 127139840,
+    "sha256": "414681bc0134320f15d4591521588dd88ae97e6e6a92242a1c2900d6548e99f5",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_1.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_1.bin",
-    "bytes": 33234176,
-    "sha256": "08da1b93fd5d427aa7dafb5af8e2ffc68a630698186eb41abb1229f090fdd990",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_1.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_1.bin",
+    "bytes": 33193984,
+    "sha256": "f23ba01d17f1eaee9f557f48b65bbba80a272e522e96076052037139e58bcce1",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_2.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_2.bin",
-    "bytes": 33505280,
-    "sha256": "114106e371472c94f39c28834f95a44924eeac8202d9520bbb46d5f7457657c4",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_2.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_2.bin",
+    "bytes": 32243712,
+    "sha256": "98cf1af3ce6740e1ef8dd9a0148c767c3b0e831e59d140bfada52afa57bb4184",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_3.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_3.bin",
-    "bytes": 33053696,
-    "sha256": "2de95c1472f18315d1bf1e26c34a79b2f3645141e221d9a7da825203ea6ee90e",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_3.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_3.bin",
+    "bytes": 31850496,
+    "sha256": "c76000a164a9893f81ff678bf80a90bcba6d00a450f81a7a52f1c1804b99bde4",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_4.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_4.bin",
-    "bytes": 33020928,
-    "sha256": "8e6f54644b2cbbb9c041083c1e3a8a3475e3a5b37e5e361140e35cff5f50d9e6",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_4.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_4.bin",
+    "bytes": 33030144,
+    "sha256": "0079356e628317d9bf5d63a297b06c4240470edbb6caa3dbf49daceedeeecf72",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_5.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_5.bin",
-    "bytes": 29211648,
-    "sha256": "e78186d6ef6ddc381b5d1846ebb7c3ddc62bf5a1bc9544966fca084f5305f8a3",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_5.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_5.bin",
+    "bytes": 33030144,
+    "sha256": "55391999df3b47f96cffe523783092ca3981a088fe1f4602b4270156f8975d3f",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_6.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_6.bin",
-    "bytes": 33297408,
-    "sha256": "8d625775408fb8ffc99430e4293a7283cd372683965b982649c73daa856cb41d",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_6.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_6.bin",
+    "bytes": 30965760,
+    "sha256": "44ec47561a8b0e71569fcb6c3995bea48257b6e1f64f838d0e42b7d06953b44b",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/params_shard_7.bin",
-    "url": "https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC/resolve/8e6ec5f417c7d0e1414703ef619b8a24686e3ab0/params_shard_7.bin",
-    "bytes": 14605824,
-    "sha256": "5d333f26220b8c084c5019b0e25ff2bebf1cccbc7c1f1a59724f9ba6d4afb5a9",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_7.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_7.bin",
+    "bytes": 33030144,
+    "sha256": "3e299baff5304ad5a7c767a4f8048e850d3cd4d8afc99e86e4daf64708c81ba5",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   },
   {
-    "file": "text/resolve/8e6ec5f4-025bcaf3/model.wasm",
-    "url": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/025bcaf3780fa8254f5e5efd3bfea0a5397248f4/web-llm-models/v0_2_84/base/Qwen2-0.5B-Instruct-q4f32_1_cs1k-webgpu.wasm",
-    "bytes": 4822084,
-    "sha256": "13142a60890868c2c1626cf513cd848677d6658ade3b2278788dad81373efd7d",
-    "why": "Qwen2.5 0.5B local text rewrite (Apache-2.0)"
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_8.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_8.bin",
+    "bytes": 32735232,
+    "sha256": "944ef481f34d54251c7b8408a1ea319a74982abef4535361ecaf7c20bbda228f",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
+  },
+  {
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_9.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_9.bin",
+    "bytes": 33030144,
+    "sha256": "4913895152c4d17032eca8f7dbbd7adc8324802ec99db4d41eb7c98a5cadf706",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
+  },
+  {
+    "file": "text/resolve/0ec13897-025bcaf3/params_shard_10.bin",
+    "url": "https://huggingface.co/mlc-ai/Qwen3.5-0.8B-q4f16_1-MLC/resolve/0ec138972555613c1d7812a821778ad0398c8790/params_shard_10.bin",
+    "bytes": 3688064,
+    "sha256": "97d2931620ee85c76d2520cec5dab1a56c4061680aae1d46dd52608296211314",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
+  },
+  {
+    "file": "text/resolve/0ec13897-025bcaf3/model.wasm",
+    "url": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/025bcaf3780fa8254f5e5efd3bfea0a5397248f4/web-llm-models/v0_2_84/base/Qwen3.5-0.8B-q4f16_1_cs1k-webgpu.wasm",
+    "bytes": 6197129,
+    "sha256": "3dd8cff049bf4599bfbb505880aea11ba95f85f3924b7e171f967d1f1348ae29",
+    "why": "Qwen3.5 0.8B local text rewrite (Apache-2.0)"
   }
 ]

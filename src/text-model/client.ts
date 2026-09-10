@@ -9,9 +9,15 @@ let nextId = 0
 let running = false
 
 export async function canDeepClean(): Promise<boolean> {
-  const gpu = (navigator as Navigator & { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu
+  const gpu = (
+    navigator as Navigator & {
+      gpu?: {
+        requestAdapter: () => Promise<{ features: { has: (name: string) => boolean } } | null>
+      }
+    }
+  ).gpu
   try {
-    return !!(await gpu?.requestAdapter())
+    return (await gpu?.requestAdapter())?.features.has('shader-f16') ?? false
   } catch {
     return false
   }
@@ -29,7 +35,8 @@ export async function deepClean(
   mode: 'deep' | 'ultra' = 'deep',
 ) {
   if (running) throw new Error('A rewrite is already running.')
-  if (!(await canDeepClean())) throw new Error('Deep clean needs WebGPU. Basic cleaning is ready.')
+  if (!(await canDeepClean()))
+    throw new Error('AI rewriting needs WebGPU with shader-f16. Basic cleaning is ready.')
   signal.throwIfAborted()
   running = true
   try {
