@@ -89,25 +89,238 @@ const emptyElements = (xml: string): string =>
  * and on `word/people.xml`, which lists everyone who has ever edited the file.
  * Accepting all changes in Word does not remove any of it.
  */
-// The namespace prefix is matched generically. Listing them by hand produced
-// `(?:w14?|w15|…)`, which means "w1 followed by an optional 4" and therefore
-// never matched plain `w:author` — the single most common case in the format.
-// The code read correctly and did nothing at all.
-const IDENTITY_ATTRIBUTE =
-  /\s(?:[A-Za-z]\w{0,5}:)?(?:author|initials|lastModifiedBy|userId|providerId|date|dateUtc)="[^"]*"/g
+const IDENTITY_NAMES = new Set([
+  'author',
+  'initials',
+  'lastModifiedBy',
+  'userId',
+  'providerId',
+  'date',
+  'dateUtc',
+])
 
-const anonymiseAttributes = (xml: string): string =>
-  xml.replaceAll(IDENTITY_ATTRIBUTE, (match) => `${match.split('=')[0]}=""`)
+const XML_NAME_START = /[A-Za-z_:]/
+const XML_NAME_CHAR = /[A-Za-z0-9_.:-]/
 
-/**
- * Revision save identifiers.
- *
- * A fingerprint of the editing sessions a document went through, which links
- * separate documents back to the same machine. Optional in the format, so the
- * whole block goes.
- */
-const stripRsids = (xml: string): string =>
-  xml.replaceAll(/<w:rsids>[\s\S]*?<\/w:rsids>/g, '').replaceAll(/\sw:rsid[A-Za-z]*="[^"]*"/g, '')
+function isIdentityAttribute(name: string): boolean {
+  const localName = name.slice(name.lastIndexOf(':') + 1)
+  return IDENTITY_NAMES.has(localName)
+}
+
+/** Revision save identifiers fingerprint the editing sessions a document went through. */
+function isRevisionAttribute(name: string): boolean {
+  const localName = name.slice(name.lastIndexOf(':') + 1)
+  return /^rsid[A-Za-z]*$/.test(localName)
+}
+
+function findTagEnd(xml: string, start: number): number {
+  let quote: string | undefined
+  for (let index = start + 1; index < xml.length; index += 1) {
+    const char = xml[index]
+    if (quote) {
+      if (char === quote) quote = undefined
+    } else if (char === '"' || char === "'") {
+      quote = char
+    } else if (char === '>') {
+      return index
+    }
+  }
+  return -1
+}
+
+function findDeclarationEnd(xml: string, start: number): number {
+  let quote: string | undefined
+  let subsetDepth = 0
+  for (let index = start + 1; index < xml.length; index += 1) {
+    const char = xml[index]
+    if (quote) {
+      if (char === quote) quote = undefined
+    } else if (char === '"' || char === "'") {
+      quote = char
+    } else if (char === '[') {
+      subsetDepth += 1
+    } else if (char === ']') {
+      subsetDepth = Math.max(0, subsetDepth - 1)
+    } else if (char === '>' && subsetDepth === 0) {
+      return index
+    }
+  }
+  return -1
+}
+
+function findElementEnd(xml: string, name: string, contentStart: number): number {
+  let depth = 1
+  let cursor = contentStart
+  while (cursor < xml.length) {
+    const start = xml.indexOf('<', cursor)
+    if (start < 0) return -1
+    if (xml.startsWith('<!--', start)) {
+      const end = xml.indexOf('-->', start + 4)
+      cursor = end < 0 ? xml.length : end + 3
+      continue
+    }
+    if (xml.startsWith('<![CDATA[', start)) {
+      const end = xml.indexOf(']]>', start + 9)
+      cursor = end < 0 ? xml.length : end + 3
+      continue
+    }
+    if (xml.startsWith('<?', start)) {
+      const end = xml.indexOf('?>', start + 2)
+      cursor = end < 0 ? xml.length : end + 2
+      continue
+    }
+    if (xml[start + 1] === '!') {
+      const end = findDeclarationEnd(xml, start)
+      cursor = end < 0 ? xml.length : end + 1
+      continue
+    }
+    const end = findTagEnd(xml, start)
+    if (end < 0) return -1
+    const tag = xml.slice(start, end + 1)
+    const tagName = tag.startsWith('</')
+      ? /^<\/\s*([^\s>]+)/.exec(tag)?.[1]
+      : /^<([^\s/>]+)/.exec(tag)?.[1]
+    if (tagName === name) {
+      if (tag.startsWith('</')) depth -= 1
+      else if (!/\/\s*>$/.test(tag)) depth += 1
+      if (depth === 0) return end + 1
+    }
+    cursor = end + 1
+  }
+  return -1
+}
+
+function rewriteStartTag(tag: string): { output: string; names: string[] } {
+  const replacements: Array<{ start: number; end: number }> = []
+  const names: string[] = []
+  let index = 1
+
+  while (index < tag.length - 1) {
+    const attributeStart = index
+    while (/\s/.test(tag[index] ?? '')) index += 1
+    if (index >= tag.length - 1 || tag[index] === '/') break
+
+    const nameStart = index
+    while (index < tag.length - 1 && XML_NAME_CHAR.test(tag[index] ?? '')) index += 1
+    if (index === nameStart) {
+      index += 1
+      continue
+    }
+    const name = tag.slice(nameStart, index)
+    while (/\s/.test(tag[index] ?? '')) index += 1
+    if (tag[index] !== '=') continue
+    index += 1
+    while (/\s/.test(tag[index] ?? '')) index += 1
+
+    const quote = tag[index]
+    if (quote !== '"' && quote !== "'") continue
+    const valueStart = index + 1
+    const valueEnd = tag.indexOf(quote, valueStart)
+    if (valueEnd < 0) break
+    if (isRevisionAttribute(name)) {
+      replacements.push({ start: attributeStart, end: valueEnd + 1 })
+    } else if (isIdentityAttribute(name)) {
+      replacements.push({ start: valueStart, end: valueEnd })
+      const localName = name.slice(name.lastIndexOf(':') + 1)
+      if (localName === 'author' || localName === 'lastModifiedBy' || localName === 'userId') {
+        const value = tag.slice(valueStart, valueEnd)
+        if (value) names.push(value)
+      }
+    }
+    index = valueEnd + 1
+  }
+
+  if (replacements.length === 0) return { output: tag, names }
+  let output = ''
+  let cursor = 0
+  for (const replacement of replacements) {
+    output += tag.slice(cursor, replacement.start)
+    cursor = replacement.end
+  }
+  output += tag.slice(cursor)
+  return { output, names }
+}
+
+function anonymiseAttributes(xml: string): { output: string; names: string[] } {
+  let output = ''
+  let cursor = 0
+  const names: string[] = []
+
+  while (cursor < xml.length) {
+    const start = xml.indexOf('<', cursor)
+    if (start < 0) {
+      output += xml.slice(cursor)
+      break
+    }
+    output += xml.slice(cursor, start)
+    if (xml.startsWith('<!--', start)) {
+      const end = xml.indexOf('-->', start + 4)
+      const stop = end < 0 ? xml.length : end + 3
+      output += xml.slice(start, stop)
+      cursor = stop
+      continue
+    }
+    if (xml.startsWith('<![CDATA[', start)) {
+      const end = xml.indexOf(']]>', start + 9)
+      const stop = end < 0 ? xml.length : end + 3
+      output += xml.slice(start, stop)
+      cursor = stop
+      continue
+    }
+    if (xml.startsWith('<?', start)) {
+      const end = xml.indexOf('?>', start + 2)
+      const stop = end < 0 ? xml.length : end + 2
+      output += xml.slice(start, stop)
+      cursor = stop
+      continue
+    }
+    const next = xml[start + 1]
+    if (next === '!') {
+      const end = findDeclarationEnd(xml, start)
+      if (end < 0) {
+        output += xml.slice(start)
+        break
+      }
+      output += xml.slice(start, end + 1)
+      cursor = end + 1
+      continue
+    }
+    if (!next || next === '/') {
+      output += '<'
+      cursor = start + 1
+      continue
+    }
+    if (!XML_NAME_START.test(next)) {
+      output += '<'
+      cursor = start + 1
+      continue
+    }
+    const end = findTagEnd(xml, start)
+    if (end < 0) {
+      output += xml.slice(start)
+      break
+    }
+    const tag = xml.slice(start, end + 1)
+    const tagName = /^<([^\s/>]+)/.exec(tag)?.[1]
+    if (tagName === 'w:rsids') {
+      if (/\/\s*>$/.test(tag)) {
+        output += tag
+        cursor = end + 1
+        continue
+      }
+      const blockEnd = findElementEnd(xml, tagName, end + 1)
+      if (blockEnd >= 0) {
+        cursor = blockEnd
+        continue
+      }
+    }
+    const rewritten = rewriteStartTag(tag)
+    output += rewritten.output
+    names.push(...rewritten.names)
+    cursor = end + 1
+  }
+  return { output, names }
+}
 
 /** A 1×1 white JPEG, to stand in for a document preview without leaking one. */
 const BLANK_THUMBNAIL = Uint8Array.from([
@@ -184,12 +397,9 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
     // left alone — only the names, ids and timestamps are cleared.
     if (entry.name.endsWith('.xml')) {
       const before = decodeUtf8(entry.data)
-      const after = stripRsids(anonymiseAttributes(before))
+      const identity = anonymiseAttributes(before)
+      const after = identity.output
       if (after !== before) {
-        const names = [...before.matchAll(/(?:author|lastModifiedBy|userId)="([^"]+)"/g)]
-          .map((match) => match[1])
-          .filter(Boolean)
-
         findings.push({
           kind: 'doc_property',
           verdict: 'probable',
@@ -197,7 +407,8 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
           length: entry.data.length,
           where: entry.name,
           label: 'Author names, timestamps and revision ids',
-          evidence: snippet([...new Set(names)].join(' · ')) || 'revision save identifiers',
+          evidence:
+            snippet([...new Set(identity.names)].join(' · ')) || 'revision save identifiers',
         })
         rebuilt.push({
           name: entry.name,

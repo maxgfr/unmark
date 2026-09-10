@@ -17,7 +17,29 @@
 // A real PDF from Word or Acrobat would exercise those, and nobody here has one.
 
 import { expect, test } from '@playwright/test'
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { cleanContainer, inspectContainer } from '../../src/core/container/index.ts'
+
+async function readPdf(bytes: Uint8Array) {
+  const task = getDocument({ data: bytes })
+  const document = await task.promise
+  try {
+    const pages = await Promise.all(
+      Array.from({ length: document.numPages }, async (_, index) => {
+        const page = await document.getPage(index + 1)
+        const content = await page.getTextContent()
+        return content.items
+          .map((item) => ('str' in item ? item.str : ''))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      }),
+    )
+    return { pageCount: document.numPages, pages }
+  } finally {
+    await task.destroy()
+  }
+}
 
 test.describe('a PDF from a real producer', () => {
   // `page.pdf()` is Chromium-only in Playwright, and one real producer is the
@@ -81,19 +103,21 @@ test.describe('a PDF from a real producer', () => {
     // no clean at all.
     await page.setContent(HTML)
     const pdf = await page.pdf({ format: 'A4' })
+    const source = await readPdf(new Uint8Array(pdf))
     const result = await cleanContainer(new Uint8Array(pdf), 'report.pdf')
+    const cleaned = await readPdf(result.output)
 
-    // Re-opened by the browser's own reader rather than by ours: our parser
-    // saying the output is valid proves only that it agrees with itself.
-    const url = `data:application/pdf;base64,${Buffer.from(result.output).toString('base64')}`
-    const opened = await page.evaluate(async (href: string) => {
-      const response = await fetch(href)
-      const buffer = new Uint8Array(await response.arrayBuffer())
-      return { length: buffer.length, header: buffer.slice(0, 5).join(',') }
-    }, url)
-
-    expect(opened.header).toBe('37,80,68,70,45')
-    expect(opened.length).toBeGreaterThan(1000)
+    // pdf.js is an independent parser and text extractor. Checking both
+    // documents proves that cleaning preserves the actual page structure and
+    // text, rather than only producing bytes our own parser accepts.
+    expect(source.pageCount).toBe(2)
+    expect(cleaned.pageCount).toBe(source.pageCount)
+    const sourceText = source.pages.join(' ')
+    expect(sourceText).toContain('Revenue rose 4.2% in March.')
+    // PDF text extraction may place a space at a glyph boundary (`fi gures`).
+    expect(sourceText).toMatch(/The board approved the fi\s*gures\./)
+    expect(source.pages[1]).toContain('Second page')
+    expect(cleaned.pages).toEqual(source.pages)
   })
 
   test('a second clean changes nothing more', async ({ page }) => {

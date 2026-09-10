@@ -143,6 +143,100 @@ const tracked = () =>
   ])
 
 describe('identity outside docProps', () => {
+  it.each(["'", '"'])('clears identity with %s quotes and XML attribute spacing', async (quote) => {
+    const body = `<w:document><w:ins w:author = ${quote}Synthetic Author${quote} w:date = ${quote}2026-01-01${quote} w:rsidR = ${quote}ABC123${quote}><w:r><w:t>Keep this text.</w:t></w:r></w:ins></w:document>`
+    const result = await cleanZipDocument(
+      zip([
+        { name: '[Content_Types].xml', content: '<Types/>' },
+        { name: 'word/document.xml', content: body },
+      ]),
+    )
+    const document = await partOf(result.output, 'word/document.xml')
+    expect(document).not.toContain('Synthetic Author')
+    expect(document).not.toContain('2026-01-01')
+    expect(document).not.toContain('ABC123')
+    expect(document).toContain('Keep this text.')
+    expect(result.findings.some((finding) => finding.evidence?.includes('Synthetic Author'))).toBe(
+      true,
+    )
+    expect((await cleanZipDocument(result.output)).findings).toEqual([])
+  })
+
+  it('preserves the opposite quote inside an identity value until anonymising it', async () => {
+    const body = `<w:document><w:ins w:author="O'Reilly" w:date='today'><w:t>Keep.</w:t></w:ins></w:document>`
+    const result = await cleanZipDocument(
+      zip([
+        { name: '[Content_Types].xml', content: '<Types/>' },
+        { name: 'word/document.xml', content: body },
+      ]),
+    )
+    expect(await partOf(result.output, 'word/document.xml')).toBe(
+      `<w:document><w:ins w:author="" w:date=''><w:t>Keep.</w:t></w:ins></w:document>`,
+    )
+  })
+
+  it('does not rewrite identity-like text outside actual start-tag attributes', async () => {
+    const body =
+      '<w:document><?proc w:author="pi"?><w:p data-note=\' w:author="nested" \'>' +
+      '<w:r><w:t>Visible w:author="keep" w:rsidR="keep-rsid"</w:t></w:r></w:p>' +
+      '<!-- w:author="comment" <w:rsids><w:rsidR w:val="comment"/></w:rsids> -->' +
+      '<![CDATA[w:author="cdata" <w:rsids><w:rsidR w:val="cdata"/></w:rsids>]]>' +
+      '<w:ins w:author="Real Author"><w:t>Text.</w:t></w:ins></w:document>'
+    const result = await cleanZipDocument(
+      zip([
+        { name: '[Content_Types].xml', content: '<Types/>' },
+        { name: 'word/document.xml', content: body },
+      ]),
+    )
+    const document = await partOf(result.output, 'word/document.xml')
+    expect(document).toContain('<?proc w:author="pi"?>')
+    expect(document).toContain('data-note=\' w:author="nested" \'')
+    expect(document).toContain('Visible w:author="keep" w:rsidR="keep-rsid"')
+    expect(document).toContain(
+      '<!-- w:author="comment" <w:rsids><w:rsidR w:val="comment"/></w:rsids> -->',
+    )
+    expect(document).toContain(
+      '<![CDATA[w:author="cdata" <w:rsids><w:rsidR w:val="cdata"/></w:rsids>]]>',
+    )
+    expect(document).toContain('w:author=""')
+    expect(result.findings.some((finding) => finding.evidence?.includes('Real Author'))).toBe(true)
+  })
+
+  it('supports long and punctuation-bearing namespace prefixes', async () => {
+    const body =
+      '<wordml:document><wordml:ins wordml:author="Long Prefix" w-compat:date=\'today\'>' +
+      '<wordml:t>Keep.</wordml:t></wordml:ins></wordml:document>'
+    const result = await cleanZipDocument(
+      zip([
+        { name: '[Content_Types].xml', content: '<Types/>' },
+        { name: 'word/document.xml', content: body },
+      ]),
+    )
+    const document = await partOf(result.output, 'word/document.xml')
+    expect(document).toContain('wordml:author=""')
+    expect(document).toContain("w-compat:date=''")
+    expect(document).toContain('Keep.')
+    expect(result.findings.some((finding) => finding.evidence?.includes('Long Prefix'))).toBe(true)
+  })
+
+  it('removes a revision block without crossing following content', async () => {
+    const body =
+      '<w:settings><w:rsids><w:rsidRoot w:val="ABC"/></w:rsids><w:t>Keep this.</w:t>' +
+      '<w:rsids/><w:t>Keep that.</w:t></w:settings>'
+    const result = await cleanZipDocument(
+      zip([
+        { name: '[Content_Types].xml', content: '<Types/>' },
+        { name: 'word/settings.xml', content: body },
+      ]),
+    )
+    const settings = await partOf(result.output, 'word/settings.xml')
+    expect(settings).not.toContain('ABC')
+    expect(settings).not.toContain('<w:rsids><w:rsidRoot')
+    expect(settings).toContain('<w:t>Keep this.</w:t>')
+    expect(settings).toContain('<w:rsids/>')
+    expect(settings).toContain('<w:t>Keep that.</w:t>')
+  })
+
   it('clears the author and date on every tracked change', async () => {
     const result = await cleanZipDocument(tracked())
     const document = await partOf(result.output, 'word/document.xml')
