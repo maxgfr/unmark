@@ -103,5 +103,9 @@ the content check and retain the cleaned source. Qwen3.5 0.8B remains a lightwei
 local option with limited rewriting quality. The shared content gate rejects
 detected language changes, excluding quotations and code. Ambiguous short text
 can remain undetermined; the check does not guarantee language or meaning.
+Between four and twelve words a second, language-independent check requires at
+least half the source's words to survive, with case and accents folded. Detection
+is unreliable at that length, and a rewrite read as the same wrong language on
+both sides passed the language gate unnoticed.
 The memory target is under 2 GB: the measured Chromium process RSS peak was
 1.93 GB on the development machine, not a universal browser memory guarantee.

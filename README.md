@@ -179,6 +179,10 @@ The page uses a concise prompt tailored to the small model, while sharing the
 content checks with the terminal. Rejected candidates now name the failed checks.
 Language checks reject detected translations while excluding protected quotes and code.
 Short or ambiguous text may not provide enough evidence to detect a language change.
+Between four and twelve words, a rewrite must also keep at least half of the source's
+words, with case and accents folded so a repaired accent still counts as the same
+word. A short line the detector misreads would otherwise let a translation through:
+read as the same wrong language on both sides, it passed the language gate.
 This 0.8B model is a lightweight local option, with limited rewriting quality;
 passing the checks does not guarantee that the meaning is unchanged.
 See the [model choice, memory measurements and regression results](docs/model-selection.md).
