@@ -336,6 +336,38 @@ test('WebGPU without half precision keeps basic cleaning and never downloads the
   expect(requests).toEqual([])
 })
 
+// The reported failure: a short French line read as Polish by the detector,
+// answered in Polish by the model, and waved through by a language gate that
+// compared Polish against Polish. Caught now without asking what language
+// either side is in.
+for (const mode of ['deep', 'ultra'] as const) {
+  test(`${mode} refuses a short rewrite that replaced the text instead of correcting it`, async ({
+    page,
+  }) => {
+    const source = 'Hello ça dit quoi wsh ?'
+    const replaced = 'Chy jest co wiesz wsh?'
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) },
+        configurable: true,
+      }),
+    )
+    await page.context().route('**/assets/text.worker-*.js', (route) =>
+      route.fulfill({
+        contentType: 'text/javascript',
+        body: `self.onmessage = ({data}) => self.postMessage({id:data.id,kind:'answer',text:${JSON.stringify(replaced)}})`,
+      }),
+    )
+    await page.getByLabel('Text to inspect').fill(source)
+    await page.getByText('Advanced options', { exact: true }).click()
+    await page.getByLabel('Cleaning mode').selectOption(mode)
+    await page.getByRole('button', { name: 'Clean text', exact: true }).click()
+    await expect(page.locator('output')).toHaveText(source)
+    await expect(page.getByText(/only 1 of 5 words from the source survived/)).toBeVisible()
+    await expect(page.getByLabel('Text to inspect')).toHaveValue(source)
+  })
+}
+
 // The local model panel under Advanced options: what is on this device, and
 // the three things a visitor can do about it. The worker is mocked; the Cache
 // API is real, which is the part worth testing.
