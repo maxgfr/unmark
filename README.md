@@ -179,6 +179,12 @@ The page uses a concise prompt tailored to the small model, while sharing the
 content checks with the terminal. Rejected candidates now name the failed checks.
 Language checks reject detected translations while excluding protected quotes and code.
 Short or ambiguous text may not provide enough evidence to detect a language change.
+A document longer than about 180 words is cut into sections at its paragraph
+boundaries, rewritten one section at a time and joined back together — the
+model stops returning a whole passage past roughly 250 words, and one long
+document used to fail entirely where each of its paragraphs would have
+succeeded. A section that fails keeps its own text, so one stubborn paragraph
+costs that paragraph rather than the document.
 Between four and twelve words, a rewrite must also keep at least half of the source's
 words, with case and accents folded so a repaired accent still counts as the same
 word. A short line the detector misreads would otherwise let a translation through:

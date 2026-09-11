@@ -1,6 +1,7 @@
 import { cleanText, PLAIN, type TextOptions } from './text/index.ts'
-import { buildBrief, type briefToPrompt } from './rewrite.ts'
-import { rewriteLoop, type Generate, type RewriteOutcome } from './rewrite-loop.ts'
+import { type briefToPrompt } from './rewrite.ts'
+import { type Generate, type RewriteOutcome } from './rewrite-loop.ts'
+import { rewriteDocument } from './rewrite-document.ts'
 
 /** Full deterministic cleanup without destructive multilingual normalisation. */
 export const ULTRA_OPTIONS: TextOptions = { ...PLAIN, paranoid: false, confusables: false }
@@ -20,9 +21,8 @@ export async function ultraClean(
   if (!baseline.trim()) {
     return { kind: 'accepted', text: baseline, attempts: 0, notes: [] }
   }
-  const outcome = await rewriteLoop(
+  const outcome = await rewriteDocument(
     baseline,
-    buildBrief(baseline),
     async (prompt, signal) => cleanText(await generate(prompt, signal), ULTRA_OPTIONS).output,
     { ...options, attempts: 3 },
   )

@@ -78,7 +78,21 @@ conjugation), grown paragraph by paragraph on the development machine:
 | 12         | 480   | 25      | no           | same                           |
 | 16         | 640   | 20      | no           | hit the 1,024-token answer cap |
 
-So the working range is roughly up to 250 words, where two thirds to four
+Long documents are now cut into sections of about 180 words, rewritten one at a
+time and concatenated, so the ceiling above applies per section rather than per
+document. Re-measured with sectioning on:
+
+| Paragraphs | Words | Seconds | Rewrite used | Mistakes repaired |
+| ---------- | ----- | ------- | ------------ | ----------------- |
+| 4          | 160   | 6       | yes          | 15 of 19          |
+| 8          | 320   | 8       | yes          | 15 of 19          |
+| 12         | 480   | 11      | yes          | 15 of 19          |
+| 16         | 640   | 16      | yes          | 15 of 19          |
+
+The three sizes that failed outright before now pass at the same repair rate as
+a short text, and the time grows roughly with the length.
+
+Without sectioning the working range was roughly up to 250 words, where two thirds to four
 fifths of the mistakes are repaired. Past that the model stops returning the
 whole passage: it drops sentences, the content checks correctly report a lost
 date, and the page now says why rather than only naming the number. These are
