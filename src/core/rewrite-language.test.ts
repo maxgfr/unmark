@@ -152,3 +152,31 @@ it('rejects a monolingual document that comes back with one paragraph translated
   const source = `${french}\n\n${french}`
   expect(languageFailures(source, `${french}\n\n${english}`)).toHaveLength(1)
 })
+
+it('accepts a correction that repairs misspelled proper nouns and their accents', () => {
+  // Measured against the real model: it produced a good repair of a French
+  // paragraph full of deliberate mistakes and the verdict threw it away,
+  // because correcting "Molliere" to "Molière" read as a name present in the
+  // source and missing from the rewrite. A perfect correction failed the same
+  // check, so the rule forbade the thing the feature is for.
+  const source = `Molliere, un grand hauteur de théatre
+
+Jean-Baptiste Poquelin, qu'on apelle Molliere, et né a Paris en 1622. Sont pere étais tapissié du roi, mais le jeune homme na pas voulut suivre ces traces.
+
+A vingt ans, il fonde une troupe qui sapelle l'Illustre Théatre.`
+  const corrected = `Molière, un grand auteur de théâtre
+
+Jean-Baptiste Poquelin, qu'on appelle Molière, est né à Paris en 1622. Son père était tapissier du roi, mais le jeune homme n'a pas voulu suivre ses traces.
+
+À vingt ans, il fonde une troupe qui s'appelle l'Illustre Théâtre.`
+  const verdict = verifyRewrite(source, corrected, buildBrief(source))
+  expect(verdict.failures).toEqual([])
+  expect(verdict.ok).toBe(true)
+})
+
+it('still rejects a rewrite that drops a name outright', () => {
+  const source = "Jean-Baptiste Poquelin est né à Paris en 1622, et Louis quatorze l'a protégé."
+  const dropped = "Jean-Baptiste Poquelin est né à Paris en 1622, et le roi l'a protégé."
+  const verdict = verifyRewrite(source, dropped, buildBrief(source))
+  expect(verdict.failures.some((failure) => failure.what.includes('Louis'))).toBe(true)
+})

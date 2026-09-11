@@ -24,6 +24,7 @@
 
 import { changedLanguage } from './text/language.ts'
 import { replacedShortText } from './text/shortrewrite.ts'
+import { isCorrection, nameSurvived } from './text/correction.ts'
 import { humanise } from './text/humanise.ts'
 import {
   analyzeStyle,
@@ -346,6 +347,13 @@ export function verifyRewrite(original: string, rewrite: string, brief: Brief): 
   //   smuggle in a habit the original did not have.
   //
   // Everything else is reported through `remaining` and left to the reader.
+  // A correction keeps the source's words and repairs them in place. The style
+  // gates exist to stop a de-slopping rewrite from drifting, and applied to a
+  // correction they reject it for the sentence rhythm the source already had —
+  // measured: a good repair of a mistake-ridden French paragraph was thrown
+  // away over "sentence-length variance ... 0.22 against 0.35". Tells are still
+  // reported through `remaining`; they simply stop being a veto.
+  const correcting = isCorrection(original, rewrite)
   for (const tell of remaining) {
     const before = brief.baseline[tell.id]
     const worse =
@@ -353,7 +361,12 @@ export function verifyRewrite(original: string, rewrite: string, brief: Brief): 
       Number.isNaN(before) ||
       (LOWER_IS_THE_TELL.has(tell.id) ? tell.value < before : tell.value > before)
 
-    if (tell.layer !== 'phrase' && !worse) continue
+    // Flagged vocabulary is rejected whatever the rewrite was trying to do:
+    // there is no reading under which it is fine, and a rewrite that returns
+    // the slop it was handed must still be told so. The statistical metrics
+    // are different — they describe rhythm the source already had, and a
+    // correction is not the place to relitigate it.
+    if (tell.layer !== 'phrase' && (correcting || !worse)) continue
 
     failures.push({
       kind: 'pattern',
@@ -388,6 +401,11 @@ export function verifyRewrite(original: string, rewrite: string, brief: Brief): 
   ]
   for (const [key, noun] of checks) {
     for (const lost of missing(brief.facts[key], after[key])) {
+      // Correcting a misspelled proper noun necessarily removes the
+      // misspelling, so an exact-survival rule forbids the repair outright:
+      // "Molliere" becoming "Molière" read as a name lost. A name that simply
+      // vanished has no near neighbour on the other side and still fails.
+      if (key === 'names' && nameSurvived(lost, after[key])) continue
       failures.push({
         kind: 'fact',
         what: `${noun} ${lost}`,
