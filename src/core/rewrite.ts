@@ -303,7 +303,7 @@ export function verifyRewrite(original: string, rewrite: string, brief: Brief): 
   // Check the source too: quoting such a sentence in an actual document is valid.
   const responsePatterns = [
     /^<think>/i,
-    /WHAT IS WRONG WITH IT|MUST SURVIVE UNCHANGED|CORRECT THESE FAILURES/,
+    /WHAT IS WRONG WITH IT|MUST SURVIVE UNCHANGED|CORRECT THESE FAILURES|PREVIOUS CANDIDATE/,
     /^the (?:document|text) should remain as is\b/i,
     /^(?:no (?:changes|modifications) (?:are )?(?:needed|required)|here is (?:the|your) (?:rewritten|edited) (?:document|text))\b/i,
   ]

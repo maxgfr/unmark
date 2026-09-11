@@ -10,6 +10,28 @@ export interface RewriteOutcome {
 
 export type Generate = (prompt: string, signal: AbortSignal) => Promise<string>
 
+/** The headings a retry adds to the prompt, and that a small model echoes back. */
+const SCAFFOLDING = ['PREVIOUS CANDIDATE:', 'CORRECT THESE FAILURES:']
+
+/**
+ * Cut a candidate at the point where it starts quoting the prompt back.
+ *
+ * A retry hands the model its previous attempt under an English heading, and
+ * on a long document the model reproduces the heading and everything after it.
+ * That English then reached the language gate, which reported the rewrite as
+ * "French and English" and rejected an otherwise good correction — the failure
+ * looked like a language problem and was a prompt-echo problem. What comes
+ * before the heading is the answer, so it is kept.
+ */
+export function trimScaffolding(text: string): string {
+  let cut = text.length
+  for (const marker of SCAFFOLDING) {
+    const at = text.indexOf(marker)
+    if (at !== -1 && at < cut) cut = at
+  }
+  return cut === text.length ? text : text.slice(0, cut).trim()
+}
+
 /** Transport-independent loop. A late or cancelled answer can never be accepted. */
 export async function rewriteLoop(
   text: string,
@@ -53,7 +75,9 @@ export async function rewriteLoop(
         )
       })
       // oxlint-disable-next-line no-await-in-loop -- each attempt corrects the last
-      candidate = (await Promise.race([generate(aimed, controller.signal), interrupted])).trim()
+      candidate = trimScaffolding(
+        (await Promise.race([generate(aimed, controller.signal), interrupted])).trim(),
+      )
       controller.signal.throwIfAborted()
       verdict = verifyRewrite(text, candidate, brief)
       if (verdict.ok)
