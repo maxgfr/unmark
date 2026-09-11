@@ -62,6 +62,28 @@ own storage and memory rows, then verifies French grammar, Spanish and German, t
 cached and offline French reloads, with only same-origin GET requests and no further
 model downloads after the panel's.
 
+## Measured ceiling on text length
+
+A French text full of deliberate mistakes (agreement, homophones, accents,
+conjugation), grown paragraph by paragraph on the development machine:
+
+| Paragraphs | Words | Seconds | Rewrite used | Mistakes repaired              |
+| ---------- | ----- | ------- | ------------ | ------------------------------ |
+| 1          | 38    | 3       | yes          | 5 of 6                         |
+| 2          | 82    | 2       | yes          | 6 of 12                        |
+| 3          | 125   | 3       | yes          | 10 of 15                       |
+| 4          | 160   | 4       | yes          | 15 of 19                       |
+| 6          | 242   | 6       | yes          | 14 of 19                       |
+| 8          | 320   | 15      | no           | model dropped 1622 and 1673    |
+| 12         | 480   | 25      | no           | same                           |
+| 16         | 640   | 20      | no           | hit the 1,024-token answer cap |
+
+So the working range is roughly up to 250 words, where two thirds to four
+fifths of the mistakes are repaired. Past that the model stops returning the
+whole passage: it drops sentences, the content checks correctly report a lost
+date, and the page now says why rather than only naming the number. These are
+real refusals, not false positives — the rewrite really had lost the fact.
+
 ## Language preservation
 
 The prompt explicitly preserves the source language. The shared verification

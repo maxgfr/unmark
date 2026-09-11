@@ -16,6 +16,8 @@ const EXAMPLE = `Quarterly results are attached.${encodeStego('recipient-4417', 
 const button =
   'rounded-md border border-[var(--color-rule)] px-3 py-2 text-sm transition-colors hover:border-[var(--color-rule-bright)] disabled:cursor-not-allowed disabled:opacity-40'
 type CleaningMode = 'standard' | 'deep' | 'ultra'
+/** Words past which the local model reliably stops returning the whole text. */
+const LONG_FOR_MODEL = 250
 type Result = { text: string; summary: string }
 type Snapshot = { input: string; result: Result | undefined }
 
@@ -157,7 +159,20 @@ export function TextTab() {
         })
         setStatus('')
       } else {
-        setStatus(`${outcome.notes.join(' ')} Basic cleaning is ready.`)
+        // Measured on the shipped model: a repair of a mistake-ridden French
+        // text is accepted up to roughly 250 words, and past that the model
+        // stops returning the whole passage — it drops sentences, so the
+        // content checks report a lost date rather than the reason for it.
+        // Say the reason, because "number 1622 is missing" does not tell
+        // anyone to try a shorter passage.
+        const long = input.trim().split(/\s+/).length > LONG_FOR_MODEL
+        setStatus(
+          `${outcome.notes.join(' ')}${
+            long
+              ? ' This passage is long for a small local model, which stops returning all of it past roughly 250 words. Try one section at a time.'
+              : ''
+          } Basic cleaning is ready.`,
+        )
       }
     } catch (error) {
       if (revision.current === ownRevision && !controller.signal.aborted) {
