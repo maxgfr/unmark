@@ -88,7 +88,7 @@ export interface Brief {
 }
 
 /** What a writer has to do about each metric — none of it is a substitution. */
-const FIX: Record<string, string> = {
+export const FIX: Record<string, string> = {
   marker_vocabulary: 'replace the flagged words with plain ones; there is no single substitute',
   business_jargon: 'say the concrete thing the jargon is standing in for',
   vague_attribution: 'name the source, or cut the claim',
