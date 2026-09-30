@@ -28,10 +28,13 @@ export { normaliseTypography } from './typography.ts'
 export { cleanProvenance } from './provenance.ts'
 export { blocksOf, paragraphsOf, protectedMask } from './regions.ts'
 export { detectSpaceCadence } from './stego.ts'
-export * from './authorship/index.ts'
 export type { StegoDecoding, StyleReport, TextOptions }
 export type { StyleLayer, StyleMetric } from './stylometry.ts'
 export type { StegoScheme } from './stego.ts'
+// The authorship assessment is deliberately not re-exported here. The page
+// imports this module on first load, and the assessment's catalogues and
+// language models would ride along with it; import ./authorship/index.ts
+// directly, lazily in the page. scripts/check-imports.mjs holds that line.
 
 /**
  * The one-button preset.

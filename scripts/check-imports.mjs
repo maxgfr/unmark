@@ -111,6 +111,51 @@ async function visit(file, trail) {
 
 await visit(resolve(ENTRY), [])
 
+// A second walk, over static imports only: what the page loads before anyone
+// asks for it. The authorship assessment is reached only through its lazy
+// section. Re-exported from a module the page imports eagerly, its catalogues
+// and the language models under them rode into the first load — 800 kB of
+// JavaScript for a section most visits never open.
+const EAGER_FORBIDDEN = [
+  [
+    'src/core/text/authorship/',
+    'the authorship assessment loads when its section opens; import it lazily',
+  ],
+]
+const eager = new Set()
+
+async function visitEager(file, trail) {
+  if (eager.has(file)) return
+  eager.add(file)
+  let source
+  try {
+    source = await readFile(file, 'utf8')
+  } catch {
+    return
+  }
+  const specifiers = [
+    ...[...source.matchAll(IMPORT)].map((match) => match[1]),
+    ...[...source.matchAll(SIDE_EFFECT)].map((match) => match[1]),
+  ]
+  for (const specifier of specifiers) {
+    if (!specifier.startsWith('.')) continue
+    const path = resolve(dirname(file), specifier.split('?')[0])
+    const forbidden = EAGER_FORBIDDEN.find(([prefix]) => path.includes(join(process.cwd(), prefix)))
+    if (forbidden) {
+      problems.push({
+        specifier,
+        why: forbidden[1],
+        trail: [...trail, file].map((p) => relative('.', p)),
+      })
+      continue
+    }
+    // oxlint-disable-next-line no-await-in-loop -- a depth-first walk is sequential
+    await visitEager(path, [...trail, file])
+  }
+}
+
+await visitEager(resolve(ENTRY), [])
+
 if (problems.length > 0) {
   process.stderr.write('\nThe page can reach code it must not:\n\n')
   for (const problem of problems) {

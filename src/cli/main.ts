@@ -17,17 +17,15 @@ import {
   type ContainerFormat,
 } from '../core/container/index.ts'
 import { decodeStego } from '../core/text/stego.ts'
+import { analyzeStyle, PLAIN, stylometryFindings } from '../core/text/index.ts'
 import {
-  analyzeStyle,
   detectAuthorship,
-  PLAIN,
   renderMarkdown,
-  stylometryFindings,
   toJSON,
   verdictSentence,
   type AuthorshipReport,
   type AuthorshipVerdict,
-} from '../core/text/index.ts'
+} from '../core/text/authorship/index.ts'
 import { buildBrief, verifyRewrite, type RewriteVerdict } from '../core/rewrite.ts'
 import { runRewrite } from './rewrite.ts'
 import {

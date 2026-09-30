@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { detectAuthorship } from './index.ts'
-import { detectAuthorship as fromText } from '../index.ts'
 import { DISCLAIMER } from './report.ts'
 import { AI_FR, HUMAN_FR } from '../../../test/authorship-samples.ts'
 
@@ -103,9 +102,5 @@ describe('detectAuthorship', () => {
 
   it('is deterministic', () => {
     expect(detectAuthorship(AI_FR)).toEqual(detectAuthorship(AI_FR))
-  })
-
-  it('is exported from the text surface', () => {
-    expect(fromText).toBe(detectAuthorship)
   })
 })
