@@ -17,5 +17,5 @@
     "noUncheckedSideEffectImports": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["vite.config.ts", "vite.skill.config.ts"]
+  "include": ["vite.config.ts", "vite.skill.config.ts", "vitest.perf.config.ts"]
 }

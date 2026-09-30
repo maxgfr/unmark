@@ -33,6 +33,21 @@ export function lineIndex(text: string): LineIndex {
     starts.push(at + 1)
   }
 
+  // Columns count code points, so every low surrogate before an offset on its
+  // line is one unit that is not a column. A running count makes that a
+  // subtraction instead of a scan — on one megabyte with no newline, the scan
+  // was quadratic. Built only when the text has surrogates at all.
+  let pairs: Uint32Array | undefined
+  if (/[\u{10000}-\u{10FFFF}]/u.test(text)) {
+    pairs = new Uint32Array(text.length + 1)
+    for (let at = 0; at < text.length; at += 1) {
+      const unit = text.charCodeAt(at)
+      const low = unit >= 0xdc00 && unit <= 0xdfff
+      const paired = low && at > 0 && isHigh(text.charCodeAt(at - 1))
+      pairs[at + 1] = (pairs[at] as number) + (paired ? 1 : 0)
+    }
+  }
+
   return {
     lines: starts.length,
     locate(offset: number): Position {
@@ -46,13 +61,11 @@ export function lineIndex(text: string): LineIndex {
       }
 
       const start = starts[low] as number
-      let col = 1
-      for (let at = start; at < target; at += 1) {
-        const unit = text.charCodeAt(at)
-        // A low surrogate belongs to the high one before it: one character.
-        if (!(unit >= 0xdc00 && unit <= 0xdfff && at > start)) col += 1
-      }
-      return { line: low + 1, col }
+      // A low surrogate belongs to the high one before it: one character.
+      const inside = pairs ? (pairs[target] as number) - (pairs[start] as number) : 0
+      return { line: low + 1, col: target - start + 1 - inside }
     },
   }
 }
+
+const isHigh = (unit: number) => unit >= 0xd800 && unit <= 0xdbff

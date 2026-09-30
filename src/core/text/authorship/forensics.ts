@@ -39,7 +39,7 @@ const TECHNICAL: ReadonlySet<FindingKind> = new Set<FindingKind>([
  * no-break space — are left out because they are not marks.
  */
 export function technicalMarks(text: string): Finding[] {
-  const { findings } = cleanText(text, { confusables: true })
+  const { findings } = cleanText(text, { confusables: true, styleReport: false })
   return [
     ...findings.filter(
       (finding) =>

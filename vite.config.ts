@@ -115,5 +115,7 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['src/**/*.test.{ts,tsx}'],
+    // Timing budgets run alone, by `pnpm test:perf` (vitest.perf.config.ts).
+    exclude: ['**/node_modules/**', 'src/**/*.perf.test.ts'],
   },
 })

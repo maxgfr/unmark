@@ -26,6 +26,61 @@ export interface Routing {
 
 const isSupported = (lang: string | undefined): lang is Lang => lang === 'fr' || lang === 'en'
 
+/** Up to this much prose, every paragraph is identified on its own. */
+const PRECISE_UNTIL = 60_000
+/** Past it, paragraphs are read in stretches of at least this many characters… */
+const STRETCH = 1000
+/** …of which this many are read. */
+const STRETCH_SAMPLE = 400
+
+/**
+ * The detected language of every block, `undefined` where none was sure.
+ *
+ * Per paragraph on an ordinary document. On a long one, consecutive short
+ * paragraphs are read together as a stretch, from its first few hundred
+ * characters: identification costs time per character read, and reading all
+ * of a book to route it cost more than everything else the detector does.
+ * A paragraph long enough to be a stretch on its own is still read alone, so
+ * a bilingual document keeps both languages; what is lost is a single short
+ * paragraph in the other language, inside a long one.
+ */
+function detect(text: string, seg: Segmentation, words: readonly number[]): (string | undefined)[] {
+  // Blocks with no kept sentence are not worth a detector call.
+  const live = seg.blocks
+    .map((block, index) => ({ ...block, index }))
+    .filter((block) => (words[block.index] ?? 0) > 0)
+  const prose = live.reduce((sum, block) => sum + block.end - block.start, 0)
+
+  const found: (string | undefined)[] = seg.blocks.map(() => undefined)
+  if (prose <= PRECISE_UNTIL) {
+    const detected = passageLanguages(text, live)
+    detected.forEach((passage, at) => {
+      found[(live[at] as (typeof live)[number]).index] = passage.lang
+    })
+    return found
+  }
+
+  const stretches: { start: number; end: number; members: number[] }[] = []
+  let current: { start: number; end: number; members: number[] } | undefined
+  for (const block of live) {
+    if (!current) current = { start: block.start, end: block.end, members: [] }
+    current.end = block.end
+    current.members.push(block.index)
+    if (current.end - current.start >= STRETCH) {
+      stretches.push(current)
+      current = undefined
+    }
+  }
+  if (current) stretches.push(current)
+
+  const detected = passageLanguages(text, stretches, { sample: STRETCH_SAMPLE })
+  detected.forEach((passage, at) => {
+    for (const member of (stretches[at] as (typeof stretches)[number]).members)
+      found[member] = passage.lang
+  })
+  return found
+}
+
 /** Route every sentence of `seg` to a catalogue, in place, and say how. */
 export function route(text: string, seg: Segmentation, option: LangOption = 'auto'): Routing {
   if (option !== 'auto') {
@@ -42,13 +97,7 @@ export function route(text: string, seg: Segmentation, option: LangOption = 'aut
     words[sentence.paragraphIndex] = (words[sentence.paragraphIndex] ?? 0) + sentence.words
   }
 
-  // Blocks with no kept sentence are not worth a detector call.
-  const detected = passageLanguages(
-    text,
-    seg.blocks.filter((_, index) => (words[index] ?? 0) > 0),
-  )
-  const byStart = new Map(detected.map((passage) => [passage.start, passage.lang]))
-  const found = seg.blocks.map((block) => byStart.get(block.start))
+  const found = detect(text, seg, words)
 
   const totals = new Map<string, number>()
   let total = 0

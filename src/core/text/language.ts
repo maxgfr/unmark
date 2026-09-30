@@ -239,11 +239,29 @@ const MIN_LETTERS = 20
  * The same scrubbing as `passages`, done by overwriting with spaces rather
  * than deleting, so a caller routing sentences by offset lands in the right
  * passage. `ranges` lets that caller choose the passages; by default they are
- * the prose blocks `passages` reads.
+ * the prose blocks `passages` reads, and `sample` caps how much of each is
+ * read — identification settles within a few hundred characters.
  */
+/**
+ * `identify(…).sure`, without the work `sure` does not need.
+ *
+ * `identify` asks franc-min for a second opinion even when TinyLD is already
+ * confident, to widen `plausible` for the rewrite prompt. Routing only reads
+ * `sure`, and franc-min is three times slower than TinyLD: on a long document
+ * that second opinion was most of the time spent.
+ */
+function sureLanguage(sample: string): string | undefined {
+  const [first, second] = detectAll(sample)
+  if (!first) return undefined
+  if (first.accuracy >= SURE && first.accuracy - (second?.accuracy ?? 0) >= LEAD) return first.lang
+  if (first.accuracy >= WEAK && confidentFranc(sample) === first.lang) return first.lang
+  return undefined
+}
+
 export function passageLanguages(
   text: string,
   ranges?: readonly { start: number; end: number }[],
+  options: { sample?: number } = {},
 ): PassageLanguage[] {
   const chosen =
     ranges ??
@@ -260,7 +278,7 @@ export function passageLanguages(
       .replace(/\bhttps?:\/\/\S+|<[^>\n]+>/g, blank)
     const letters = scrubbed.match(/\p{L}/gu)?.length ?? 0
     if (letters < MIN_LETTERS) return { start, end }
-    const { sure } = identify(scrubbed.trim())
+    const sure = sureLanguage(scrubbed.trim().slice(0, options.sample ?? SAMPLE))
     return sure ? { start, end, lang: sure } : { start, end }
   })
 }

@@ -37,13 +37,4 @@ describe('lineIndex', () => {
   it('clamps an offset past the end to the last position', () => {
     expect(lineIndex('ab').locate(99)).toEqual({ line: 1, col: 3 })
   })
-
-  it('finds the line of an offset deep in a long text quickly', () => {
-    const text = 'line\n'.repeat(200_000)
-    const at = lineIndex(text)
-    const started = performance.now()
-    for (let i = 0; i < 10_000; i += 1) at.locate(i * 97)
-    expect(performance.now() - started).toBeLessThan(200)
-    expect(at.locate(5 * 150_000).line).toBe(150_001)
-  })
 })

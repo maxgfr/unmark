@@ -82,6 +82,15 @@ describe('carriers', () => {
     expect(preserved[0]?.preserved).toMatch(/French/)
   })
 
+  it('can skip the style report when only marks are wanted', () => {
+    const text = `In order to proceed — quickly — we use it.${ZWSP} I hope this helps!`
+    const full = cleanText(text)
+    expect(full.preserved.some((f) => f.kind === 'typography' || f.kind === 'ai_phrase')).toBe(true)
+    const marks = cleanText(text, { styleReport: false })
+    expect(marks.findings.map((f) => f.kind)).toEqual(['zwj_family'])
+    expect(marks.preserved).toEqual([])
+  })
+
   it('still reports a no-break space between two words', () => {
     const [finding] = inspectText(`Il a${NBSP}dit non.`)
     expect(finding).toMatchObject({ kind: 'space', verdict: 'probable' })

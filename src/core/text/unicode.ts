@@ -44,6 +44,13 @@ export interface TextOptions {
    * filler phrases, stacked hedges, chat pleasantries, signposting.
    */
   humanise?: boolean
+  /**
+   * Run the two style passes at all. On by default: an inspect reports
+   * boilerplate and punctuation even when it will not change them. A caller
+   * that only wants the marks — the authorship forensics — turns it off, and
+   * skips the half of the work that reads prose.
+   */
+  styleReport?: boolean
 }
 
 interface Carrier {
@@ -469,6 +476,8 @@ export function cleanText(text: string, options?: TextOptions): CleanResult<stri
       }
     }
   }
+
+  if (options?.styleReport === false) return { output: stage.text, findings, preserved }
 
   const boilerplate = humanise(stage.text)
   collect(boilerplate.findings, options?.humanise ?? false)
