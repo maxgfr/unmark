@@ -28,6 +28,7 @@ export { normaliseTypography } from './typography.ts'
 export { cleanProvenance } from './provenance.ts'
 export { blocksOf, paragraphsOf, protectedMask } from './regions.ts'
 export { detectSpaceCadence } from './stego.ts'
+export * from './authorship/index.ts'
 export type { StegoDecoding, StyleReport, TextOptions }
 export type { StyleLayer, StyleMetric } from './stylometry.ts'
 export type { StegoScheme } from './stego.ts'

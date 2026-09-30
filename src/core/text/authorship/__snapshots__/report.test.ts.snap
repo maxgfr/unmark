@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderMarkdown > renders the fixed report 1`] = `
+"# Authorship assessment
+
+**Likely AI-written** · score 0.74 · confidence low · French · 412 words
+
+> Not proof. This reads writing habits that generated text shares with many people: humans write like this too, and generated text can be edited to avoid every check here. Do not use it as the basis for an accusation, a grade or a disciplinary decision.
+
+Engine: unmark 0.1.0 · calibration \`provisional-0\` (not yet calibrated: thresholds are provisional) · thresholds 0.30 / 0.70
+
+## Why
+
+- Vocabulary: 0.81 — 9 weighted flagged phrases in 412 words
+- Document shape: not measured — too little text
+
+## Passages
+
+| Line | Excerpt | Score | Pattern | Reason | Fix |
+| ---: | --- | ---: | --- | --- | --- |
+| 3 | Plongeons \\| dans \\\`le\\\` sujet, dans un monde où tout change. | 0.71 | fr.lex.plongeons | a stock phrase of generated French | say the specific thing |
+
+## What is not evidence
+
+- The subject of the text, including a text about AI.
+- A formal, administrative or academic register.
+- Phrasing typical of a writer working in a second language.
+- Clean spelling and grammar.
+- Em dashes, or one stock phrase, on their own.
+- Anything under 150 words of prose: there is no verdict at that length.
+
+## How to fix
+
+- \`fr.lex.plongeons\` (1×): say the specific thing
+
+For a checked rewrite: \`unmark brief\` lists what must change and what must survive, \`unmark rewrite\` does it, \`unmark verify\` rejects a rewrite that broke a fact. Run \`unmark detect\` again afterwards.
+"
+`;

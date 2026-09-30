@@ -40,6 +40,13 @@ describe('isRemovable', () => {
   it('removes a confirmed carrier', () => {
     expect(isRemovable(finding())).toBe(true)
   })
+
+  it('never removes an AI-writing pattern: it is reported, and rewriting is the fix', () => {
+    const pattern = finding({ kind: 'ai_style', verdict: 'probable', noFix: 'state the claim' })
+    expect(isRemovable(pattern)).toBe(false)
+    expect(outcomeOf(pattern)).toBe('reported')
+    expect(KIND_LABEL.ai_style).toBe('AI-writing pattern')
+  })
 })
 
 describe('worstVerdict', () => {

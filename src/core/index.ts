@@ -6,7 +6,7 @@
 // Pixel work (canvas, WebGPU, wasm) lives in src/image and is browser-only by
 // nature; the CLI says so rather than pretending otherwise.
 
-export const VERSION = '0.1.0'
+export { VERSION } from './version.ts'
 
 export * from './report.ts'
 export * from './text/index.ts'

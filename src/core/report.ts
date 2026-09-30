@@ -29,6 +29,9 @@ export type FindingKind =
   | 'stego_payload'
   // Text, statistical tells. Never removed, only reported.
   | 'stylometry'
+  // A located habit of generated prose, from the authorship assessment. Never
+  // removed either: there is no substitution for it, only a rewrite.
+  | 'ai_style'
   // Punctuation and boilerplate phrasing. Removable, but a style choice rather
   // than a mark — which is why both are opt-in.
   | 'typography'
@@ -122,6 +125,7 @@ export interface CleanResult<T> {
 /** Findings a `clean` pass would act on, as opposed to ones it only reports. */
 export const isRemovable = (finding: Finding): boolean =>
   finding.kind !== 'stylometry' &&
+  finding.kind !== 'ai_style' &&
   finding.kind !== 'stego_payload' &&
   finding.verdict !== 'likely_false_positive'
 
@@ -154,6 +158,7 @@ export const KIND_LABEL: Record<FindingKind, string> = {
   confusable: 'Lookalike letter',
   stego_payload: 'Hidden payload',
   stylometry: 'Writing style',
+  ai_style: 'AI-writing pattern',
   typography: 'Typography',
   ai_phrase: 'Generated-prose boilerplate',
   c2pa: 'C2PA provenance',

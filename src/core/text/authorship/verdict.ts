@@ -46,15 +46,6 @@ const inMean = (signal: Signal) =>
 export function decide(input: VerdictInput): VerdictResult {
   const { human, ai } = input.calibration.thresholds
 
-  if (input.unsupported) {
-    return {
-      verdict: 'insufficient_evidence',
-      score: null,
-      confidence: 'low',
-      abstainReason: 'unsupported_language',
-      used: 0,
-    }
-  }
   if (input.words < MIN_WORDS) {
     return {
       verdict: 'insufficient_evidence',
@@ -65,6 +56,15 @@ export function decide(input: VerdictInput): VerdictResult {
     }
   }
 
+  if (input.unsupported) {
+    return {
+      verdict: 'insufficient_evidence',
+      score: null,
+      confidence: 'low',
+      abstainReason: 'unsupported_language',
+      used: 0,
+    }
+  }
   const used = input.signals.filter(inMean)
   const total = used.reduce((sum, s) => sum + s.weight, 0)
   let score =
