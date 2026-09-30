@@ -49,6 +49,9 @@ does not have. Hold to these:
 
 1. **One level.** You may move the engine's verdict one step (`likely_ai` ↔
    `uncertain` ↔ `likely_human`), and each move cites the line that justifies it.
+   The floor is `uncertain` whenever `findings` holds chat residue or
+   `technicalMarks` is not empty: "few signals" is never said about a text
+   carrying either.
 2. **Abstentions stay abstentions.** `insufficient_evidence` is the answer for
    a short text; you do not supply the verdict the engine declined to give.
 3. **The disclaimer is copied word for word** from the report's `disclaimer`

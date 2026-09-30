@@ -100,27 +100,35 @@ word — document shape, chat residue (_J'espère que cela vous aide_,
 blockquotes are left out: quoting a chatbot is not writing like one.
 
 **Measured, not promised.** Weights and thresholds were fitted on a train split
-and measured on a held-out test split of 458 real documents: a committed
-corpus of dated human text (service-public, HAL, Wikipedia, Wikinews,
-Wikisource, Federal Register, Gutenberg — all before November 2022) with a
-generated twin of each from four Claude models, plus the
+and measured on a held-out test split of 420 real documents, split by subject
+so a generated twin is never tested on what its original taught the fit: a
+committed corpus of dated human text (service-public, HAL, Wikipedia,
+Wikinews, Wikisource, Federal Register, Gutenberg — all before November 2022)
+with a generated twin of each from four Claude models, plus the
 [binoculars-eu](https://github.com/linagora/binoculars-eu) French corpus with
 GPT-4o, Luciole and Claude outputs.
 
-| Test split                                    | Result                                                                            |
-| --------------------------------------------- | --------------------------------------------------------------------------------- |
-| AUROC, human vs generated                     | **0.75** (95 % CI 0.70–0.80)                                                      |
-| Generated texts caught at 1 % false positives | 37 % (95 % CI 26–45 %)                                                            |
-| Human texts called `likely_ai`                | **0 of 146**, in every stratum, French administrative and academic prose included |
-| Text run through a humanizer tool             | AUROC 0.46 — **not detected**                                                     |
+| Test split                                         | Result                                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Ranking: AUROC, human vs generated                 | **0.76** (95 % CI 0.71–0.81)                                                               |
+| Ranking: generated texts above 1 % false positives | 39 % (95 % CI 27–46 %)                                                                     |
+| Verdict: human texts called `likely_ai`            | **0 of 142** (French administrative and academic: 0 of 3 each — too few to certify a rate) |
+| Verdict: generated texts called `likely_ai`        | 3 of 220 — 170 were too short to judge, 47 `uncertain`                                     |
+| Verdict: human texts called "few signals"          | 0 of 142 — see below                                                                       |
+| Humanizer-tool output                              | AUROC 0.51 — **not detected**                                                              |
 
 Full numbers, per stratum and with the fitted weights:
 [`docs/authorship-eval-2026-09-30.md`](docs/authorship-eval-2026-09-30.md).
 Reproduce with `node scripts/fetch-authorship-corpus.mjs` then
 `node --experimental-strip-types scripts/eval-authorship.mjs`.
 
-Read those numbers for what they are. A text generated in a neutral register
-often carries no tell at all, and most short generated texts get
+Read those numbers for what they are. The ranking separates real human from
+generated text better than chance, and the verdict is built never to accuse:
+it said `likely_ai` about no human text, and about almost no generated one
+either. More than 5 % of generated texts carry no tell at all, and the
+threshold rule refuses to call "few signals" anything a generated text could
+also score — so on this calibration the honest answer for nearly everything is
+`uncertain`, with the passages located. Most short generated texts get
 `insufficient_evidence`; a humanizer defeats it outright. A model-based signal
 is the next step, and the verdict already takes one in (`external`). Topic,
 formal register, a second-language writer's phrasing and clean spelling are

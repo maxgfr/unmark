@@ -154,6 +154,7 @@ the report — it holds the verdict scale, the judge's rules and the template.
 
 You may move the engine's verdict **one level**, and only by citing a line.
 The top of the scale is `likely_ai`; `confirmed` belongs to technical marks.
+A text with chat residue or a technical mark stays `uncertain` at best.
 
 **To fix what reads as AI**, send the user through the rewrite loop above
 (`brief` → rewrite → `verify`), then run `detect` again on the result.
