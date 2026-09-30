@@ -102,4 +102,8 @@ describe('word', () => {
     expect('complété, étés'.match(word('été'))).toBeNull()
     expect(pattern.flags).toBe('giu')
   })
+
+  it('lets a match end on an elided article', () => {
+    expect("à l'aube d'une ère".match(word("à l'aube d'"))).toEqual(["à l'aube d'"])
+  })
 })

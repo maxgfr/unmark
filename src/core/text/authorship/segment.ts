@@ -57,7 +57,9 @@ export interface Token {
  * and every catalogue pattern goes through this so none of them forgets.
  */
 export function word(source: string): RegExp {
-  return new RegExp(String.raw`(?<![\p{L}\p{N}])(?:${source})(?![\p{L}\p{N}])`, 'giu')
+  // A match that ends on an elided article ("d'", "l'") ends inside a word on
+  // purpose: the apostrophe is the boundary.
+  return new RegExp(String.raw`(?<![\p{L}\p{N}])(?:${source})(?:(?<=['’])|(?![\p{L}\p{N}]))`, 'giu')
 }
 
 const TOKEN = /\p{L}[\p{L}\p{M}'’-]*/gu

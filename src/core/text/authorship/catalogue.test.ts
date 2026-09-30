@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CATALOGUE, matchesOf } from './catalogue/index.ts'
+import { FR_TRAPS } from './catalogue/fr.traps.ts'
 
 // Every entry, walked. A pattern that no longer matches its own sample has
 // drifted; one that matches its own trap fires on the legitimate use it was
@@ -44,12 +45,27 @@ describe('catalogue', () => {
   it('uses only global patterns with bounded wildcards', () => {
     // An unbounded `.*` or `[^.]+` between two alternatives is how a regex
     // backtracks for minutes on one long line. Every wildcard is bounded.
-    const unbounded = /(?<!\\)\.[*+]|\[\^[^\]]*\][*+]|\{\d+,\}/
+    const unbounded = /(?<!\\)\.(?:[*+]|\{\d+,\})|\[\^[^\]]*\](?:[*+]|\{\d+,\})/
     for (const entry of CATALOGUE) {
       expect(entry.pattern.flags, entry.id).toContain('g')
       expect(unbounded.test(entry.pattern.source), `${entry.id}: ${entry.pattern.source}`).toBe(
         false,
       )
+    }
+  })
+
+  it('has French entries in every tier', () => {
+    const tiers = new Set(CATALOGUE.filter((e) => e.id.startsWith('fr.')).map((e) => e.tier))
+    expect(tiers).toEqual(new Set([1, 2, 3]))
+  })
+
+  it('finds no tier-1 habit in legitimate administrative or academic French', () => {
+    const strong = CATALOGUE.filter((e) => e.tier === 1 && e.lang !== 'en')
+    for (const { register, text } of FR_TRAPS) {
+      const hits = strong.flatMap((entry) =>
+        matchesOf(entry, text).map((m) => `${entry.id}: ${text.slice(m.start, m.end)}`),
+      )
+      expect(hits, register).toEqual([])
     }
   })
 
