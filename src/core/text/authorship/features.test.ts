@@ -47,9 +47,9 @@ describe('scan', () => {
   })
 
   it('never counts a tier-3 habit on its own', () => {
-    const alone = features('En effet, le projet avance bien depuis le mois dernier.', 'fr')
+    const alone = features('De plus, le projet avance bien depuis le mois dernier.', 'fr')
     expect(alone.hits.filter((h) => h.counted)).toEqual([])
-    const paired = features('En effet, plongeons dans le sujet sans tarder dès aujourd’hui.', 'fr')
+    const paired = features('De plus, plongeons dans le sujet sans tarder dès aujourd’hui.', 'fr')
     expect(paired.hits.filter((h) => h.counted).map((h) => h.entry.tier)).toEqual([3, 1])
   })
 

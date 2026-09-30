@@ -57,7 +57,7 @@ const structure: Pattern[] = [
   {
     id: 'fr.struct.gerund_chain',
     lang: 'fr',
-    tier: 1,
+    tier: 2,
     category: 'structure',
     pattern: fr(`${GERUND}[^.!?\\n]{1,80}?${GERUND}[^.!?\\n]{1,80}?${GERUND}`),
     reason: 'three gerunds chained in one sentence, the rhythm of a generated list of benefits',
@@ -73,7 +73,7 @@ const structure: Pattern[] = [
   {
     id: 'fr.struct.participle_chain',
     lang: 'fr',
-    tier: 1,
+    tier: 2,
     category: 'structure',
     pattern: fr(
       `${PARTICIPLE}[^.!?\\n]{1,80}?, ${PARTICIPLE}[^.!?\\n]{1,80}?(?:, | et )${PARTICIPLE}`,
@@ -151,13 +151,16 @@ const structure: Pattern[] = [
     tier: 2,
     category: 'structure',
     pattern: new RegExp(
-      String.raw`(?<=(?:^|\n)[^\S\n]{0,3})(?:En conclusion|En somme|En résumé|Pour conclure|Pour résumer|En définitive|Tout d['’]abord|Premièrement|Deuxièmement|Troisièmement|Par ailleurs|En outre|De plus|Ainsi|Enfin)(?=,)`,
+      String.raw`(?<=(?:^|\n)[^\S\n]{0,3})(?:En conclusion|En somme|En résumé|Pour conclure|Pour résumer|En définitive)(?=,)`,
       'gu',
     ),
-    reason: 'a school connector opening the paragraph, the outline showing through',
-    fixHint: 'open on the point of the paragraph; the order already says what comes next',
+    reason: 'a closing formula opening the paragraph: the recap announces itself',
+    fixHint: 'end on the last concrete point; the reader does not need the summary announced',
     samples: ['En conclusion, le projet avance.'],
-    traps: ['Le projet avance, en conclusion de quoi nous signons.'],
+    traps: [
+      'Le projet avance, en conclusion de quoi nous signons.',
+      'Premièrement, le cœur stratégique est sanctuarisé.',
+    ],
   },
 ]
 

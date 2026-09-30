@@ -130,7 +130,9 @@ export function builtInSignals(
   for (const hit of input.hits) {
     if (!hit.counted) continue
     if (hit.entry.category === 'residue') forensic = Math.max(forensic, 0.9)
-    if (hit.entry.category === 'formatting') forensic = Math.max(forensic, 0.5)
+    // Markdown in a .txt is weak: people paste their own Markdown too. It is
+    // kept under the 0.5 that would let it corroborate a verdict on its own.
+    if (hit.entry.category === 'formatting') forensic = Math.max(forensic, 0.3)
   }
   for (const mark of input.marks) {
     forensic = Math.max(forensic, mark.verdict === 'confirmed' ? 1 : 0.85)

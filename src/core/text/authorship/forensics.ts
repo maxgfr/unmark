@@ -68,11 +68,13 @@ export const FORENSIC_PATTERNS: readonly Pattern[] = [
     lang: 'any',
     tier: 1,
     category: 'formatting',
-    pattern: /\*\*[^*\n]{1,80}\*\*/gu,
+    // Letters inside, no star on either side: `Desktop/***` in a shell command
+    // is a glob, and read as bold it flagged a person's own how-to.
+    pattern: /(?<![*\\])\*\*(?=[^\s*])[^*\n]{0,78}\p{L}[^*\n]{0,78}(?<=[^\s*])\*\*(?!\*)/gu,
     reason: 'Markdown bold in a plain-text file: formatting copied out of a chat window',
     fixHint: 'remove the asterisks, or use the emphasis the destination supports',
     samples: ['The **key point** is cost.'],
-    traps: ['2 * 3 * 4 = 24'],
+    traps: ['2 * 3 * 4 = 24', "--include='Desktop/***' --include='Documents/***'"],
     formats: ['Text'],
   },
   {

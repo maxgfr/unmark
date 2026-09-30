@@ -97,8 +97,20 @@ export const TIER_1: readonly LexiconEntry[] = [
   },
   {
     name: 'revolutionner_facon',
-    source: 'révolutionne(?:r|nt)? (?:la façon|notre façon|votre façon|le monde)',
+    // "Révolutionner le monde" turned up in a person's own blog post; the
+    // generated habit is the promise about how we work.
+    source: 'révolutionne(?:r|nt)? (?:la|notre|votre|leur) (?:façon|manière)',
     sample: 'révolutionner la façon dont nous travaillons',
+    traps: ['Je ne cherche pas à révolutionner le monde.'],
+  },
+  {
+    name: 'role_cle',
+    // Measured on the binoculars-eu train split: in 44 generated documents and
+    // one human one. "Un rôle important" stays out — people write it daily.
+    source:
+      '(?:joue|jouent|jouer|joué|jouait|jouant|jouera) (?:aussi |également |ainsi )?un rôle (?:clé|crucial|essentiel|central|déterminant|prépondérant|majeur|fondamental|primordial|capital|incontournable)',
+    sample: 'joue un rôle clé',
+    traps: ['Il joue un rôle important dans la pièce.', 'Elle joue le rôle de la reine.'],
   },
 ]
 
@@ -145,12 +157,6 @@ export const TIER_2: readonly LexiconEntry[] = [
     sample: 'un sujet fascinant',
   },
   {
-    name: 'role_cle',
-    source:
-      '(?:joue|jouent|jouer|jouera|jouant) un rôle (?:clé|crucial|essentiel|central|déterminant|prépondérant|majeur)',
-    sample: 'joue un rôle clé',
-  },
-  {
     name: 'a_laube_de',
     source: "à l'aube (?:de|du|des|d')",
     sample: "à l'aube d'une nouvelle ère",
@@ -160,6 +166,37 @@ export const TIER_2: readonly LexiconEntry[] = [
     source: 'levier (?:puissant|essentiel|incontournable|majeur|stratégique)',
     sample: 'un levier stratégique',
   },
+  {
+    name: 'lun_des_plus',
+    source:
+      "(?:est|reste|demeure|constitue|compte parmi|figure parmi) (?:l'une?|les) (?:des )?(?:plus|principaux|principales|sites les plus|lieux les plus)",
+    sample: "Elle est l'une des plus belles villes",
+  },
+  {
+    name: 'reputee_pour',
+    source:
+      '(?:célèbre|célèbres|réputée?s?|renommée?s?|connue?s?) (?:pour (?:son|sa|ses)|dans le monde entier|à travers le monde)',
+    sample: 'réputée pour sa gastronomie',
+    traps: ['Il est connu de tous.'],
+  },
+  {
+    name: 'symbole_de',
+    source: "(?:un|le|véritable|véritables|les) symboles? (?:de|du|des|d')",
+    sample: 'un symbole de la ville',
+  },
+  { name: 'a_travers_le_monde', source: 'à travers le monde', sample: 'à travers le monde' },
+  {
+    name: 'ce_qui_en_fait',
+    source: "(?:ce qui|qui) en (?:fait|font|faisait) (?:un|une|l'un|l'une|le|la)",
+    sample: "ce qui en fait l'une des",
+  },
+  {
+    name: 'riche_histoire',
+    source:
+      '(?:riche|longue et riche|riche et longue) (?:histoire|patrimoine|héritage|passé|culture)',
+    sample: 'une riche histoire',
+  },
+  { name: 'dynamique', source: 'dynamiques?', sample: 'une dynamique' },
   {
     name: 'optimiser_potentiel',
     source: '(?:libérer|exploiter|optimiser) (?:tout )?(?:le|son|votre|leur) (?:plein )?potentiel',
@@ -171,10 +208,8 @@ export const TIER_2: readonly LexiconEntry[] = [
 export const TIER_3: readonly LexiconEntry[] = [
   { name: 'ainsi', source: 'ainsi', sample: 'ainsi' },
   { name: 'de_plus', source: 'de plus', sample: 'De plus' },
-  { name: 'en_effet', source: 'en effet', sample: 'En effet' },
   { name: 'en_fin_de_compte', source: 'en fin de compte', sample: 'en fin de compte' },
   { name: 'veritable', source: 'véritables?', sample: 'un véritable atout' },
   { name: 'ecosysteme', source: 'écosystèmes?', sample: "l'écosystème" },
-  { name: 'dynamique', source: 'dynamiques?', sample: 'une dynamique' },
   { name: 'optimiser', source: 'optimise(?:r|z|ons)?', sample: 'optimiser' },
 ]
