@@ -177,6 +177,19 @@ describe('detectSpaceCadence', () => {
     expect(detectSpaceCadence(irregular)).toBeUndefined()
   })
 
+  it('still finds a no-break-space cadence inside French prose', () => {
+    // Keeping the typographic no-break spaces must not blind the decoder: a
+    // regular substitution between words is still a scheme, whatever else
+    // the text carries before its question marks.
+    const words = Array.from({ length: 40 }, (_, i) => `mot${i}`)
+      .map((word, i) => (i > 0 && i % 4 === 0 ? cp(0x00a0) + word : ` ${word}`))
+      .join('')
+      .trim()
+    const cadence = detectSpaceCadence(`Pourquoi${cp(0x00a0)}? ${words}`)
+    expect(cadence?.point).toBe(0x00a0)
+    expect(cadence?.stride).toBe(4)
+  })
+
   it('needs enough spaces to call an interval an interval', () => {
     expect(detectSpaceCadence(`a${cp(THREE_PER_EM)}b c`)).toBeUndefined()
   })

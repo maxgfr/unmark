@@ -209,7 +209,12 @@ function spaceRun(text: string): { point: number; offset: number }[] {
   for (let index = 0; index < text.length; index += 1) {
     const point = text.codePointAt(index)
     if (point === undefined) break
-    if (point === PLAIN_SPACE || EXOTIC_SPACES.has(point)) run.push({ point, offset: index })
+    // A space typography requires is not a slot an encoder chose. Counting it
+    // would shift every position after it, and a cadence of four would read
+    // as a gap of five and then fours — no cadence at all.
+    if (point === PLAIN_SPACE || (EXOTIC_SPACES.has(point) && !isLoadBearing(text, index))) {
+      run.push({ point, offset: index })
+    }
   }
   return run
 }

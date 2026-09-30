@@ -241,6 +241,9 @@ function tagSequenceBase(text: string, index: number): number | undefined {
   }
 }
 
+/** Punctuation French typesets with a no-break space in front of it. */
+const FRENCH_BEFORE = new Set([';', ':', '!', '?', '»'])
+
 /**
  * Why this particular occurrence is not a mark — or undefined if it is one.
  *
@@ -282,6 +285,14 @@ function preservationReason(
 
   if (isTagChar(point) && tagSequenceBase(text, index) === BLACK_FLAG) {
     return 'subdivision flag tag sequence — these characters are the flag'
+  }
+
+  if (point === 0x00a0 || point === 0x202f) {
+    const after = text[index + width]
+    const before = text[index - 1]
+    if ((after !== undefined && FRENCH_BEFORE.has(after)) || before === '«') {
+      return 'French typography — a no-break space belongs before ; : ! ? » and after «'
+    }
   }
 
   return undefined

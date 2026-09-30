@@ -313,7 +313,8 @@ rewrites alongside the measured scores; it does not count score reduction as suc
 
 The tool refuses to corrupt real text. A zero-width joiner between two emoji is
 what makes 👨‍👩‍👧 one family instead of three people; a zero-width non-joiner inside a
-Persian word is orthography. Those are reported as `likely_false_positive` and
+Persian word is orthography, and so is the no-break space French puts before
+`; : ! ? »` and after `«`. Those are reported as `likely_false_positive` and
 kept, with the reason attached. `--paranoid` strips them anyway and says that it
 will damage legitimate text.
 

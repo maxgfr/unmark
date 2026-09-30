@@ -68,6 +68,25 @@ describe('carriers', () => {
     expect(findings[0]).toMatchObject({ kind: 'space', verdict: 'probable' })
   })
 
+  it('keeps the no-break spaces French typography requires', () => {
+    // French puts a no-break space before ; : ! ? » and after «. Stripping them
+    // is wrong, and reporting them as marks flags every French text ever
+    // typeset properly.
+    const NNBSP = cp(0x202f)
+    const french = `Il a dit${NBSP}: «${NBSP}Non${NBSP}!${NBSP}» Pourquoi${NNBSP}? Voilà${NNBSP};`
+    const { output, findings, preserved } = cleanText(french)
+    expect(output).toBe(french)
+    expect(findings).toEqual([])
+    expect(preserved).toHaveLength(6)
+    expect(preserved.every((f) => f.verdict === 'likely_false_positive')).toBe(true)
+    expect(preserved[0]?.preserved).toMatch(/French/)
+  })
+
+  it('still reports a no-break space between two words', () => {
+    const [finding] = inspectText(`Il a${NBSP}dit non.`)
+    expect(finding).toMatchObject({ kind: 'space', verdict: 'probable' })
+  })
+
   it('leaves ordinary text alone', () => {
     expect(inspectText('Just a normal sentence, with punctuation and a dash.')).toEqual([])
   })
