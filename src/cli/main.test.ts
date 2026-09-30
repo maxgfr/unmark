@@ -17,6 +17,7 @@ import process from 'node:process'
 import { main } from './main.ts'
 import { png, textChunkData } from '../test/containers.ts'
 import { encodeStego } from '../core/text/stego.ts'
+import { AI_FR, HUMAN_FR } from '../test/authorship-samples.ts'
 
 let dir = ''
 let out: string[] = []
@@ -462,5 +463,90 @@ describe('argument parsing', () => {
     } finally {
       delete (process.stdout as { isTTY?: boolean }).isTTY
     }
+  })
+})
+
+describe('detect', () => {
+  // Residue lifts the score to the threshold and the vocabulary corroborates
+  // it, so this reads as likely AI under any calibration the guards allow.
+  const LOADED = `${AI_FR}\n\nJ'espère que cela vous aide !`
+  const parse = () => JSON.parse(stdout())
+
+  it('reports a verdict, located findings and the disclaimer as JSON', async () => {
+    const code = await main(['detect', await file('draft.md', LOADED), '--json'])
+    const report = parse()
+    expect(['likely_ai', 'uncertain', 'likely_human']).toContain(report.verdict)
+    expect(report.findings.every((f: { line: number }) => f.line >= 1)).toBe(true)
+    expect(report.disclaimer).toMatch(/^Not proof/)
+    expect(code).toBe(report.verdict === 'likely_ai' ? 1 : 0)
+  })
+
+  it('exits 1 on likely_ai', async () => {
+    expect(await main(['detect', await file('draft.md', LOADED)])).toBe(1)
+  })
+
+  it('exits 0 when it finds few signals, and never says a person wrote it', async () => {
+    expect(await main(['detect', await file('news.md', HUMAN_FR)])).toBe(0)
+    expect(stdout()).toContain('Few AI-writing signals found')
+    expect(stdout()).toContain('Not proof')
+  })
+
+  it('exits 3 on a text too short to assess', async () => {
+    const short = HUMAN_FR.split(/\s+/).slice(0, 40).join(' ')
+    expect(await main(['detect', await file('short.txt', short)])).toBe(3)
+    expect(stdout()).toContain('Not enough text')
+  })
+
+  it('renders Markdown with a passages table, reading the file and not the flag value', async () => {
+    expect(await main(['detect', '--format', 'md', await file('draft.md', LOADED)])).toBe(1)
+    expect(stdout()).toContain('| Line |')
+    expect(stdout()).toContain('# Authorship assessment')
+  })
+
+  it('treats --json and --format json alike', async () => {
+    await main(['detect', await file('draft.md', LOADED), '--format', 'json'])
+    expect(parse().schemaVersion).toBe(1)
+  })
+
+  it('filters the listed passages with --min-score, never the verdict', async () => {
+    const path = await file('draft.md', LOADED)
+    await main(['detect', path, '--json'])
+    const all = parse()
+    out = []
+    await main(['detect', path, '--json', '--min-score', '0.99'])
+    const filtered = parse()
+    expect(filtered.verdict).toBe(all.verdict)
+    expect(filtered.score).toBe(all.score)
+    expect(filtered.spans.length).toBeLessThan(all.spans.length)
+  })
+
+  it('takes a language instead of detecting it', async () => {
+    await main(['detect', await file('news.md', HUMAN_FR), '--json', '--lang', 'en'])
+    expect(parse().language.document).toBe('en')
+  })
+
+  it('refuses a bad value with exit 2', async () => {
+    const path = await file('draft.md', LOADED)
+    expect(await main(['detect', path, '--lang', 'de'])).toBe(2)
+    expect(await main(['detect', path, '--format', 'pdf'])).toBe(2)
+    expect(await main(['detect', path, '--min-score', '2'])).toBe(2)
+    expect(await main(['detect', path, '--min-score', 'abc'])).toBe(2)
+    expect(stderr()).toContain('--lang')
+  })
+
+  it('refuses a binary file with exit 2 and says what to do', async () => {
+    expect(await main(['detect', await file('image.png', png([]))])).toBe(2)
+    expect(stderr()).toMatch(/text/i)
+  })
+
+  it('names placeholder residue by its pattern id', async () => {
+    await main([
+      'detect',
+      await file('letter.txt', `${HUMAN_FR}\n\nCordialement, [Votre nom]`),
+      '--json',
+    ])
+    expect(parse().findings.map((f: { patternId: string }) => f.patternId)).toContain(
+      'any.residue.placeholder',
+    )
   })
 })

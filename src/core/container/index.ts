@@ -198,6 +198,23 @@ function cleanBinary(bytes: Uint8Array, format: ContainerFormat, options?: Conta
   }
 }
 
+/**
+ * A file's text and its text format, or `undefined` when it is not text.
+ *
+ * For the commands that read prose rather than containers. A PDF or a DOCX
+ * has text inside it, but getting it out faithfully is its own job; reading
+ * the bytes as UTF-8 would score the file's structure as if it were writing.
+ */
+export async function readTextual(
+  bytes: Uint8Array,
+  name?: string,
+): Promise<{ text: string; format: ContainerFormat } | undefined> {
+  const binary = await sniffBinary(bytes)
+  if (binary !== undefined || !looksLikeText(bytes)) return undefined
+  const text = decodeUtf8(bytes)
+  return { text, format: sniffText(text, name) }
+}
+
 /** Report a file's marks without changing it. */
 export async function inspectContainer(
   bytes: Uint8Array,

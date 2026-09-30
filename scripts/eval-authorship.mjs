@@ -451,6 +451,21 @@ const meta = { date, split, corpora, calibration: { id: calibration.id }, fitted
 if (args.includes('--json')) console.log(JSON.stringify({ meta, summary }, undefined, 2))
 else console.log(markdown(summary, meta))
 
+if (fit && pinned.documents.length > 0) {
+  // What eval.test.ts holds the committed corpus to from now on.
+  const test = samples.filter((s) => s.corpus === 'pinned' && s.split === 'test')
+  const baseline = {
+    calibration: calibration.id,
+    testAuroc: round(
+      auroc(
+        test.filter((s) => s.label === 'ai').map((s) => scoreOf(s, calibration)),
+        test.filter((s) => s.label === 'human').map((s) => scoreOf(s, calibration)),
+      ),
+    ),
+  }
+  await writeFile(join(FIXTURES, 'baseline.json'), `${JSON.stringify(baseline, undefined, 2)}\n`)
+}
+
 if (write) {
   await writeFile(join(ROOT, 'docs', `authorship-eval-${date}.md`), `${markdown(summary, meta)}\n`)
   await writeFile(

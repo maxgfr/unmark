@@ -26,6 +26,8 @@
   // No "node" in `types`, and src/cli deliberately excluded. That is not tidiness:
   // it is what makes "the core never imports node:" a compile error rather than a
   // convention. The core has to run unchanged in both the page and the CLI.
+  // src/corpus is excluded for the same reason: its tests read the evaluation
+  // corpus from disk, so they are typed with the CLI and its node: types.
   "include": ["src"],
-  "exclude": ["src/cli"]
+  "exclude": ["src/cli", "src/corpus"]
 }

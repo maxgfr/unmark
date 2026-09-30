@@ -231,6 +231,54 @@ try {
   check('inspect', styleInspect.code === 0, 'style alone must not exit 1')
   const styleAudit = unmark(['audit', styledDir])
   check('audit', styleAudit.code === 0, 'must not count writing style as a mark')
+
+  // detect: the structure of its answer, never a particular verdict — the
+  // calibration is allowed to move, the contract is not.
+  const french = [
+    'Dans un monde en constante évolution, la transformation numérique joue un rôle crucial pour les entreprises. Plongeons au cœur de cette révolution qui redéfinit notre façon de travailler au quotidien, dans les bureaux comme sur le terrain.',
+    "Que vous soyez dirigeant de PME ou responsable d'un grand groupe, il est essentiel de comprendre ces enjeux. Il ne s'agit pas seulement d'adopter de nouveaux outils, mais de repenser en profondeur l'organisation, les métiers et la culture de l'entreprise.",
+    "Les solutions modernes permettent d'optimiser les processus en offrant une visibilité accrue, en permettant une collaboration fluide et en garantissant une sécurité renforcée. Par ailleurs, la formation des équipes constitue la pierre angulaire de toute transformation réussie, notamment pour les collaborateurs les moins familiers avec le numérique.",
+    "En conclusion, à l'ère du numérique, l'avenir s'annonce prometteur pour les entreprises qui sauront saisir ces opportunités. N'hésitez pas à explorer ces pistes pour libérer tout le potentiel de votre organisation.",
+    'Cordialement, [Votre nom]',
+  ].join('\n\n')
+  await writeFile(at('brouillon.md'), french)
+
+  const detectJson = unmark(['detect', at('brouillon.md'), '--json'])
+  let detected
+  try {
+    detected = JSON.parse(detectJson.out)
+  } catch {
+    failures.push('detect --json: output is not valid JSON')
+  }
+  if (detected) {
+    check(
+      'detect --json',
+      ['likely_ai', 'uncertain', 'likely_human'].includes(detected.verdict),
+      `should give a verdict on 150+ words, not "${detected.verdict}"`,
+    )
+    check(
+      'detect --json',
+      detected.findings.length > 0 && detected.findings.every((f) => f.line >= 1),
+      'should locate every finding at a line',
+    )
+    check('detect --json', detected.disclaimer.startsWith('Not proof'), 'must carry the disclaimer')
+    check(
+      'detect --json',
+      detected.findings.some((f) => f.patternId.startsWith('any.residue.')),
+      'should name the unfilled placeholder as residue',
+    )
+    check('detect --json', [0, 1].includes(detectJson.code), 'should exit 0 or 1 on a verdict')
+  }
+
+  const markdown = unmark(['detect', '--format', 'md', at('brouillon.md')])
+  check('detect --format md', markdown.out.includes('| Line |'), 'should render a passages table')
+
+  await writeFile(at('court.txt'), french.split(/\s+/).slice(0, 40).join(' '))
+  const short = unmark(['detect', at('court.txt')])
+  check('detect', short.code === 3, 'should exit 3 on forty words')
+
+  const german = unmark(['detect', at('brouillon.md'), '--lang', 'de'])
+  check('detect --lang de', german.code === 2, 'should refuse an unsupported language with 2')
 } finally {
   await rm(work, { recursive: true, force: true })
 }

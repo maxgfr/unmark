@@ -10,9 +10,24 @@ import { chmod, readdir, readFile, realpath, rename, rm, stat, writeFile } from 
 import { join, relative } from 'node:path'
 import process from 'node:process'
 import { VERSION } from '../core/index.ts'
-import { cleanContainer, inspectContainer, type ContainerFormat } from '../core/container/index.ts'
+import {
+  cleanContainer,
+  inspectContainer,
+  readTextual,
+  type ContainerFormat,
+} from '../core/container/index.ts'
 import { decodeStego } from '../core/text/stego.ts'
-import { analyzeStyle, PLAIN, stylometryFindings } from '../core/text/index.ts'
+import {
+  analyzeStyle,
+  detectAuthorship,
+  PLAIN,
+  renderMarkdown,
+  stylometryFindings,
+  toJSON,
+  verdictSentence,
+  type AuthorshipReport,
+  type AuthorshipVerdict,
+} from '../core/text/index.ts'
 import { buildBrief, verifyRewrite, type RewriteVerdict } from '../core/rewrite.ts'
 import { runRewrite } from './rewrite.ts'
 import {
@@ -32,6 +47,8 @@ USAGE
   unmark clean   <file|->        strip what is removable, print the result
   unmark decode  <file|->        recover payloads hidden in invisible characters
   unmark audit   <dir>           walk a tree and report every marked file
+  unmark detect  <file|->        assess whether the prose reads as AI-written,
+                                 with every passage located. Not proof.
 
   unmark brief   <file|->        what a rewrite must fix and must not break (JSON)
   unmark rewrite <file|->        run the rewrite loop; local model by default
@@ -61,6 +78,15 @@ REWRITE (the tells no regex reaches: word choice, and the shape of the argument)
   With no --model, rewrite talks to Ollama on 127.0.0.1 and nothing leaves the
   machine. The browser optionally rewrites locally with WebLLM; its policy
   pins connect-src to 'self', and that is not negotiable for a feature.
+
+DETECT (French and English; an assessment of writing habits, never proof)
+  --format <f>        text (default), md, or json
+  --lang <l>          fr, en, or auto (default: per paragraph)
+  --min-score <n>     list only passages scoring at least n, 0 to 1 (default
+                      0.35). Filters the list; never changes the verdict.
+
+  Exit codes: 0 few signals or uncertain · 1 likely AI-written ·
+  2 usage error or binary input · 3 not enough text (under 150 words)
 
 FORMATS
   Text, Markdown, HTML, SVG, PNG, JPEG, WebP, GIF, HEIC, AVIF, MP4/MOV, PDF,
@@ -222,6 +248,9 @@ interface Options {
   model?: string
   attempts?: number
   against?: string
+  format?: 'text' | 'md' | 'json'
+  lang?: 'fr' | 'en' | 'auto'
+  minScore?: number
 }
 
 const textOptions = (options: Options) => ({
@@ -487,6 +516,113 @@ async function commandAudit(target: string, options: Options): Promise<number> {
   return 1
 }
 
+// ----------------------------------------------------------------- detect
+//
+// The one command whose answer is an assessment rather than a finding. It
+// says how the prose reads, locates why, and says on the same screen that
+// none of it is proof. Amber stays reserved for technical marks: a verdict
+// about style is never painted in the colour that means "certain".
+
+const EXIT_FOR: Record<AuthorshipVerdict, number> = {
+  likely_human: 0,
+  uncertain: 0,
+  likely_ai: 1,
+  insufficient_evidence: 3,
+}
+
+const LANGUAGE_NAME = { fr: 'French', en: 'English', und: 'language undetermined' } as const
+
+function renderAuthorship(name: string, report: AuthorshipReport, minScore: number): string {
+  const out = [
+    `${bold(name)} ${dim(`· ${LANGUAGE_NAME[report.language.document]} · ${report.words} words`)}`,
+    '',
+    `  ${bold(verdictSentence(report))}${
+      report.score === null
+        ? ''
+        : dim(`   score ${report.score.toFixed(2)} · confidence ${report.confidence}`)
+    }`,
+    `  ${dim(report.disclaimer)}`,
+    `  ${dim(
+      `calibration ${report.calibration.id}${report.calibration.calibrated ? '' : ' (not yet calibrated: provisional thresholds)'}`,
+    )}`,
+    '',
+  ]
+
+  const listed = report.spans.filter((span) => span.score >= minScore)
+  if (listed.length > 0) {
+    out.push(`  ${bold('Passages')} ${dim(`scoring ${minScore.toFixed(2)} or more`)}`)
+    for (const span of listed) {
+      const own = report.findings.filter((f) => f.start >= span.start && f.start < span.end)
+      out.push(
+        `  ${pad(`line ${span.line}`, 10)} ${span.score.toFixed(2)}  ${span.excerpt}`,
+        ...own.slice(0, 3).map((f) => `  ${' '.repeat(16)}${dim(`${f.patternId} — ${f.reason}`)}`),
+      )
+      const fix = own[0]?.fixHint
+      if (fix) out.push(`  ${' '.repeat(16)}${dim(`fix: ${fix}`)}`)
+    }
+    out.push('')
+  } else if (report.verdict !== 'insufficient_evidence') {
+    out.push(dim(`  No passage scored ${minScore.toFixed(2)} or more.`), '')
+  }
+
+  const loose = report.findings.filter(
+    (f) =>
+      (f.category === 'residue' || f.category === 'formatting') &&
+      !listed.some((span) => f.start >= span.start && f.start < span.end),
+  )
+  for (const finding of loose) {
+    out.push(`  ${pad(`line ${finding.line}`, 10)} ${finding.patternId}  ${finding.excerpt}`)
+    out.push(`  ${' '.repeat(16)}${dim(finding.reason)}`)
+  }
+  if (loose.length > 0) out.push('')
+
+  if (report.technicalMarks.length > 0) {
+    out.push(`  ${bold('Technical marks')}`)
+    for (const mark of report.technicalMarks) {
+      out.push(
+        `  ${pad(`line ${mark.line}`, 10)} ${colourVerdict(mark.verdict)} ${KIND_LABEL[mark.kind]} ${dim(mark.label)}`,
+      )
+    }
+    out.push('')
+  }
+
+  out.push(
+    dim(
+      `  Not evidence: ${report.notEvidence.map((line) => line.replace(/\.$/, '').toLowerCase()).join('; ')}.`,
+    ),
+    dim('  --format md for a report to share · --json for scripts'),
+  )
+  return `${out.join('\n')}\n`
+}
+
+async function commandDetect(target: string, options: Options): Promise<number> {
+  const source = await readSource(target)
+  const textual = await readTextual(source.bytes, source.name)
+  if (!textual) {
+    process.stderr.write(
+      `unmark: ${source.name} is not text. detect reads prose: export it as .txt, .md or .html first.\n`,
+    )
+    return 2
+  }
+
+  const report = detectAuthorship(textual.text, {
+    format: textual.format,
+    lang: options.lang ?? 'auto',
+  })
+  const minScore = options.minScore ?? 0.35
+
+  const format = options.json ? 'json' : (options.format ?? 'text')
+  if (format === 'json') {
+    const listed = { ...report, spans: report.spans.filter((span) => span.score >= minScore) }
+    process.stdout.write(`${toJSON(listed)}\n`)
+  } else if (format === 'md') {
+    process.stdout.write(renderMarkdown(report, { minScore }))
+  } else {
+    process.stdout.write(renderAuthorship(source.name, report, minScore))
+  }
+  return EXIT_FOR[report.verdict]
+}
+
 // ----------------------------------------------------------------- rewrite
 //
 // The deterministic half of the tool stops at word choice and at the shape of
@@ -609,6 +745,9 @@ const KNOWN_FLAGS = new Set([
   '--model',
   '--attempts',
   '--against',
+  '--format',
+  '--lang',
+  '--min-score',
   '--version',
   '-V',
   '--help',
@@ -647,7 +786,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   // target, fell back to reading stdin, and hung forever with no output.
   // Verifying a file against itself is the first thing anyone tries.
   const consumed = new Set<number>()
-  for (const name of ['--model', '--attempts', '--against']) {
+  for (const name of ['--model', '--attempts', '--against', '--format', '--lang', '--min-score']) {
     const at = argv.indexOf(name)
     const next = at === -1 ? undefined : argv[at + 1]
     if (at !== -1 && next && !next.startsWith('-')) consumed.add(at + 1)
@@ -676,6 +815,27 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2
   }
 
+  // detect's three values, checked the same way: a wrong one is named and
+  // nothing is read, rather than quietly falling back to a default.
+  const format = value('--format')
+  if (format !== undefined && !['text', 'md', 'json'].includes(format)) {
+    process.stderr.write(`unmark: --format takes text, md or json, not "${format}"\n`)
+    return 2
+  }
+  const lang = value('--lang')
+  if (lang !== undefined && !['fr', 'en', 'auto'].includes(lang)) {
+    process.stderr.write(`unmark: --lang takes fr, en or auto, not "${lang}"\n`)
+    return 2
+  }
+  const minScore = value('--min-score')
+  if (
+    minScore !== undefined &&
+    (!/^(?:0(?:\.\d+)?|1(?:\.0+)?|\.\d+)$/.test(minScore) || Number(minScore) > 1)
+  ) {
+    process.stderr.write(`unmark: --min-score takes a number from 0 to 1, not "${minScore}"\n`)
+    return 2
+  }
+
   const options: Options = {
     json: flags.has('--json'),
     inPlace: flags.has('--in-place'),
@@ -686,6 +846,9 @@ export async function main(argv: readonly string[]): Promise<number> {
     ...(value('--model') ? { model: value('--model') as string } : {}),
     ...(attempts ? { attempts: Number(attempts) } : {}),
     ...(value('--against') ? { against: value('--against') as string } : {}),
+    ...(format ? { format: format as 'text' | 'md' | 'json' } : {}),
+    ...(lang ? { lang: lang as 'fr' | 'en' | 'auto' } : {}),
+    ...(minScore === undefined ? {} : { minScore: Number(minScore) }),
     // --plain is one name for the pair, defined once in the core so the page's
     // button and this flag cannot drift into two different presets.
     typography: flags.has('--typography') || (flags.has('--plain') && PLAIN.typography === true),
@@ -713,6 +876,9 @@ export async function main(argv: readonly string[]): Promise<number> {
       }
       case 'rewrite': {
         return await commandRewrite(target, options)
+      }
+      case 'detect': {
+        return await commandDetect(target, options)
       }
       case 'audit': {
         return await commandAudit(target === '-' ? '.' : target, options)
