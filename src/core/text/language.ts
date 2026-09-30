@@ -218,3 +218,49 @@ export function changedLanguage(original: string, candidate: string): string | u
     .map(languageName)
     .join(' and ')}`
 }
+
+export interface PassageLanguage {
+  /** UTF-16 offsets of the passage in the text as given. */
+  start: number
+  end: number
+  /** ISO 639-1, only when the detectors are confident. */
+  lang?: string
+}
+
+/** Scrub a span to spaces, keeping its length so every offset after it holds. */
+const blank = (match: string) => match.replaceAll(/[^\n]/gu, ' ')
+
+/** Below this many letters a passage is not identified at all. */
+const MIN_LETTERS = 20
+
+/**
+ * The language of each prose passage, with offsets into the original text.
+ *
+ * The same scrubbing as `passages`, done by overwriting with spaces rather
+ * than deleting, so a caller routing sentences by offset lands in the right
+ * passage. `ranges` lets that caller choose the passages; by default they are
+ * the prose blocks `passages` reads.
+ */
+export function passageLanguages(
+  text: string,
+  ranges?: readonly { start: number; end: number }[],
+): PassageLanguage[] {
+  const chosen =
+    ranges ??
+    blocksOf(text).filter(
+      (block) =>
+        !['fence', 'indented_code', 'frontmatter', 'blockquote', 'blank'].includes(block.kind),
+    )
+
+  return chosen.map(({ start, end }) => {
+    const scrubbed = text
+      .slice(start, end)
+      .replace(/(`+)(?:(?!\1)[^\n])+\1/g, blank)
+      .replace(/"[^"\n]*"|“[^”\n]*”|«[^»\n]*»/g, blank)
+      .replace(/\bhttps?:\/\/\S+|<[^>\n]+>/g, blank)
+    const letters = scrubbed.match(/\p{L}/gu)?.length ?? 0
+    if (letters < MIN_LETTERS) return { start, end }
+    const { sure } = identify(scrubbed.trim())
+    return sure ? { start, end, lang: sure } : { start, end }
+  })
+}

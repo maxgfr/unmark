@@ -36,8 +36,8 @@ export interface Segmentation {
   sentences: Sentence[]
   /** Unsealed prose words across all kept sentences. */
   words: number
-  /** How many prose blocks there were, kept sentences or not. */
-  paragraphs: number
+  /** Every prose block, kept sentences or not, indexed by `paragraphIndex`. */
+  blocks: { start: number; end: number }[]
   mask: Uint8Array
   index: LineIndex
 }
@@ -231,11 +231,12 @@ export function segment(text: string, mask = protectedMask(text)): Segmentation 
   const index = lineIndex(text)
   const sentences: Sentence[] = []
   let words = 0
-  let paragraphIndex = -1
+  const blocks: { start: number; end: number }[] = []
 
   for (const block of blocksOf(text)) {
     if (block.kind !== 'paragraph' && block.kind !== 'list_item') continue
-    paragraphIndex += 1
+    const paragraphIndex = blocks.length
+    blocks.push({ start: block.start, end: block.end })
 
     let from = block.start
     if (block.kind === 'list_item') {
@@ -268,5 +269,5 @@ export function segment(text: string, mask = protectedMask(text)): Segmentation 
     }
   }
 
-  return { sentences, words, paragraphs: paragraphIndex + 1, mask, index }
+  return { sentences, words, blocks, mask, index }
 }
