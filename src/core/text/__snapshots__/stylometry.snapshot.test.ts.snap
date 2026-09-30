@@ -1,0 +1,141 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`stylometry values > are unchanged on the crlf sample 1`] = `
+{
+  "measurable": true,
+  "metrics": {
+    "aphorism": "0",
+    "burstiness": "0 !",
+    "business_jargon": "0",
+    "copula_avoidance": "0",
+    "em_dash": "0",
+    "em_dash_paragraph": "0",
+    "false_range": "0",
+    "generic_outline": "NaN",
+    "marker_vocabulary": "0",
+    "negative_parallelism": "50 !",
+    "paragraph_template": "NaN",
+    "paragraph_variance": "0 !",
+    "recap_loop": "NaN",
+    "rule_of_three": "0",
+    "signpost_density": "0",
+    "staccato": "0",
+    "vague_attribution": "0",
+  },
+  "paragraphs": 12,
+  "sentences": 24,
+  "words": 288,
+}
+`;
+
+exports[`stylometry values > are unchanged on the human sample 1`] = `
+{
+  "measurable": false,
+  "metrics": {
+    "aphorism": "0",
+    "burstiness": "NaN",
+    "business_jargon": "0",
+    "copula_avoidance": "0",
+    "em_dash": "8.695652",
+    "em_dash_paragraph": "1",
+    "false_range": "0",
+    "generic_outline": "NaN",
+    "marker_vocabulary": "0",
+    "negative_parallelism": "0",
+    "paragraph_template": "NaN",
+    "paragraph_variance": "NaN",
+    "recap_loop": "NaN",
+    "rule_of_three": "0",
+    "signpost_density": "0",
+    "staccato": "1",
+    "vague_attribution": "0",
+  },
+  "paragraphs": 2,
+  "sentences": 6,
+  "words": 115,
+}
+`;
+
+exports[`stylometry values > are unchanged on the loaded sample 1`] = `
+{
+  "measurable": true,
+  "metrics": {
+    "aphorism": "0",
+    "burstiness": "0.324864 !",
+    "business_jargon": "0",
+    "copula_avoidance": "0",
+    "em_dash": "58.823529 !",
+    "em_dash_paragraph": "18 !",
+    "false_range": "0",
+    "generic_outline": "NaN",
+    "marker_vocabulary": "264.705882 !",
+    "negative_parallelism": "33.333333 !",
+    "paragraph_template": "NaN",
+    "paragraph_variance": "NaN",
+    "recap_loop": "NaN",
+    "rule_of_three": "33.333333",
+    "signpost_density": "0",
+    "staccato": "0",
+    "vague_attribution": "0",
+  },
+  "paragraphs": 1,
+  "sentences": 27,
+  "words": 306,
+}
+`;
+
+exports[`stylometry values > are unchanged on the markdown sample 1`] = `
+{
+  "measurable": true,
+  "metrics": {
+    "aphorism": "0",
+    "burstiness": "0.934973",
+    "business_jargon": "0",
+    "copula_avoidance": "23.809524",
+    "em_dash": "0",
+    "em_dash_paragraph": "0",
+    "false_range": "0",
+    "generic_outline": "1 !",
+    "marker_vocabulary": "104.895105 !",
+    "negative_parallelism": "19.047619",
+    "paragraph_template": "NaN",
+    "paragraph_variance": "NaN",
+    "recap_loop": "NaN",
+    "rule_of_three": "0",
+    "signpost_density": "19.047619",
+    "staccato": "3",
+    "vague_attribution": "0",
+  },
+  "paragraphs": 2,
+  "sentences": 21,
+  "words": 143,
+}
+`;
+
+exports[`stylometry values > are unchanged on the signposts sample 1`] = `
+{
+  "measurable": true,
+  "metrics": {
+    "aphorism": "25 !",
+    "burstiness": "0.25 !",
+    "business_jargon": "41.666667 !",
+    "copula_avoidance": "25",
+    "em_dash": "0",
+    "em_dash_paragraph": "0",
+    "false_range": "25",
+    "generic_outline": "NaN",
+    "marker_vocabulary": "104.166667 !",
+    "negative_parallelism": "0",
+    "paragraph_template": "NaN",
+    "paragraph_variance": "NaN",
+    "recap_loop": "NaN",
+    "rule_of_three": "0",
+    "signpost_density": "100 !",
+    "staccato": "0",
+    "vague_attribution": "25 !",
+  },
+  "paragraphs": 1,
+  "sentences": 24,
+  "words": 288,
+}
+`;
