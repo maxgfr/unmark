@@ -1,8 +1,13 @@
+import { lazy, Suspense, useState } from 'react'
 import type { TextReport } from '../core/text/index.ts'
 import { MIN_WORDS } from '../core/text/index.ts'
 import { outcomeOf, type Row } from '../core/report.ts'
 import { FindingsTable, Section } from './parts.tsx'
 import { SourceView } from './SourceView.tsx'
+
+// Its own chunk: the catalogues and language models behind the assessment load
+// the first time someone opens the section, not with the page.
+const Authorship = lazy(() => import('./Authorship.tsx'))
 
 export function TextDetails({
   text,
@@ -19,6 +24,7 @@ export function TextDetails({
   onLocate: (row: Row) => void
   onApply: (row: Row) => void
 }) {
+  const [assessing, setAssessing] = useState(false)
   const located = report.findings.filter(
     (finding) => finding.scope !== 'document' && finding.length > 0,
   )
@@ -78,6 +84,32 @@ export function TextDetails({
               ))}
             </Section>
           ) : undefined}
+          <Section title="Authorship" aside="French and English · an assessment, not proof">
+            <details
+              className="border-t border-[var(--color-rule)] py-3"
+              onToggle={(event) => setAssessing(event.currentTarget.open)}
+            >
+              <summary className="cursor-pointer text-sm">Was this written by AI?</summary>
+              <div className="mt-4">
+                {!text ? (
+                  <p className="text-sm text-[var(--color-muted)]">Paste text to assess it.</p>
+                ) : assessing ? (
+                  <Suspense
+                    fallback={
+                      <p className="text-xs text-[var(--color-muted)]">Reading the text…</p>
+                    }
+                  >
+                    <Authorship
+                      text={text}
+                      onLocate={(row) => {
+                        if (settled) onLocate(row)
+                      }}
+                    />
+                  </Suspense>
+                ) : undefined}
+              </div>
+            </details>
+          </Section>
           <Section
             title="Writing style"
             aside={
@@ -87,8 +119,8 @@ export function TextDetails({
             }
           >
             <p className="mb-3 text-sm text-[var(--color-muted)]">
-              English-oriented style heuristics, not an AI detector. These measurements describe the
-              source.
+              Document-level measurements, English-oriented. They describe the source; the
+              authorship section above reads French and English, as an assessment, not proof.
             </p>
             {report.style.measurable ? (
               (['phrase', 'structure', 'silhouette'] as const).map((layer) => (

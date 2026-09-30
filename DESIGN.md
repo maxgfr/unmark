@@ -91,6 +91,24 @@ Two rules on it, both learned by breaking them:
   reproduced in the view whose job is to make the document readable. One chip
   reading `U+200B/U+200C ×112` says more, and clicking it selects the whole run.
 
+**Authorship** is its own section in Inspection details, closed until opened;
+its code and language models load only then.
+
+- **The verdict is a sentence, not a score.** "Likely AI-written", "Uncertain:
+  the signals are mixed", "Few AI-writing signals found" — at body size, bone,
+  weight 500 only for `likely_ai`. The score, confidence, language and
+  calibration follow in one muted mono line. A large number would read as a
+  measurement of authorship, which it is not.
+- **The disclaimer sits directly under the verdict**, in the same block, always
+  visible. Never in a footer, never behind a click.
+- **No amber, no green.** Amber means a confirmed mark; a style verdict never
+  is one. Green would reassure, and "few signals" is not "written by a person".
+- **Passages are underlined in neutral greys**, graded by the line's style —
+  solid for `high`, dashed for `medium`, dotted for `low` — so the grade
+  survives greyscale and colour-blind reading. Selecting one shows its patterns,
+  reasons and fixes beside the text and selects it in the source.
+- **Export report (.md)** is the section's only action, secondary like Copy.
+
 A row also states what it proposes — `becomes "-"`, `delete it` — or why it has
 none. `delve` has no correct substitution, and a button offering one would be
 the tool guessing where it has always refused to.

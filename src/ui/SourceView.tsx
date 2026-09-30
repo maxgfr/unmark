@@ -63,6 +63,15 @@ interface Run {
   mark?: number
   /** Inside the span of a decoded payload. */
   banded: boolean
+  /** Index into `bands`, when this run sits inside an assessed passage. */
+  band?: number
+}
+
+/** An assessed passage: a sentence the authorship report scored. */
+export interface Band {
+  start: number
+  end: number
+  band: 'high' | 'medium' | 'low'
 }
 
 /**
@@ -72,12 +81,31 @@ interface Run {
  * visible inside the payload that carrier helped spell. The payload itself is
  * not a mark but a band: it covers characters that already belong to their own
  * findings, so it is drawn as a background across both rather than as a box
- * that would have to contain them.
+ * that would have to contain them. Assessed passages work the same way, as an
+ * underline under whatever the passage contains.
+ *
+ * Both are looked up in per-character arrays filled once. Asking every band
+ * "does this offset fall in you" for every character was quadratic, and an
+ * authorship report on a long document is thousands of passages.
  */
-function runsOf(text: string, findings: readonly Finding[]): { runs: Run[]; hidden: number } {
-  const bands = findings.filter((f) => f.kind === 'stego_payload' && f.length > 0)
-  const inBand = (offset: number) =>
-    bands.some((band) => offset >= band.offset && offset < band.offset + band.length)
+export function runsOf(
+  text: string,
+  findings: readonly Finding[],
+  bands: readonly Band[] = [],
+): { runs: Run[]; hidden: number } {
+  const payload = new Uint8Array(text.length)
+  for (const finding of findings) {
+    if (finding.kind === 'stego_payload' && finding.length > 0) {
+      payload.fill(1, finding.offset, Math.min(text.length, finding.offset + finding.length))
+    }
+  }
+  // Which passage owns each character, plus one so zero means none.
+  const owner = new Int32Array(text.length)
+  bands.forEach((band, index) => {
+    owner.fill(index + 1, Math.max(0, band.start), Math.min(text.length, band.end))
+  })
+  const bandAt = (offset: number) =>
+    (owner[offset] ?? 0) > 0 ? (owner[offset] as number) - 1 : undefined
 
   const claimed: { start: number; end: number; mark: number }[] = []
   const candidates = findings
@@ -120,41 +148,57 @@ function runsOf(text: string, findings: readonly Finding[]): { runs: Run[]; hidd
   }
 
   const runs: Run[] = []
+  // Plain text is split wherever the payload band or the passage changes, so a
+  // background or an underline runs continuously under the words.
+  const plain = (from: number, to: number) => {
+    let cursor = from
+    while (cursor < to) {
+      const banded = payload[cursor] === 1
+      const band = owner[cursor]
+      let next = cursor + 1
+      while (next < to && (payload[next] === 1) === banded && owner[next] === band) next += 1
+      const at = bandAt(cursor)
+      runs.push({
+        text: text.slice(cursor, next),
+        start: cursor,
+        end: next,
+        banded,
+        ...(at === undefined ? {} : { band: at }),
+      })
+      cursor = next
+    }
+  }
+
   let read = 0
   for (const span of merged) {
-    if (span.start > read) {
-      // Plain text is split at band edges too, so a payload's background runs
-      // continuously under the words as well as under the carriers.
-      let cursor = read
-      while (cursor < span.start) {
-        const banded = inBand(cursor)
-        let next = cursor + 1
-        while (next < span.start && inBand(next) === banded) next += 1
-        runs.push({ text: text.slice(cursor, next), start: cursor, end: next, banded })
-        cursor = next
-      }
-    }
+    if (span.start > read) plain(read, span.start)
+    const at = bandAt(span.start)
     runs.push({
       text: text.slice(span.start, span.end),
       start: span.start,
       end: span.end,
       mark: span.mark,
-      banded: inBand(span.start),
+      banded: payload[span.start] === 1,
+      ...(at === undefined ? {} : { band: at }),
     })
     read = span.end
   }
-  if (read < text.length) {
-    let cursor = read
-    while (cursor < text.length) {
-      const banded = inBand(cursor)
-      let next = cursor + 1
-      while (next < text.length && inBand(next) === banded) next += 1
-      runs.push({ text: text.slice(cursor, next), start: cursor, end: next, banded })
-      cursor = next
-    }
-  }
+  if (read < text.length) plain(read, text.length)
 
   return { runs, hidden }
+}
+
+/**
+ * How each band is drawn: by the style of its underline, in neutral greys.
+ *
+ * Never amber — that is for confirmed marks — and never by colour alone. A
+ * solid, a dashed and a dotted line survive a greyscale print and a reader who
+ * does not separate hues.
+ */
+const BAND_STYLE: Record<Band['band'], string> = {
+  high: 'underline decoration-solid decoration-2 decoration-[var(--color-muted)]',
+  medium: 'underline decoration-dashed decoration-[var(--color-muted)]',
+  low: 'underline decoration-dotted decoration-[var(--color-rule-bright)]',
 }
 
 export function SourceView({
@@ -162,6 +206,9 @@ export function SourceView({
   findings,
   selected,
   onSelect,
+  bands,
+  activeBand,
+  onBand,
 }: {
   text: string
   /** Positional findings only, addressing `text` as it stands. */
@@ -182,9 +229,14 @@ export function SourceView({
    */
   selected: number | undefined
   onSelect: (finding: Finding) => void
+  /** Assessed passages to underline, from the authorship report. */
+  bands?: readonly Band[]
+  /** Index into `bands` of the passage being read. */
+  activeBand?: number | undefined
+  onBand?: (index: number) => void
 }) {
   const container = useRef<HTMLDivElement>(null)
-  const { runs, hidden } = useMemo(() => runsOf(text, findings), [text, findings])
+  const { runs, hidden } = useMemo(() => runsOf(text, findings, bands), [text, findings, bands])
 
   /** The run the selected offset falls inside, if any run is drawn over it. */
   const active = useMemo(() => {
@@ -198,11 +250,11 @@ export function SourceView({
   // may be two thousand of them, and a map of two thousand refs rebuilt on every
   // keystroke costs more than one selector lookup on a click.
   useEffect(() => {
-    if (active === -1) return
+    if (active === -1 && activeBand === undefined) return
     container.current
       ?.querySelector('[data-selected="true"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [active])
+  }, [active, activeBand])
 
   return (
     <>
@@ -212,6 +264,24 @@ export function SourceView({
       >
         {runs.map((run, index) => {
           const key = `${index}-${run.mark ?? 'plain'}`
+          if (run.mark === undefined && run.band !== undefined && bands && onBand) {
+            const band = bands[run.band] as Band
+            const reading = activeBand === run.band
+            return (
+              <button
+                key={key}
+                type="button"
+                data-selected={reading}
+                aria-pressed={reading}
+                onClick={() => onBand(run.band as number)}
+                className={`${BAND_STYLE[band.band]} ${run.banded ? 'bg-[var(--color-signal-dim)] ' : ''}${
+                  reading ? 'bg-[var(--color-panel-high)] text-[var(--color-bone)]' : ''
+                } cursor-pointer text-left underline-offset-4 transition-colors duration-150 hover:decoration-[var(--color-bone)]`}
+              >
+                {run.text}
+              </button>
+            )
+          }
           if (run.mark === undefined) {
             return run.banded ? (
               <span key={key} className="bg-[var(--color-signal-dim)]">
