@@ -43,6 +43,22 @@ export interface VerdictResult {
 const inMean = (signal: Signal) =>
   signal.value !== null && !(signal.oneSided === true && signal.value === 0)
 
+/**
+ * The weighted mean of the signals that can be averaged, with guard C applied.
+ *
+ * Exported for the evaluation, which needs a score for every document —
+ * including the short ones the verdict abstains on — to rank them.
+ */
+export function weightedScore(signals: readonly Signal[], residue: boolean, ai: number): number {
+  const used = signals.filter(inMean)
+  const total = used.reduce((sum, s) => sum + s.weight, 0)
+  const mean =
+    total === 0 ? 0 : used.reduce((sum, s) => sum + s.weight * (s.value as number), 0) / total
+  // Guard C: chat residue is near-certain on its own, so it lifts the score to
+  // the threshold — and guard A still decides whether that is a verdict.
+  return residue ? Math.max(mean, ai) : mean
+}
+
 export function decide(input: VerdictInput): VerdictResult {
   const { human, ai } = input.calibration.thresholds
 
@@ -66,13 +82,7 @@ export function decide(input: VerdictInput): VerdictResult {
     }
   }
   const used = input.signals.filter(inMean)
-  const total = used.reduce((sum, s) => sum + s.weight, 0)
-  let score =
-    total === 0 ? 0 : used.reduce((sum, s) => sum + s.weight * (s.value as number), 0) / total
-
-  // Guard C: chat residue is near-certain on its own, so it lifts the score to
-  // the threshold — and guard A below still decides whether that is a verdict.
-  if (input.residue) score = Math.max(score, ai)
+  const score = weightedScore(input.signals, input.residue, ai)
 
   const strong = input.signals.filter((s) => s.value !== null && s.value >= STRONG).length
   let verdict: AuthorshipVerdict

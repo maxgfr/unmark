@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decide, MIN_WORDS } from './verdict.ts'
+import { decide, MIN_WORDS, weightedScore } from './verdict.ts'
 import type { Signal } from './signals.ts'
 import type { Calibration } from './calibration.ts'
 
@@ -114,5 +114,14 @@ describe('decide', () => {
     expect(decide({ ...base, signals: four.slice(0, 3) }).confidence).toBe('low')
     const near = four.map((s) => ({ ...s, value: 0.75 }))
     expect(decide({ ...base, signals: near }).confidence).toBe('medium')
+  })
+})
+
+describe('weightedScore', () => {
+  it('is the score decide gives, before the verdict rules', () => {
+    const signals = [signal('a', 0.2), signal('b', 0.6, { weight: 3 }), signal('c', null)]
+    expect(weightedScore(signals, false, 0.7)).toBeCloseTo(0.5)
+    expect(decide({ ...base, signals }).score).toBeCloseTo(0.5)
+    expect(weightedScore(signals, true, 0.7)).toBeCloseTo(0.7)
   })
 })

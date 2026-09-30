@@ -94,6 +94,13 @@ describe('detectAuthorship', () => {
     expect(report.verdict).not.toBe('likely_human')
   })
 
+  it('lists every sentence, band or not, when asked for all spans', () => {
+    const some = detectAuthorship(HUMAN_FR)
+    const all = detectAuthorship(HUMAN_FR, { allSpans: true })
+    expect(all.spans.length).toBe(all.sentences)
+    expect(all.spans.length).toBeGreaterThan(some.spans.length)
+  })
+
   it('is deterministic', () => {
     expect(detectAuthorship(AI_FR)).toEqual(detectAuthorship(AI_FR))
   })

@@ -44,6 +44,8 @@ export interface DetectOptions {
   external?: readonly ExternalSignal[]
   /** For the evaluation harness; everything else uses the shipped one. */
   calibration?: Calibration
+  /** List every sentence in `spans`, not only those in a band. For evaluation. */
+  allSpans?: boolean
 }
 
 /** Script and style bodies, overwritten with spaces so every offset holds. */
@@ -139,7 +141,7 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
     thresholds: { ...calibration.thresholds },
     signals,
     spans: scored
-      .filter((span) => span.band !== 'none')
+      .filter((span) => options.allSpans === true || span.band !== 'none')
       .map((span) => ({
         start: span.start,
         end: span.end,
@@ -181,5 +183,5 @@ export type { AuthorshipVerdict, Confidence, AbstainReason } from './verdict.ts'
 export type { ExternalSignal, Signal, EvidenceLabel } from './signals.ts'
 export type { Calibration } from './calibration.ts'
 export { CALIBRATION } from './calibration.ts'
-export { MIN_WORDS as MIN_AUTHORSHIP_WORDS } from './verdict.ts'
+export { MIN_WORDS as MIN_AUTHORSHIP_WORDS, weightedScore } from './verdict.ts'
 export type { LangOption } from './route.ts'
