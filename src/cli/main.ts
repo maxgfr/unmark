@@ -12,7 +12,7 @@ import process from 'node:process'
 import { VERSION } from '../core/index.ts'
 import { cleanContainer, inspectContainer, type ContainerFormat } from '../core/container/index.ts'
 import { decodeStego } from '../core/text/stego.ts'
-import { PLAIN } from '../core/text/index.ts'
+import { analyzeStyle, PLAIN, stylometryFindings } from '../core/text/index.ts'
 import { buildBrief, verifyRewrite, type RewriteVerdict } from '../core/rewrite.ts'
 import { runRewrite } from './rewrite.ts'
 import {
@@ -234,14 +234,36 @@ const textOptions = (options: Options) => ({
 
 async function commandInspect(target: string, options: Options): Promise<number> {
   const source = await readSource(target)
-  const report = await inspectContainer(source.bytes, source.name, textOptions(options))
+  const { textual, ...report } = await inspectContainer(
+    source.bytes,
+    source.name,
+    textOptions(options),
+  )
+
+  // Style is read here and not inside `inspectContainer`, because `audit` calls
+  // that too and exits 1 on any finding it returns. Every draft in a tree would
+  // then count as a marked file. Style is a reading, never a mark, and it is
+  // never `confirmed`, so the exit code below cannot move because of it.
+  const text = textual ? decodeUtf8(source.bytes) : undefined
+  const style = text === undefined ? undefined : analyzeStyle(text)
+  const stylometry = text === undefined ? [] : stylometryFindings(text)
 
   if (options.json) {
-    process.stdout.write(`${JSON.stringify({ file: source.name, ...report }, undefined, 2)}\n`)
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          file: source.name,
+          ...report,
+          ...(style ? { stylometryFindings: stylometry, style } : {}),
+        },
+        undefined,
+        2,
+      )}\n`,
+    )
   } else {
     const out = [`${bold(source.name)} ${dim(`· ${report.format}`)}`, '']
-    renderFindings(report.findings, out)
-    summarise(report.findings, out)
+    renderFindings([...report.findings, ...stylometry], out)
+    summarise([...report.findings, ...stylometry], out)
     process.stdout.write(`${out.join('\n')}\n`)
   }
 

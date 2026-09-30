@@ -11,7 +11,7 @@
 // differs from a fresh build is a bundle that was never rebuilt.
 
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -216,6 +216,21 @@ try {
   check('audit', audit.code === 1, 'should exit 1 when a tree contains a marked file')
   check('audit', audit.out.includes('marked.txt'), 'should name the marked file')
   check('audit', !audit.out.includes('clean.txt'), 'should not list a clean file')
+
+  // inspect reports style, as SKILL.md says; audit still calls a styled draft clean.
+  const styledDir = at('styled')
+  await mkdir(styledDir)
+  const styled = Array.from(
+    { length: 9 },
+    (_, i) =>
+      `This rich tapestry is a testament to the ever-evolving landscape of case ${i}. It is not just robust, but seamless. The result is fast, cheap, and reliable, a pivotal and crucial moment.`,
+  ).join(' ')
+  await writeFile(join(styledDir, 'styled.txt'), styled)
+  const styleInspect = unmark(['inspect', join(styledDir, 'styled.txt')])
+  check('inspect', styleInspect.out.includes('Writing style'), 'should report the writing style')
+  check('inspect', styleInspect.code === 0, 'style alone must not exit 1')
+  const styleAudit = unmark(['audit', styledDir])
+  check('audit', styleAudit.code === 0, 'must not count writing style as a mark')
 } finally {
   await rm(work, { recursive: true, force: true })
 }

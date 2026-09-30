@@ -109,7 +109,38 @@ describe('inspect', () => {
     expect(report.format).toBe('Text')
     expect(report.findings.length).toBeGreaterThan(0)
   })
+
+  it('reports the writing style of a text file, as the skill says it does', async () => {
+    const path = await file('draft.md', STYLED)
+    expect(await main(['inspect', path])).toBe(0)
+    expect(stdout()).toContain('Writing style')
+  })
+
+  it('carries the style report and its findings in JSON', async () => {
+    await main(['inspect', await file('draft.md', STYLED), '--json'])
+    const report = JSON.parse(stdout())
+    expect(report.style.measurable).toBe(true)
+    expect(report.stylometryFindings.length).toBeGreaterThan(0)
+    expect(report.stylometryFindings.every((f: { kind: string }) => f.kind === 'stylometry')).toBe(
+      true,
+    )
+  })
+
+  it('says nothing about style for a binary file', async () => {
+    await main(['inspect', await file('image.png', png([])), '--json'])
+    const report = JSON.parse(stdout())
+    expect(report.style).toBeUndefined()
+  })
 })
+
+// Style tells in every layer, and not a single mark. `inspect` must report the
+// first and `audit` must still call the file clean: a tree of drafts is not a
+// tree of marked files.
+const STYLED = Array.from(
+  { length: 9 },
+  (_, i) =>
+    `This rich tapestry is a testament to the ever-evolving landscape of case ${i}. It is not just robust, but seamless. The result is fast, cheap, and reliable, a pivotal and crucial moment.`,
+).join(' ')
 
 describe('decode', () => {
   it('recovers the payload rather than only reporting that one exists', async () => {
@@ -217,6 +248,14 @@ describe('audit', () => {
 
   it('exits 0 when a tree is clean', async () => {
     await file('a.txt', 'Nothing.')
+    expect(await main(['audit', dir])).toBe(0)
+  })
+
+  it('does not count writing style as a mark', async () => {
+    // `inspect` reports style; `audit` answers "which files carry marks". A
+    // tree of ordinary drafts that audit calls marked would make the answer
+    // useless, so style stays out of it.
+    await file('draft.txt', STYLED)
     expect(await main(['audit', dir])).toBe(0)
   })
 

@@ -203,9 +203,14 @@ export async function inspectContainer(
   bytes: Uint8Array,
   name?: string,
   options?: TextOptions & ContainerOptions,
-): Promise<{ format: ContainerFormat; findings: Finding[]; preserved: Finding[] }> {
-  const { format, findings, preserved } = await cleanContainer(bytes, name, options)
-  return { format, findings: [...findings, ...preserved].sort(byPosition), preserved }
+): Promise<{
+  format: ContainerFormat
+  findings: Finding[]
+  preserved: Finding[]
+  textual: boolean
+}> {
+  const { format, findings, preserved, textual } = await cleanContainer(bytes, name, options)
+  return { format, findings: [...findings, ...preserved].sort(byPosition), preserved, textual }
 }
 
 export {
