@@ -46,10 +46,15 @@ describe('performance', () => {
 
   it('reads 100k words in under 1.5 s', () => {
     const paragraphs = HUMAN_FR.split('\n\n')
-    const long = Array.from(
-      { length: 2400 },
-      (_, i) => `${paragraphs[i % paragraphs.length]} Séance numéro ${i}.`,
-    ).join('\n\n')
+    // Built to a word count rather than a paragraph count, so the budget still
+    // measures 100k words whichever sample text it is made from.
+    const parts: string[] = []
+    for (let i = 0, count = 0; count < 100_500; i += 1) {
+      const paragraph = `${paragraphs[i % paragraphs.length]} Séance numéro ${i}.`
+      parts.push(paragraph)
+      count += paragraph.split(/\s+/).length
+    }
+    const long = parts.join('\n\n')
     expect(long.split(/\s+/).length).toBeGreaterThan(100_000)
     const started = performance.now()
     detectAuthorship(long)
