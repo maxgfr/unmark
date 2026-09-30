@@ -205,8 +205,17 @@ function fitCalibration(train, corpusId) {
   }
 
   const draft = { ...CALIBRATION, weights }
-  const human = rows.filter((s) => s.label === 'human').map((s) => scoreOf(s, draft))
-  const ai = rows.filter((s) => s.label === 'ai').map((s) => scoreOf(s, draft))
+  // Thresholds only ever apply to documents long enough for a verdict, so they
+  // are fitted on those when there are enough to fit on. Fitted on everything,
+  // the many short generated texts with no tell at all pulled the human
+  // threshold to zero, and nothing could ever read as "few signals".
+  const long = rows.filter((s) => s.words >= MIN_AUTHORSHIP_WORDS)
+  const enough = ['human', 'ai'].every(
+    (label) => long.filter((s) => s.label === label).length >= 20,
+  )
+  const pool = enough ? long : rows
+  const human = pool.filter((s) => s.label === 'human').map((s) => scoreOf(s, draft))
+  const ai = pool.filter((s) => s.label === 'ai').map((s) => scoreOf(s, draft))
   const date = new Date().toISOString().slice(0, 10)
   return {
     id: `fit-${date}-${corpusId}`,
