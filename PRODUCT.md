@@ -57,7 +57,17 @@ says who marked the text. And it states plainly what it cannot remove.
   fragmented video is refused rather than rebuilt on a guess.
 - **Never corrupt real text.** A zero-width joiner between two emoji, or inside
   a Persian word, is not a watermark. Those are reported and kept.
-- **No verdict beyond the evidence.** Stylometry can never say "confirmed".
+- **No verdict beyond the evidence.** `confirmed` is reserved for technical
+  marks: a carrier, a decoded payload, a generator tag. Style evidence can reach
+  `likely_ai` and never `confirmed`. An authorship assessment abstains below 150
+  words of prose, and says it is not proof on the same screen as the verdict,
+  never in a footer or behind a click.
+- **An assessment, not an accusation.** The authorship report never says a text
+  was written by a person: the lowest it goes is "few AI-writing signals
+  found". It is a reading aid for a writer checking their own draft or an
+  editor asking where to look, and it must not be the basis of a disciplinary
+  decision. Topic, formality, a non-native writer's phrasing and clean spelling
+  are not evidence, and the report says so.
 
 ## Voice
 

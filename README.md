@@ -55,14 +55,14 @@ hunts for invisible codepoints walks straight past them. unmark also measures
 and a periodic substitution is reported `confirmed` where a lone one is not.
 
 A deterministic stylometry report flags the habits of generated prose and never
-rewrites anything. Eighteen metrics in three layers, following unslop's split,
+rewrites anything. Seventeen metrics in three layers, following unslop's split,
 because _which kind_ of tell fired is more useful than how many did:
 
-| Layer          | Reads                                                                                                                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **phrase**     | marker vocabulary, business jargon, attribution with nobody behind it                                                                                                                    |
-| **structure**  | **dashes per paragraph**, sentence-length and paragraph-length spread, signpost density, how uniformly paragraphs open, staccato runs, false ranges, copula avoidance, aphorism formulas |
-| **silhouette** | a closing paragraph that recaps the ones above it, headings that would fit any subject, paragraphs built to one internal template                                                        |
+| Layer          | Reads                                                                                                                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **phrase**     | marker vocabulary, business jargon, attribution with nobody behind it                                                                                                                          |
+| **structure**  | **dashes per paragraph**, sentence-length and paragraph-length spread, signpost density, rule of three, negative parallelism, staccato runs, false ranges, copula avoidance, aphorism formulas |
+| **silhouette** | a closing paragraph that recaps the ones above it, headings that would fit any subject, paragraphs built to one internal template                                                              |
 
 The silhouette layer is the one that survives a word-level rewrite, which is why
 it is worth more than another vocabulary list. Dashes are counted per paragraph
