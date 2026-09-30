@@ -489,7 +489,9 @@ describe('detect', () => {
     // Which of the two lower verdicts it reaches depends on the calibration;
     // that it is one of them, with the disclaimer, does not.
     expect(await main(['detect', await file('fiche.md', HUMAN_FR)])).toBe(0)
-    expect(stdout()).toMatch(/Few AI-writing signals found|Uncertain: the signals are mixed/)
+    expect(stdout()).toMatch(
+      /Few AI-writing signals found|Uncertain: not enough to call it either way/,
+    )
     expect(stdout()).toContain('Not proof')
     expect(stdout()).not.toMatch(/written by a (?:person|human)/i)
   })

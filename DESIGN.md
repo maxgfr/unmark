@@ -95,7 +95,7 @@ Two rules on it, both learned by breaking them:
 its code and language models load only then.
 
 - **The verdict is a sentence, not a score.** "Likely AI-written", "Uncertain:
-  the signals are mixed", "Few AI-writing signals found" — at body size, bone,
+  not enough to call it either way", "Few AI-writing signals found" — at body size, bone,
   weight 500 only for `likely_ai`. The score, confidence, language and
   calibration follow in one muted mono line. A large number would read as a
   measurement of authorship, which it is not.

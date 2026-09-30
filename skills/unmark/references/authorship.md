@@ -10,7 +10,7 @@ too, and generated text can be edited until none of it shows.
 | Verdict                 | Exit | Say it as                                                          |
 | ----------------------- | ---: | ------------------------------------------------------------------ |
 | `likely_ai`             |    1 | "Likely AI-written" — several independent habits agree             |
-| `uncertain`             |    0 | "Uncertain: the signals are mixed"                                 |
+| `uncertain`             |    0 | "Uncertain: not enough to call it either way"                      |
 | `likely_human`          |    0 | "Few AI-writing signals found" — never "written by a person"       |
 | `insufficient_evidence` |    3 | "Not enough text to assess", or the language is not French/English |
 

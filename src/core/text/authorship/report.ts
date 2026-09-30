@@ -139,7 +139,7 @@ export function verdictSentence(
       return 'Likely AI-written'
     }
     case 'uncertain': {
-      return 'Uncertain: the signals are mixed'
+      return 'Uncertain: not enough to call it either way'
     }
     case 'likely_human': {
       return 'Few AI-writing signals found'

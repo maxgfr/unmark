@@ -83,12 +83,12 @@ behind the answer: line, excerpt, pattern, reason, and what a writer would do
 instead. It is an assessment of habits, **never proof**, and every report says
 so on the same screen as its verdict.
 
-| Verdict                 | Says                             | When                                                              |
-| ----------------------- | -------------------------------- | ----------------------------------------------------------------- |
-| `likely_ai`             | Likely AI-written                | several independent habits agree, past the fitted threshold       |
-| `uncertain`             | Uncertain: the signals are mixed | anything in between, or one strong habit alone                    |
-| `likely_human`          | Few AI-writing signals found     | never "written by a person" — absence of tells is not a signature |
-| `insufficient_evidence` | Not enough text to assess        | under 150 words of prose, or mostly another language              |
+| Verdict                 | Says                                        | When                                                              |
+| ----------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| `likely_ai`             | Likely AI-written                           | several independent habits agree, past the fitted threshold       |
+| `uncertain`             | Uncertain: not enough to call it either way | mixed signals, one strong habit alone, or nothing either way      |
+| `likely_human`          | Few AI-writing signals found                | never "written by a person" — absence of tells is not a signature |
+| `insufficient_evidence` | Not enough text to assess                   | under 150 words of prose, or mostly another language              |
 
 What it reads, one habit per signal so nothing votes twice: tiered French and
 English catalogues (a tier-2 phrase like _notamment_ counts only when a second

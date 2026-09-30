@@ -111,6 +111,14 @@ describe('renderMarkdown', () => {
     expect(markdown).toContain('a &lt;b&gt;bold&lt;/b&gt; claim')
   })
 
+  it('says "uncertain" in words that stay true when nothing at all was found', () => {
+    // With a human threshold of zero, a text with no signal is `uncertain` too;
+    // "the signals are mixed" told a reader there were signals on both sides.
+    const empty = renderMarkdown({ ...REPORT, verdict: 'uncertain', score: 0 })
+    expect(empty).toContain('Uncertain: not enough to call it either way')
+    expect(empty).not.toMatch(/signals are mixed/)
+  })
+
   it('never says a text was written by a person', () => {
     const human = renderMarkdown({ ...REPORT, verdict: 'likely_human', score: 0.1 })
     expect(human).toContain('Few AI-writing signals found')
