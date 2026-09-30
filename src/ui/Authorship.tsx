@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react'
 import {
   detectAuthorship,
+  formatOfPaste,
   renderMarkdown,
   verdictSentence,
   type AuthorshipReport,
@@ -21,6 +22,7 @@ import type { Row } from '../core/report.ts'
 import { SourceView, type Band } from './SourceView.tsx'
 import { saveBlob } from './download.ts'
 import { IconDownload } from './icons.tsx'
+import { useStable } from './useStable.ts'
 
 const LANGUAGE = { fr: 'French', en: 'English', und: 'language undetermined' } as const
 
@@ -34,7 +36,15 @@ export default function Authorship({
   text: string
   onLocate: (row: Row) => void
 }) {
-  const report = useMemo(() => detectAuthorship(text, { format: 'Markdown' }), [text])
+  // Assessed once typing pauses, not per keystroke; until then the last report
+  // stays up, marked out of date, and nothing in it can be clicked — its
+  // offsets address the text as it was.
+  const assessed = useStable(text, 400)
+  const stale = assessed !== text
+  const report = useMemo(
+    () => detectAuthorship(assessed, { format: formatOfPaste(assessed) }),
+    [assessed],
+  )
   const [reading, setReading] = useState<number | undefined>(undefined)
 
   const bands: Band[] = useMemo(
@@ -43,6 +53,7 @@ export default function Authorship({
   )
 
   const read = (index: number) => {
+    if (stale) return
     setReading(index)
     const span = report.spans[index]
     if (span) {
@@ -61,8 +72,16 @@ export default function Authorship({
     .filter(({ span }) => LISTED.has(span.band))
 
   return (
-    <div className="flex flex-col gap-5">
+    <div
+      className={`flex flex-col gap-5 transition-opacity duration-150 ${stale ? 'opacity-60' : ''}`}
+      aria-busy={stale}
+    >
       <Verdict report={report} />
+      {stale ? (
+        <p className="text-xs text-[var(--color-muted)]">
+          The text changed; the assessment updates when you stop typing.
+        </p>
+      ) : undefined}
 
       {report.verdict === 'insufficient_evidence' ? undefined : (
         <>
@@ -86,7 +105,7 @@ export default function Authorship({
           {report.spans.length > 0 ? (
             <div className="flex flex-col gap-2">
               <SourceView
-                text={text}
+                text={assessed}
                 findings={[]}
                 selected={undefined}
                 onSelect={() => {}}
@@ -109,6 +128,7 @@ export default function Authorship({
                   <button
                     type="button"
                     onClick={() => read(index)}
+                    disabled={stale}
                     aria-pressed={reading === index}
                     className={`grid w-full grid-cols-[4.5rem_3rem_1fr] gap-3 border-b border-[var(--color-rule)] py-2 text-left text-xs transition-colors duration-150 hover:bg-[var(--color-panel)] ${
                       reading === index ? 'bg-[var(--color-panel)]' : ''

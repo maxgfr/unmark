@@ -21,7 +21,9 @@ test('states a verdict as a sentence, with the disclaimer under it', async ({ pa
   await page.getByLabel('Text to inspect').fill(GENERATED)
   await page.getByText('Was this written by AI?', { exact: true }).click()
 
-  const verdict = page.getByText(/^(Likely AI-written|Uncertain: the signals are mixed)$/)
+  const verdict = page.getByText(
+    /^(Likely AI-written|Uncertain: not enough to call it either way)$/,
+  )
   await expect(verdict).toBeVisible()
   await expect(page.getByText(/^Not proof\./)).toBeVisible()
   await expect(page.getByText(/calibration /).first()).toBeVisible()
@@ -54,6 +56,36 @@ test('exports the report as Markdown', async ({ page }) => {
   for await (const chunk of stream) body += chunk.toString()
   expect(body).toContain('# Authorship assessment')
   expect(body).toContain('Not proof.')
+})
+
+test('reads pasted HTML as a page: no tag in a passage, script bodies ignored', async ({
+  page,
+}) => {
+  const html = `<script>const note = "plongeons dans un monde où tout change"</script>${GENERATED.split(
+    '\n\n',
+  )
+    .map((paragraph) => `<p>${paragraph}</p>`)
+    .join('')}`
+  await page.getByLabel('Text to inspect').fill(html)
+  await page.getByText('Was this written by AI?', { exact: true }).click()
+  await expect(page.getByRole('button', { name: /line 1 .*Que vous soyez/ })).toBeVisible()
+  const passages = await page.getByRole('button', { name: /^line \d+/ }).allTextContents()
+  expect(passages.length).toBeGreaterThan(0)
+  expect(passages.every((text) => !text.includes('<'))).toBe(true)
+})
+
+test('says the assessment is out of date while the text is being typed', async ({ page }) => {
+  const input = page.getByLabel('Text to inspect')
+  await input.fill(GENERATED)
+  await page.getByText('Was this written by AI?', { exact: true }).click()
+  await expect(
+    page.getByText(/^(Likely AI-written|Uncertain: not enough to call it either way)$/),
+  ).toBeVisible()
+
+  await input.press('End')
+  await input.pressSequentially(' Encore une phrase.', { delay: 20 })
+  await expect(page.getByText(/assessment updates when you stop typing/)).toBeVisible()
+  await expect(page.getByText(/assessment updates when you stop typing/)).toBeHidden()
 })
 
 test('abstains on a short text instead of guessing', async ({ page }) => {
