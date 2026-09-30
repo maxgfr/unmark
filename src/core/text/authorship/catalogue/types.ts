@@ -46,7 +46,13 @@ export interface Pattern {
   traps: readonly string[]
   /** Tested against the text just before a match; a hit cancels it. */
   unless?: RegExp
+  /** Only read in documents of these formats. Absent means every format. */
+  formats?: readonly string[]
 }
+
+/** Whether `entry` reads a document of `format`. */
+export const applies = (entry: Pattern, format: string | undefined): boolean =>
+  entry.formats === undefined || (format !== undefined && entry.formats.includes(format))
 
 /** How much text before a match an `unless` guard is shown. */
 export const GUARD_WINDOW = 40
