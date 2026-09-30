@@ -53,6 +53,16 @@ describe('scan', () => {
     expect(paired.hits.filter((h) => h.counted).map((h) => h.entry.tier)).toEqual([3, 1])
   })
 
+  it('counts a phrase once when several entries match it', () => {
+    // One habit, one count: the stronger entry keeps the phrase.
+    const fr = features('Dans un monde en constante évolution, tout change très vite ici.', 'fr')
+    expect(fr.hits.filter((h) => h.counted).map((h) => h.entry.id)).toEqual([
+      'fr.lex.monde_en_evolution',
+    ])
+    const en = features('Here is the report you asked for today. I hope this helps!')
+    expect(en.hits.filter((h) => h.counted && h.entry.category === 'residue')).toHaveLength(1)
+  })
+
   it('reads Markdown furniture only in a plain-text file', () => {
     const text = 'The **key point** is the cost of the whole operation this year.'
     expect(features(text, 'en', 'Markdown').hits.filter((h) => h.counted)).toEqual([])

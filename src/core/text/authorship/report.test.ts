@@ -98,6 +98,19 @@ describe('renderMarkdown', () => {
     expect(row).toContain(String.raw`Plongeons \| dans \`le\` sujet`)
   })
 
+  it('escapes angle brackets so an excerpt cannot become markup in the table', () => {
+    const markdown = renderMarkdown({
+      ...REPORT,
+      spans: [
+        {
+          ...(REPORT.spans[0] as AuthorshipReport['spans'][number]),
+          excerpt: 'a <b>bold</b> claim',
+        },
+      ],
+    })
+    expect(markdown).toContain('a &lt;b&gt;bold&lt;/b&gt; claim')
+  })
+
   it('never says a text was written by a person', () => {
     const human = renderMarkdown({ ...REPORT, verdict: 'likely_human', score: 0.1 })
     expect(human).toContain('Few AI-writing signals found')

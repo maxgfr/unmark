@@ -84,7 +84,12 @@ export function decide(input: VerdictInput): VerdictResult {
   const used = input.signals.filter(inMean)
   const score = weightedScore(input.signals, input.residue, ai)
 
-  const strong = input.signals.filter((s) => s.value !== null && s.value >= STRONG).length
+  // Only signals the calibration weighs can corroborate. One it fitted to
+  // zero — texture, which dashes alone can saturate — is not evidence, and
+  // must not be the second of two agreeing habits.
+  const strong = input.signals.filter(
+    (s) => s.weight > 0 && s.value !== null && s.value >= STRONG,
+  ).length
   let verdict: AuthorshipVerdict
   if (score >= ai) {
     // Guard A: one habit, however strong, is a habit.

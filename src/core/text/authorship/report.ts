@@ -153,7 +153,13 @@ export function verdictSentence(
 }
 
 const cell = (value: string) =>
-  value.replaceAll('\\', '\\\\').replaceAll('|', '\\|').replaceAll('`', '\\`').replaceAll('\n', ' ')
+  value
+    .replaceAll('\\', '\\\\')
+    .replaceAll('|', '\\|')
+    .replaceAll('`', '\\`')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('\n', ' ')
 
 const fixed = (value: number) => value.toFixed(2)
 

@@ -79,6 +79,17 @@ describe('decide', () => {
     expect(result.verdict).toBe('uncertain')
   })
 
+  it('does not let a signal the calibration gives no weight corroborate (guard A)', () => {
+    // Dashes alone can push texture to 1; with weight 0 they are not evidence,
+    // and must not become the second of two agreeing signals.
+    const result = decide({
+      ...base,
+      signals: [signal('lexicon', 1), signal('spans', 1, { weight: 0 })],
+    })
+    expect(result.score).toBeGreaterThanOrEqual(0.7)
+    expect(result.verdict).toBe('uncertain')
+  })
+
   it('never says likely_human with chat residue or a technical mark (guard B)', () => {
     const low = [signal('a', 0), signal('b', 0)]
     expect(decide({ ...base, signals: low, technical: true }).verdict).toBe('uncertain')

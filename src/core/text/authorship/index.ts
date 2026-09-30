@@ -17,6 +17,7 @@
 
 import { VERSION } from '../../version.ts'
 import { protectedMask } from '../regions.ts'
+import { lineIndex } from '../lines.ts'
 import { analyzeStyle } from '../stylometry.ts'
 import { CALIBRATION, type Calibration } from './calibration.ts'
 import { measure, scan, wordReuse, type Hit } from './features.ts'
@@ -48,11 +49,29 @@ export interface DetectOptions {
   allSpans?: boolean
 }
 
-/** Script and style bodies, overwritten with spaces so every offset holds. */
-function blankHtmlNoise(html: string): string {
-  return html.replaceAll(/<(script|style)\b[^>]{0,200}>[\s\S]*?<\/\1\s*>/giu, (block) =>
-    block.replaceAll(/[^\n]/gu, ' '),
-  )
+/** Overwrite with spaces, newlines kept, so every offset and line still holds. */
+const blank = (match: string) => match.replaceAll(/[^\n]/gu, ' ')
+
+/** Elements whose content is not prose: dropped whole, like a fenced block. */
+const NOT_PROSE = /<(script|style|pre|code|template|svg)\b[^>]{0,500}>[\s\S]*?<\/\1\s*>/giu
+/** Tags that start or end a block; they become paragraph breaks. */
+const BLOCK_TAG =
+  /<\/?(?:p|div|h[1-6]|li|ul|ol|br|hr|section|article|header|footer|main|nav|aside|blockquote|table|tr|td|th|dl|dt|dd|figure|figcaption|title|head|body|html)\b[^>]{0,500}>/giu
+const ANY_TAG = /<!--[\s\S]*?-->|<[!/]?[a-z][^>]{0,500}>/giu
+
+/**
+ * An HTML page as prose, at the same length as the page.
+ *
+ * Every tag is overwritten rather than removed, so a passage found here is
+ * found at the same offset in the page, and lines are counted on the page
+ * itself. A block tag turns into a paragraph break: two <p> on one line are
+ * two paragraphs, which is what the tier-2 rule counts within.
+ */
+function htmlAsProse(html: string): string {
+  return html
+    .replaceAll(NOT_PROSE, blank)
+    .replaceAll(BLOCK_TAG, (tag) => `\n\n${' '.repeat(Math.max(0, tag.length - 2))}`)
+    .replaceAll(ANY_TAG, blank)
 }
 
 const severityOf = (hit: Hit): Severity =>
@@ -78,9 +97,10 @@ function contextOf(text: string, seg: Segmentation, hit: Hit): [number, number] 
 
 export function detectAuthorship(input: string, options: DetectOptions = {}): AuthorshipReport {
   const calibration = options.calibration ?? CALIBRATION
-  const text = options.format === 'HTML' ? blankHtmlNoise(input) : input
+  const text = options.format === 'HTML' ? htmlAsProse(input) : input
 
-  const seg = segment(text, protectedMask(text))
+  // Lines and columns always address the input as given, not its prose view.
+  const seg = segment(text, protectedMask(text), lineIndex(input))
   const routing = route(text, seg, options.lang ?? 'auto')
   const hits = scan(text, seg, options.format)
   const marks = technicalMarks(input)

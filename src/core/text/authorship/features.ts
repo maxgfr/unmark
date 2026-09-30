@@ -99,6 +99,9 @@ export function scan(text: string, seg: Segmentation, format?: string): Hit[] {
     }
   }
   hits.sort((a, b) => a.start - b.start)
+  const deduped = oneHitPerPhrase(hits, text.length)
+  hits.length = 0
+  hits.push(...deduped)
 
   // Tier 2 needs company in its paragraph; tier 3 needs company in its sentence.
   const tierTwo = new Map<number, number>()
@@ -155,6 +158,39 @@ export function wordReuse(text: string, seg: Segmentation): { share: number; tok
     }
   }
   return { share: position === 0 ? 0 : repeated / position, tokens: position }
+}
+
+/**
+ * One count per phrase, kept by the strongest entry that matched it.
+ *
+ * Catalogues overlap by design — "dans un monde en constante évolution" is a
+ * tier-1 phrase containing a tier-2 one, "let's delve into" is signposting
+ * containing "delve", and two residue patterns both read "I hope this helps".
+ * Counted each time, one habit voted twice and a report said 8× for four
+ * occurrences. A hit is dropped when it sits inside a hit at least as strong.
+ * Two phrases that merely share a word — "plongeons dans" and "dans un monde
+ * où" — are two habits and both count.
+ */
+function oneHitPerPhrase(hits: readonly Hit[], length: number): Hit[] {
+  const strength = (hit: Hit) =>
+    (hit.entry.category === 'residue' ? 0 : hit.entry.tier) * 10_000 - (hit.end - hit.start)
+  const ranked = [...hits].sort((a, b) => strength(a) - strength(b) || a.start - b.start)
+  const owner = new Int32Array(length).fill(-1)
+  const kept: Hit[] = []
+
+  for (const hit of ranked) {
+    let drop = false
+    for (let at = hit.start; at < hit.end && !drop; at += 1) {
+      const index = owner[at] as number
+      if (index === -1) continue
+      const other = kept[index] as Hit
+      drop = other.start <= hit.start && other.end >= hit.end
+    }
+    if (drop) continue
+    const index = kept.push(hit) - 1
+    for (let at = hit.start; at < hit.end; at += 1) if (owner[at] === -1) owner[at] = index
+  }
+  return kept.sort((a, b) => a.start - b.start)
 }
 
 /** Typical MATTR over 50-word windows in edited prose, by language. */

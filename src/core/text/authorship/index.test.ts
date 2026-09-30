@@ -87,6 +87,28 @@ describe('detectAuthorship', () => {
     expect(report.findings.map((f) => f.patternId)).not.toContain('fr.lex.plongeons')
   })
 
+  it('locates passages of an HTML page at their real line and column, without tags', () => {
+    const page = [
+      '<!doctype html>',
+      '<html><head><title>Rapport</title></head><body>',
+      '<p>Plongeons dans le sujet sans tarder dès ce matin avec toute l’équipe.</p>',
+      '<p>Le conseil a voté le budget mardi soir après deux heures de débat.</p>',
+      '</body></html>',
+    ].join('\n')
+    const report = detectAuthorship(page, { format: 'HTML', lang: 'fr' })
+    const finding = report.findings.find((f) => f.patternId === 'fr.lex.plongeons')
+    expect(finding).toMatchObject({ line: 3, col: 4 })
+    expect(report.spans.every((span) => !span.excerpt.includes('<'))).toBe(true)
+  })
+
+  it('treats each HTML block as its own paragraph', () => {
+    // Two tier-2 phrases count only when they share a paragraph. On one line of
+    // HTML, two <p> elements are still two paragraphs.
+    const page = `<p>Le projet avance, notamment grâce à la région, depuis mars.</p><p>En outre, la ville participe au financement du chantier.</p>`
+    const report = detectAuthorship(page, { format: 'HTML', lang: 'fr' })
+    expect(report.findings.filter((f) => f.tier === 2)).toEqual([])
+  })
+
   it('reports technical marks with their line', () => {
     const report = detectAuthorship(`${HUMAN_FR}\n\nVoir citeturn0search1 pour la source.`)
     expect(report.technicalMarks[0]).toMatchObject({ kind: 'generator_tag' })

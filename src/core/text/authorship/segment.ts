@@ -229,8 +229,11 @@ function sealedShare(mask: Uint8Array, start: number, end: number): number {
  * table is data. Sentences keep their place in the document even when a
  * mostly-quoted one is dropped, so every offset still addresses the input.
  */
-export function segment(text: string, mask = protectedMask(text)): Segmentation {
-  const index = lineIndex(text)
+export function segment(
+  text: string,
+  mask = protectedMask(text),
+  index: LineIndex = lineIndex(text),
+): Segmentation {
   const sentences: Sentence[] = []
   let words = 0
   const blocks: { start: number; end: number }[] = []
