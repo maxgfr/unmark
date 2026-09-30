@@ -129,6 +129,15 @@ citation glyphs, `citeturn0search1` tokens, and `contentReference[oaicite:…]`.
 Only parameters whose _value_ names an AI product are removed — a plain
 `utm_source=newsletter` is the sender's own analytics and is left alone.
 
+## What `detect` reads
+
+Prose only: **Text, Markdown and HTML** (script and style blocks are skipped,
+tags are not read as words). Code blocks, blockquotes, quotations and URLs are
+left out of the assessment — quoting a chatbot is not writing like one.
+
+A binary file — PDF, DOCX, an image — is refused with exit 2. Export the text
+first (`.txt` or `.md`) and run `detect` on that.
+
 ## Anything else
 
 A file whose format is not recognised is reported as `unknown` and handed back

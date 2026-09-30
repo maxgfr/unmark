@@ -1,6 +1,6 @@
 ---
 name: unmark
-description: Inspect, decode, or remove hidden marks from text and files, including invisible Unicode, EXIF/C2PA/XMP metadata, PDF/DOCX history, and AI-style signals. Use image editing for visible pixel watermarks.
+description: Inspect, decode, or remove hidden marks from text and files, including invisible Unicode, EXIF/C2PA/XMP metadata, PDF/DOCX history, and AI-style signals. Assess whether French or English prose reads as AI-written, with every suspect passage located and a way to fix it. Use image editing for visible pixel watermarks.
 disable-model-invocation: true
 metadata:
   opencode/autoinvoke: 'false'
@@ -25,7 +25,7 @@ Four questions decide everything. Answer them before running anything.
 Text goes to `inspect` / `decode` / `clean`. A file goes to the same commands —
 the format is sniffed from the bytes, not the extension.
 
-**2. Is the user asking about a _mark_, or about _style_?**
+**2. Is the user asking about a _mark_, about _style_, or about _authorship_?**
 They are different problems and this tool treats them differently.
 
 - A mark is a fact about the file: a zero-width payload, a C2PA manifest, an
@@ -33,6 +33,8 @@ They are different problems and this tool treats them differently.
 - Style is how the prose reads: em dashes, filler, rule-of-three cadence. None
   of it is a mark, none of it is removed unless asked, and saying otherwise
   would be the central lie of this category of tool.
+- Authorship is "was this written by AI?" — an _assessment_ of the habits, with
+  passages located. Go to **Was this written by AI?** below.
 
 **3. Report, or remove?**
 **Always `inspect` first.** Show the user what is there before you change their
@@ -125,6 +127,37 @@ From a terminal without an agent, `unmark rewrite` runs the same loop against a
 local model on `127.0.0.1` (nothing leaves the machine), or `--model <id>` for a
 remote provider, or `--print-prompt` to get the prompt and spend nothing.
 
+## Was this written by AI?
+
+`detect` gives an assessment, never proof, in French and English. You are the
+**judge** of what it found: the engine counts habits; you read the passages
+and decide which ones hold up. Load `references/authorship.md` before writing
+the report — it holds the verdict scale, the judge's rules and the template.
+
+1. Run the engine and keep its JSON:
+
+   ```bash
+   node scripts/unmark.mjs detect draft.md --json > detect.json
+   ```
+
+   Exit 3, `insufficient_evidence`: say so and stop. Under 150 words there is
+   no verdict, and you do not supply one.
+
+2. Judge every passage in the `high` and `medium` bands: **confirm** or
+   **reject** it, one line each, citing its line number. Reject what the
+   subject, a formal register or a second-language writer explains.
+3. Add your own `JUDGE_OBSERVATION`s, each tied to a line: the horoscope test
+   (a sentence that fits any subject), genericity, fabricated precision
+   (figures or sources nobody could check), a register that never varies.
+4. Write the report from the template in `references/authorship.md`, with the
+   engine's `disclaimer` copied word for word under the verdict.
+
+You may move the engine's verdict **one level**, and only by citing a line.
+The top of the scale is `likely_ai`; `confirmed` belongs to technical marks.
+
+**To fix what reads as AI**, send the user through the rewrite loop above
+(`brief` → rewrite → `verify`), then run `detect` again on the result.
+
 ## What it will not do
 
 **It does not strip invisible characters that are load-bearing.** A ZWJ between
@@ -157,3 +190,5 @@ Load these when you need them, not before.
   is deliberately kept, and what is refused.
 - `references/recipes.md` — worked sequences for the requests that actually
   arrive, with the output shape to expect.
+- `references/authorship.md` — the authorship verdicts, bands and evidence
+  labels, the judge's rules, and the report template.

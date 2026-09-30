@@ -33,17 +33,37 @@ For a DOCX specifically, name what came off: tracked-change authors, `people.xml
 revision save ids, the rendered thumbnail of page one, and the EXIF inside every
 embedded image. Users are usually surprised by the last two.
 
-## "Make this draft not read as AI"
+## "Was this written by AI?"
 
 ```bash
-node scripts/unmark.mjs inspect draft.md          # what the style report says
-node scripts/unmark.mjs clean   draft.md --plain  # the deterministic half
+node scripts/unmark.mjs detect essay.md --json > detect.json
+node scripts/unmark.mjs detect essay.md --format md      # the engine's report as Markdown
 ```
 
-Then read the report. If it lists `rule_of_three`, `marker_vocabulary`,
-`recap_loop`, `paragraph_template` or anything else in the silhouette layer,
-`--plain` did not touch those and cannot. Go to the rewrite loop below and say
-so plainly rather than letting `--plain` imply a finished job.
+Follow **Was this written by AI?** in SKILL.md: judge each `high` and `medium`
+passage, add observations with line numbers, and write the report from the
+template in `authorship.md`. Exit 3 means under 150 words or an unsupported
+language: say that, and give no verdict.
+
+If the user means to act on the answer about someone else — a student, an
+applicant, a colleague — say before anything else that this is not proof and
+must not decide a sanction.
+
+## "Fix what reads as AI"
+
+```bash
+node scripts/unmark.mjs detect  draft.md                 # where, and why
+node scripts/unmark.mjs clean   draft.md --plain         # the deterministic half
+node scripts/unmark.mjs brief   draft.md > /tmp/brief.json
+#   ...rewrite, aiming at the passages detect listed...
+node scripts/unmark.mjs verify  rewritten.md --against draft.md
+node scripts/unmark.mjs detect  rewritten.md             # did it move
+```
+
+`--plain` removes the filler and chat residue that has one right answer. Stock
+phrases, school connectors, "not just X but Y", triads and recap endings need a
+writer: that is the rewrite loop below. A lower `detect` score afterwards means
+fewer of these habits, not that a detector — or a watermark — has been beaten.
 
 ## "Rewrite it properly" — the loop
 

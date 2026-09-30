@@ -30,23 +30,46 @@ A `confirmed` emoji joiner is `kept`. A merely `probable` XMP packet is
 `removed`. The two columns are independent and you need both to say what
 happened.
 
-## Never `confirmed`
+## `confirmed` is for technical marks
 
-Nothing in the `stylometry` kind can be `confirmed`, at any threshold, ever. Style
-is not evidence. A tool that says "confirmed: written by AI" on the strength of
-an em-dash count is lying, and people have been failed by exactly that guess.
+A carrier, a decoded payload, a citation token, a C2PA manifest: those can be
+`confirmed`, because they are facts about the file. Style never is. Nothing in
+the `stylometry` or `ai_style` kinds reaches `confirmed`, at any threshold. A
+tool that says "confirmed: written by AI" on the strength of an em-dash count is
+lying, and people have been failed by exactly that guess.
 
 The strongest thing the style report may say is that several independent tells
-co-occur, which is a pattern and not proof. When you relay it, keep that shape.
+co-occur, which is a pattern and not proof. The authorship assessment goes one
+step further, to `likely_ai`, and only when independent signals agree. When you
+relay either, keep that shape.
+
+## Authorship verdicts
+
+A separate scale from the one above: it answers "does this read as AI-written",
+not "how sure is this finding". `ai_style` findings are always `reported`,
+never `removed`.
+
+| Verdict                 | Means                                                    |
+| ----------------------- | -------------------------------------------------------- |
+| `likely_ai`             | Several independent habits of generated text agree       |
+| `uncertain`             | Mixed signals, or one strong habit on its own            |
+| `likely_human`          | Few AI-writing signals found — not "written by a person" |
+| `insufficient_evidence` | Under 150 words of prose, or not French or English       |
+
+Every report carries its disclaimer. Copy it; see `authorship.md`.
 
 ## Exit codes
 
-| Command   | 0                       | 1                                       | 2              |
-| --------- | ----------------------- | --------------------------------------- | -------------- |
-| `inspect` | nothing `confirmed`     | something `confirmed` is present        | bad usage      |
-| `decode`  | a payload was recovered | nothing hidden found                    | bad usage      |
-| `audit`   | the tree is clean       | at least one file carries a mark        | bad usage      |
-| `verify`  | the rewrite passed      | it was rejected; the reasons are listed | no `--against` |
-| `rewrite` | accepted, or a prompt   | rejected, or no model answered          | bad usage      |
+| Command   | 0                           | 1                                       | 2                       |
+| --------- | --------------------------- | --------------------------------------- | ----------------------- |
+| `detect`  | `likely_human`, `uncertain` | `likely_ai`                             | bad usage, binary input |
+| `inspect` | nothing `confirmed`         | something `confirmed` is present        | bad usage               |
+| `decode`  | a payload was recovered     | nothing hidden found                    | bad usage               |
+| `audit`   | the tree is clean           | at least one file carries a mark        | bad usage               |
+| `verify`  | the rewrite passed          | it was rejected; the reasons are listed | no `--against`          |
+| `rewrite` | accepted, or a prompt       | rejected, or no model answered          | bad usage               |
+
+`detect` also exits **3** on `insufficient_evidence`: an abstention that exited
+0 would read as "passed" in a script.
 
 They compose, so `unmark inspect x && ship` does what it looks like.
