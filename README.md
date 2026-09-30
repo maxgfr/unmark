@@ -75,6 +75,58 @@ division, not a signal. Co-occurrence is counted over distinct _signals_ rather
 than metrics: three metrics reading the same em dashes are one habit, and letting
 each vote would manufacture a pattern out of a single character.
 
+### Authorship assessment
+
+`unmark detect`, and the **Authorship** section of the page, answer "does this
+read as AI-written?" for **French and English**, and point at every passage
+behind the answer: line, excerpt, pattern, reason, and what a writer would do
+instead. It is an assessment of habits, **never proof**, and every report says
+so on the same screen as its verdict.
+
+| Verdict                 | Says                             | When                                                              |
+| ----------------------- | -------------------------------- | ----------------------------------------------------------------- |
+| `likely_ai`             | Likely AI-written                | several independent habits agree, past the fitted threshold       |
+| `uncertain`             | Uncertain: the signals are mixed | anything in between, or one strong habit alone                    |
+| `likely_human`          | Few AI-writing signals found     | never "written by a person" — absence of tells is not a signature |
+| `insufficient_evidence` | Not enough text to assess        | under 150 words of prose, or mostly another language              |
+
+What it reads, one habit per signal so nothing votes twice: tiered French and
+English catalogues (a tier-2 phrase like _notamment_ counts only when a second
+one shares its paragraph, because formal French is full of them), sentence
+structure (_que vous soyez X ou Y_, _it's not just X, it's Y_), **word
+variation** — generated prose cycles synonyms where people repeat their own
+word — document shape, chat residue (_J'espère que cela vous aide_,
+`[Your Name]`), and the technical marks above. Code, quotations and
+blockquotes are left out: quoting a chatbot is not writing like one.
+
+**Measured, not promised.** Weights and thresholds were fitted on a train split
+and measured on a held-out test split of 458 real documents: a committed
+corpus of dated human text (service-public, HAL, Wikipedia, Wikinews,
+Wikisource, Federal Register, Gutenberg — all before November 2022) with a
+generated twin of each from four Claude models, plus the
+[binoculars-eu](https://github.com/linagora/binoculars-eu) French corpus with
+GPT-4o, Luciole and Claude outputs.
+
+| Test split                                    | Result                                                                            |
+| --------------------------------------------- | --------------------------------------------------------------------------------- |
+| AUROC, human vs generated                     | **0.75** (95 % CI 0.70–0.80)                                                      |
+| Generated texts caught at 1 % false positives | 37 % (95 % CI 26–45 %)                                                            |
+| Human texts called `likely_ai`                | **0 of 146**, in every stratum, French administrative and academic prose included |
+| Text run through a humanizer tool             | AUROC 0.46 — **not detected**                                                     |
+
+Full numbers, per stratum and with the fitted weights:
+[`docs/authorship-eval-2026-09-30.md`](docs/authorship-eval-2026-09-30.md).
+Reproduce with `node scripts/fetch-authorship-corpus.mjs` then
+`node --experimental-strip-types scripts/eval-authorship.mjs`.
+
+Read those numbers for what they are. A text generated in a neutral register
+often carries no tell at all, and most short generated texts get
+`insufficient_evidence`; a humanizer defeats it outright. A model-based signal
+is the next step, and the verdict already takes one in (`external`). Topic,
+formal register, a second-language writer's phrasing and clean spelling are
+not evidence, and the report lists them. It is a reading aid for your own
+draft or for an editor deciding where to look — not grounds for a sanction.
+
 **Making text read less like a machine wrote it** is a separate, opt-in pass,
 following [Wikipedia's _Signs of AI writing_](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing).
 That catalogue splits in two, and the split is the whole design:
@@ -238,6 +290,7 @@ unmark inspect suspicious.txt     # report every mark, change nothing
 unmark decode  suspicious.txt     # recover what the invisible characters spell
 unmark clean   suspicious.txt --in-place
 unmark audit   ./docs             # walk a tree, list what is marked
+unmark detect  essay.md           # does it read as AI-written, and where — not proof
 
 # The opt-in style passes
 unmark clean draft.md --typography   # em dashes, curly quotes, ellipses → ASCII
@@ -247,7 +300,9 @@ unmark clean draft.md --plain        # both at once
 
 Zero dependencies — one file, no install step. Exit codes compose: `inspect`
 returns 1 when something `confirmed` is present, `audit` returns 1 when a tree is
-dirty. The CLI and the page run the **same core**, built twice from one source, so
+dirty, `detect` returns 1 on `likely_ai`, 3 when it abstains and 2 on a bad
+flag or a binary file (`--format text|md|json`, `--lang fr|en|auto`,
+`--min-score 0..1`). The CLI and the page run the **same core**, built twice from one source, so
 they cannot disagree about the same character.
 
 ## Crossing the deterministic ceiling
