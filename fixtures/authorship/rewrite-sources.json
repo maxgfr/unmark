@@ -1,0 +1,30 @@
+{
+  "documents": [
+    {
+      "id": "humanized-fr-rewrite-academic-ecotoxicite-acv",
+      "path": "humanized/fr/humanized-fr-rewrite-academic-ecotoxicite-acv.md",
+      "sha256": "024d6d3fa06205362080c55df12205658b2868fbe18d794b4594c91174a3061e",
+      "words": 228,
+      "label": "humanized",
+      "lang": "fr",
+      "genre": "academic",
+      "source": "derived",
+      "license": "CC0-1.0",
+      "derivedFrom": "ai-fr-academic-ecotoxicite-acv",
+      "transform": "unmark rewrite --print-prompt, answered by claude-sonnet-5-5 in one attempt; unmark verify --against the original: passed"
+    },
+    {
+      "id": "humanized-en-rewrite-academic-optical-aptasensors",
+      "path": "humanized/en/humanized-en-rewrite-academic-optical-aptasensors.md",
+      "sha256": "452d197e4fa61fa541c2541fed49969d160bf589a926f098db75b13e9b683465",
+      "words": 188,
+      "label": "humanized",
+      "lang": "en",
+      "genre": "academic",
+      "source": "derived",
+      "license": "CC0-1.0",
+      "derivedFrom": "ai-en-academic-optical-aptasensors",
+      "transform": "unmark rewrite --print-prompt, answered by claude-sonnet-5-5 in one attempt; unmark verify --against the original: passed"
+    }
+  ]
+}

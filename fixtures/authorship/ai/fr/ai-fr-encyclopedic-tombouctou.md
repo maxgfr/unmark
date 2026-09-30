@@ -1,0 +1,5 @@
+Tombouctou est une ville du Mali située à la lisière sud du Sahara, à une quinzaine de kilomètres au nord du fleuve Niger. Fondée vers le XIe siècle par des Touaregs comme campement saisonnier, elle s'est développée grâce à sa position au carrefour des routes caravanières transsahariennes et du commerce fluvial, échangeant le sel du nord contre l'or, les esclaves et les céréales du sud.
+
+La ville connaît son apogée aux XVe et XVIe siècles sous l'Empire songhaï. Elle devient alors un centre intellectuel et religieux majeur du monde musulman, avec ses mosquées de Djingareyber, de Sankoré et de Sidi Yahia, et ses nombreuses écoles coraniques où enseignent des savants renommés. Des dizaines de milliers de manuscrits, portant sur la théologie, le droit, l'astronomie ou la médecine, y sont copiés et conservés.
+
+Le déclin s'amorce après la conquête marocaine de 1591 et le déplacement des routes commerciales vers les côtes atlantiques. Tombouctou passe sous domination française en 1894. Inscrite au patrimoine mondial de l'UNESCO en 1988, elle a subi en 2012 l'occupation de groupes armés qui ont détruit plusieurs mausolées, depuis reconstruits.

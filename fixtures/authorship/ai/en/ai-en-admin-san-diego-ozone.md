@@ -1,0 +1,7 @@
+The U.S. Environmental Protection Agency (EPA) is reclassifying the San Diego County ozone nonattainment area from "Moderate" to "Severe" for the national ambient air quality standard for ground-level ozone. This action applies to the 2008 ozone standard of 0.075 parts per million and follows a determination that the area did not attain the standard by the applicable Moderate attainment date.
+
+Under the Clean Air Act, areas that fail to meet a national air quality standard by their deadline must be reclassified to a higher classification. Reclassification to Severe means the area is subject to more stringent planning and control requirements and receives a later deadline by which it must attain the standard.
+
+As a result of this action, the State of California must submit revisions to its State Implementation Plan (SIP) for San Diego County. These revisions must include a demonstration of how the area will reach attainment, updated emissions inventories, and additional measures to reduce pollutants that form ozone, including nitrogen oxides and volatile organic compounds. The lower thresholds for major stationary sources will also apply, meaning more facilities will be subject to permitting and emission control requirements.
+
+This action is effective 30 days after publication in the Federal Register. Members of the public may review the docket, including supporting technical materials, at www.regulations.gov. For further information, contact the EPA Region 9 Air Planning Office in San Francisco, California.

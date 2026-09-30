@@ -1,0 +1,5 @@
+C'est le troisième week-end de mobilisation pour les « gilets jaunes » en France. Aux abords des Champs-Élysées à Paris, au moins dix personnes ont été blessées dont trois parmi les forces de l'ordre, a indiqué la préfecture de police de Paris avant 13 heures.
+
+Une source policière a indiqué à franceinfo en début de matinée qu'au moins 81 personnes ont été interpellées aux abords des Champs-Élysées. Le nombre des agressions était en particulier élevé autour de l'Arc de Triomphe. La police a utilisé des gaz lacrymogènes et un canon d'arrosage pour chasser les manifestants. Un restaurant a été incendié. Plus tôt dans la journée, le ministre de l'intérieur français, Christophe Castaner avait indiqué sur Twitter l'arrestation de 39 personnes. Il avait également dénombré « 200 manifestants pacifiques sur les Champs-Élysées » et « 1500 perturbateurs à l’extérieur du périmètre venus pour en découdre ».
+
+En plus, plusieurs dizaines de manifestants se sont réunis de nouveau aujourd'hui dans d'autres villes en France, par exemple aux ronds-points de Meaux et Fontainebleau et à Nemours. Une opération "péage gratuit" est menée au péage de Fleury-en-Bière.

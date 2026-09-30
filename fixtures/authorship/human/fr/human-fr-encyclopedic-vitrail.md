@@ -1,0 +1,5 @@
+Le vitrail est une composition de verre formée de pièces de verre. Celles-ci peuvent être blanches ou colorées et peuvent recevoir un décor. Le mot vitrail désigne une technique tandis que la fermeture d'une baie fixe avec du verre s'appelle une verrière.
+
+On retrouve des traces de vitrail primitif durant l'Antiquité tardive sur les ouvertures d'édifices religieux chrétiens. Le vitrail actuel va être inventé au début du Moyen Âge, avec des pièces de verre assemblées par des baguettes de plomb, spécifiquement profilées. Ce procédé de sertissage par « mise en plomb », bien qu'aujourd'hui toujours dominant, n'est pas le seul en usage : d'autres techniques, telles que celles du ruban de cuivre (aussi appelée méthode Tiffany, de son concepteur Louis Comfort Tiffany), de la dalle de verre enchâssée dans le béton ou le silicone, de collages (avec des résines ou des polymères), de thermoformage, de fusing et du vitrail à verre libre, peuvent être utilisées ou combinées.
+
+Un vitrail est appelé vitrerie lorsque son dessin est géométrique et répétitif (par exemple des losanges ou des bornes). La vitrerie est généralement claire et sans peinture.

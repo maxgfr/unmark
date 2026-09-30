@@ -1,0 +1,7 @@
+Erinaceus europaeus, communément appelé hérisson d'Europe ou hérisson commun, est un petit mammifère insectivore de la famille des Érinacéidés. Il est répandu dans la majeure partie de l'Europe occidentale et septentrionale, des îles Britanniques à la Scandinavie méridionale et jusqu'à la péninsule Ibérique et l'Italie. Il a également été introduit en Nouvelle-Zélande au XIXe siècle.
+
+L'adulte mesure généralement entre 20 et 30 centimètres de long et pèse de 600 grammes à plus d'un kilogramme selon la saison. Son dos est couvert de 5 000 à 7 000 piquants, qui sont des poils modifiés. En cas de danger, il se roule en boule grâce à une puissante musculature dorsale, exposant uniquement ses piquants.
+
+Principalement nocturne et solitaire, le hérisson fréquente les lisières de forêts, les haies, les prairies ainsi que les parcs et jardins. Son régime alimentaire se compose surtout d'insectes, de vers de terre, de limaces et d'escargots, auxquels s'ajoutent occasionnellement des œufs, des fruits ou de petits vertébrés.
+
+Il hiberne généralement de novembre à mars. La reproduction a lieu au printemps et en été ; la femelle met bas une portée de quatre à cinq petits en moyenne. L'espèce est protégée dans plusieurs pays européens, notamment en France, et ses populations sont en déclin, en raison de la circulation routière, de l'usage de pesticides et de la fragmentation de ses habitats.
