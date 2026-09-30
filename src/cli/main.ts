@@ -814,7 +814,15 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   // detect's three values, checked the same way: a wrong one is named and
-  // nothing is read, rather than quietly falling back to a default.
+  // nothing is read, rather than quietly falling back to a default. A flag
+  // with no value at all is the same mistake: `--format` alone used to print
+  // text, which is the one format the caller had not asked for.
+  for (const name of ['--format', '--lang', '--min-score']) {
+    if (flags.has(name) && value(name) === undefined) {
+      process.stderr.write(`unmark: ${name} needs a value\n`)
+      return 2
+    }
+  }
   const format = value('--format')
   if (format !== undefined && !['text', 'md', 'json'].includes(format)) {
     process.stderr.write(`unmark: --format takes text, md or json, not "${format}"\n`)

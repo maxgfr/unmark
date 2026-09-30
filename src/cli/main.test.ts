@@ -485,10 +485,13 @@ describe('detect', () => {
     expect(await main(['detect', await file('draft.md', LOADED)])).toBe(1)
   })
 
-  it('exits 0 when it finds few signals, and never says a person wrote it', async () => {
-    expect(await main(['detect', await file('news.md', HUMAN_FR)])).toBe(0)
-    expect(stdout()).toContain('Few AI-writing signals found')
+  it('exits 0 on real human prose, and never says a person wrote it', async () => {
+    // Which of the two lower verdicts it reaches depends on the calibration;
+    // that it is one of them, with the disclaimer, does not.
+    expect(await main(['detect', await file('fiche.md', HUMAN_FR)])).toBe(0)
+    expect(stdout()).toMatch(/Few AI-writing signals found|Uncertain: the signals are mixed/)
     expect(stdout()).toContain('Not proof')
+    expect(stdout()).not.toMatch(/written by a (?:person|human)/i)
   })
 
   it('exits 3 on a text too short to assess', async () => {
@@ -532,6 +535,14 @@ describe('detect', () => {
     expect(await main(['detect', path, '--min-score', '2'])).toBe(2)
     expect(await main(['detect', path, '--min-score', 'abc'])).toBe(2)
     expect(stderr()).toContain('--lang')
+  })
+
+  it('refuses a flag given without its value, rather than using the default', async () => {
+    const path = await file('draft.md', LOADED)
+    expect(await main(['detect', path, '--format'])).toBe(2)
+    expect(await main(['detect', path, '--lang', '--json'])).toBe(2)
+    expect(await main(['detect', path, '--min-score'])).toBe(2)
+    expect(stderr()).toContain('needs a value')
   })
 
   it('refuses a binary file with exit 2 and says what to do', async () => {
