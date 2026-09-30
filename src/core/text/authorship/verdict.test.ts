@@ -8,7 +8,7 @@ const CAL: Calibration = {
   calibrated: true,
   date: '2026-01-01',
   corpus: 'test',
-  weights: { spans: 1, lexicon: 1, discourse: 1, stylometry: 1, forensic: 1 },
+  weights: { spans: 1, lexicon: 1, discourse: 1, variation: 1, stylometry: 1, forensic: 1 },
   thresholds: { human: 0.3, ai: 0.7 },
 }
 

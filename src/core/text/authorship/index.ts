@@ -19,7 +19,7 @@ import { VERSION } from '../../version.ts'
 import { protectedMask } from '../regions.ts'
 import { analyzeStyle } from '../stylometry.ts'
 import { CALIBRATION, type Calibration } from './calibration.ts'
-import { measure, scan, type Hit } from './features.ts'
+import { measure, scan, wordReuse, type Hit } from './features.ts'
 import { technicalMarks } from './forensics.ts'
 import {
   DISCLAIMER,
@@ -89,7 +89,10 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
   const lang = routing.document === 'und' ? 'en' : routing.document
 
   const signals = [
-    ...builtInSignals({ words: seg.words, lang, spans: scored, hits, marks, style }, calibration),
+    ...builtInSignals(
+      { words: seg.words, lang, spans: scored, hits, marks, style, reuse: wordReuse(text, seg) },
+      calibration,
+    ),
     ...(options.external ?? []).map(fromExternal),
   ]
 

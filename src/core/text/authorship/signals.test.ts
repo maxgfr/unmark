@@ -66,6 +66,7 @@ const input = (over: Partial<SignalInput> = {}): SignalInput => ({
   hits: [],
   marks: [],
   style: style([]),
+  reuse: { share: 0.15, tokens: 120 },
   ...over,
 })
 
@@ -73,14 +74,33 @@ const value = (signals: ReturnType<typeof builtInSignals>, id: string) =>
   signals.find((s) => s.id === id)?.value
 
 describe('builtInSignals', () => {
-  it('returns the five built-in signals', () => {
+  it('returns the six built-in signals', () => {
     expect(builtInSignals(input()).map((s) => s.id)).toEqual([
       'spans',
       'lexicon',
       'discourse',
+      'variation',
       'stylometry',
       'forensic',
     ])
+  })
+
+  it('reads low word reuse as the variation habit, and abstains on too few words', () => {
+    // Generated prose cycles synonyms rather than repeating its own words.
+    expect(value(builtInSignals(input({ reuse: { share: 0.06, tokens: 120 } })), 'variation')).toBe(
+      1,
+    )
+    expect(value(builtInSignals(input({ reuse: { share: 0.22, tokens: 120 } })), 'variation')).toBe(
+      0,
+    )
+    expect(
+      value(builtInSignals(input({ reuse: { share: 0.06, tokens: 30 } })), 'variation'),
+    ).toBeNull()
+  })
+
+  it('does not read repetition as texture: real text repeats more than generated text', () => {
+    const repeated = builtInSignals(input({ spans: [span({ repetition: 1 })] }))
+    expect(value(repeated, 'spans')).toBe(0)
   })
 
   it('reads vocabulary only in the lexicon signal', () => {
@@ -93,7 +113,7 @@ describe('builtInSignals', () => {
   })
 
   it('reads sentence texture only in the spans signal', () => {
-    const textured = builtInSignals(input({ spans: [span({ repetition: 1, typography: 1 })] }))
+    const textured = builtInSignals(input({ spans: [span({ diversity: 1, typography: 1 })] }))
     expect(value(textured, 'spans')).toBeGreaterThan(0.5)
     expect(value(textured, 'lexicon')).toBe(0)
   })

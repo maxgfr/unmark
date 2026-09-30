@@ -31,12 +31,21 @@ export interface SpanScore {
   features: SentenceFeatures
 }
 
+/**
+ * What each feature adds to a sentence's score.
+ *
+ * Repetition started at 0.20, following ADAFAI, which reads a sentence that
+ * echoes its neighbours as generated. On real French and English the
+ * direction is the reverse — people repeat their words, models vary them — so
+ * it flagged human sentences for being human. It is still measured and shown,
+ * and weighs nothing. Diversity pointed nowhere and keeps a token weight.
+ */
 export const SPAN_WEIGHTS = {
-  phrase: 0.35,
-  structure: 0.25,
-  repetition: 0.2,
-  diversity: 0.1,
-  typography: 0.1,
+  phrase: 0.45,
+  structure: 0.35,
+  repetition: 0,
+  diversity: 0.05,
+  typography: 0.15,
 } as const
 
 /** Scores a sentence cannot go below, whatever else it does. */

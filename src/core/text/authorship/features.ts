@@ -33,7 +33,11 @@ export interface SentenceFeatures {
   phrase: number
   /** Structural and discourse habits, 0–1. */
   structure: number
-  /** Share of the sentence's word trigrams repeated in the 100 words around it. */
+  /**
+   * Share of the sentence's word trigrams repeated in the 100 words around it.
+   * Measured and reported; it carries no weight, because real text repeats
+   * more than generated text does — see `wordReuse`.
+   */
   repetition: number
   /** How far vocabulary diversity falls below the language's baseline, 0–1. */
   diversity: number
@@ -121,6 +125,36 @@ export function scan(text: string, seg: Segmentation, format?: string): Hit[] {
   }
 
   return hits
+}
+
+/** How far back a content word counts as "said already". */
+const REUSE_WINDOW = 100
+/** Content words: five letters or more, so articles and pronouns stay out. */
+const CONTENT = /^\p{L}{5,}$/u
+
+/**
+ * The share of content words that repeat one used in the last hundred.
+ *
+ * People name a thing and keep naming it: "the council … the council". Models
+ * reach for a synonym each time, the habit Wikipedia's Signs of AI writing
+ * calls elegant variation. Measured on the committed corpus with lengths
+ * matched, generated text reused its words about half as often. A window
+ * rather than the whole document keeps the measure from growing with length.
+ */
+export function wordReuse(text: string, seg: Segmentation): { share: number; tokens: number } {
+  const last = new Map<string, number>()
+  let position = 0
+  let repeated = 0
+  for (const sentence of seg.sentences) {
+    for (const token of tokens(text, sentence.start, sentence.end)) {
+      if (seg.mask[token.start] === 1 || !CONTENT.test(token.norm)) continue
+      const seen = last.get(token.norm)
+      if (seen !== undefined && position - seen <= REUSE_WINDOW) repeated += 1
+      last.set(token.norm, position)
+      position += 1
+    }
+  }
+  return { share: position === 0 ? 0 : repeated / position, tokens: position }
 }
 
 /** Typical MATTR over 50-word windows in edited prose, by language. */

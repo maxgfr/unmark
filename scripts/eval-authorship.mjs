@@ -40,9 +40,9 @@ import { CORPUS_DIR, PINNED } from './fetch-authorship-corpus.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const FIXTURES = join(ROOT, 'fixtures', 'authorship')
-const SIGNALS = ['spans', 'lexicon', 'discourse', 'stylometry', 'forensic']
+const SIGNALS = ['spans', 'lexicon', 'discourse', 'variation', 'stylometry', 'forensic']
 /** Fitted on the four signals that vary; forensic keeps its hand-set share. */
-const FITTED = ['spans', 'lexicon', 'discourse', 'stylometry']
+const FITTED = ['spans', 'lexicon', 'discourse', 'variation', 'stylometry']
 const SEED = 42
 
 const args = process.argv.slice(2)
@@ -217,13 +217,20 @@ function fitCalibration(train, corpusId) {
   const human = pool.filter((s) => s.label === 'human').map((s) => scoreOf(s, draft))
   const ai = pool.filter((s) => s.label === 'ai').map((s) => scoreOf(s, draft))
   const date = new Date().toISOString().slice(0, 10)
+  const thresholds = fitThresholds(human, ai)
+  // The parameters are part of the name: the same corpus fitted by a changed
+  // detector gives different weights, and one id must mean one calibration.
+  const parameters = createHash('sha256')
+    .update(JSON.stringify({ weights, thresholds }))
+    .digest('hex')
+    .slice(0, 6)
   return {
-    id: `fit-${date}-${corpusId}`,
+    id: `fit-${date}-${corpusId}-${parameters}`,
     calibrated: true,
     date,
     corpus: corpusId,
     weights,
-    thresholds: fitThresholds(human, ai),
+    thresholds,
     coefficients: Object.fromEntries(
       FITTED.map((id, at) => [id, Math.round(coefficients[at] * 1000) / 1000]),
     ),
@@ -262,6 +269,7 @@ export interface Calibration {
     spans: number
     lexicon: number
     discourse: number
+    variation: number
     stylometry: number
     forensic: number
   }

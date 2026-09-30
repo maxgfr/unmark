@@ -53,6 +53,16 @@ describe('route', () => {
     expect(route(abstract, seg).document).toBe('en')
   })
 
+  it('routes English that TinyLD misreads, when both detectors put English first', () => {
+    // A real HAL abstract (Dias et al., hal.science/bioemco-00542730, CC BY 4.0).
+    // Its Latin binomials make TinyLD answer Berber 0.50 over English 0.44;
+    // franc-min ranks English first. Two detectors agreeing on the one
+    // supported language they both rank highest is an answer for routing.
+    const abstract = `The mycorrhizal colonisation of plants grown in unmanaged soils from two restoration sites with a fire history in Northern Portugal was evaluated from the perspective of supporting restoration programmes. To promote restoration of original tree stands, Quercus ilex L. and Pinus pinaster Ait. were used as target species on two sites, denoted Site 1 and 2 respectively. The aim of the study was to assess whether mycorrhizal propagules that survived fire episodes could serve as in situ inoculum sources, and to analyse the spatial distribution of soil nutrients and mycorrhizal parameters. In a laboratory bioassay, P. pinaster and Q. ilex seedlings were grown on soils from the target sites and root colonisation by ectomycorrhizal (ECM) and arbuscular mycorrhizal (AM) fungi was determined. The ECM root colonisation levels found indicated that soil from Site 2 contained sufficient ECM propagules to serve as a primary source of inoculum for P pinaster. The low levels of ECM and AM colonisation obtained on the roots of plants grown in soil from Site 1 indicated that the existing mycorrhizal propagules might be insufficient for effective root colonisation of Q. ilex. Different ECM morphotypes were found in plants grown in soil from the two sites. At Site 2 mycorrhizal parameters were found to be spatially structured, with significant differences in ECM colonisation and soil P concentrations between regions of either side of an existing watercourse. The spatial distribution of mycorrhizal propagules was related to edaphic parameters (total C and extractable P), and correlations between soil nutrients and mycorrhizal parameters were found.`
+    const seg = segment(abstract)
+    expect(route(abstract, seg).document).toBe('en')
+  })
+
   it('takes the language it is given over the one it would detect', () => {
     const seg = segment(EN)
     const routed = route(EN, seg, 'fr')

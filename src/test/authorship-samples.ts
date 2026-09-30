@@ -1,7 +1,7 @@
-// Two French texts on the same scale, for tests that need a document rather
-// than a sentence. Written for the tests: one piles up the habits the French
-// catalogue lists, the other is local reporting with names, figures and a
-// quotation. Neither is a sample of what any real model or person wrote.
+// Two French documents for tests that need a whole text rather than a sentence.
+//
+// AI_FR was written by a model for these tests, and piles up the habits the
+// French catalogue lists. HUMAN_FR is real, dated, openly licensed human prose.
 
 export const AI_FR = `Dans un monde en constante évolution, la transformation numérique joue un rôle crucial pour les entreprises. Plongeons au cœur de cette révolution qui redéfinit notre façon de travailler.
 
@@ -13,10 +13,37 @@ Par ailleurs, la formation des équipes constitue la pierre angulaire de toute t
 
 En conclusion, à l'ère du numérique, l'avenir s'annonce prometteur pour les entreprises qui sauront saisir ces opportunités. N'hésitez pas à explorer ces pistes pour libérer tout le potentiel de votre organisation.`
 
-export const HUMAN_FR = `Mardi soir, le conseil municipal de Saint-Aubin s'est réuni pendant près de trois heures. L'essentiel du débat a porté sur l'école primaire de la rue des Tilleuls, dont la toiture fuit depuis deux hivers.
+/**
+ * A real administrative page, written by people before chat models existed:
+ * "Carte d'identité d'un majeur : première demande", service-public.fr, DILA,
+ * Licence Ouverte 2.0 (etalab-2.0), as captured on 2021-10-22 —
+ * https://web.archive.org/web/20211022134657/https://www.service-public.fr/particuliers/vosdroits/F1341
+ *
+ * It replaces a "human" sample that had been written for these tests by a
+ * model, which the variation signal then correctly read as generated.
+ */
+export const HUMAN_FR = `Pour demander une carte nationale d'identité, il faut se rendre au guichet avec les pièces justificatives nécessaires. Les documents à présenter dépendent de votre situation et notamment de la possession d'un passeport récent.
 
-Le maire, Bernard Lecoq, a présenté trois devis. Le moins cher dépasse de 40 % l'enveloppe votée en mars. « On peut rafistoler encore un an, mais ce sera de l'argent jeté », a-t-il reconnu.
+Le lieu de la demande ne dépend pas du domicile. Vous pouvez vous rendre à n'importe quelle mairie, à condition qu'elle soit équipée d'une station d'enregistrement.
 
-L'opposition a demandé qu'on attende la subvention départementale, dont le montant ne sera connu qu'en octobre. Plusieurs parents présents dans la salle ont protesté : deux classes ont déjà dû déménager dans le réfectoire après les pluies de janvier.
+Votre présence est indispensable pour procéder à la prise d'empreintes.
 
-Finalement, les élus ont voté un emprunt de 180 000 euros sur quinze ans, par dix-neuf voix contre quatre. Les travaux devraient commencer pendant les vacances de la Toussaint et durer six semaines. D'ici là, la mairie fera poser des bâches sur la partie la plus abîmée du toit, et les services techniques passeront chaque lundi vérifier l'état des plafonds.`
+Vous pouvez préparer la démarche en faisant une pré-demande en ligne mais ce n'est pas une obligation.
+
+Il faudra ensuite vous rendre en mairie pour finaliser la demande avec les pièces justificatives.
+
+Le guichet récupérera vos données grâce au numéro de pré-demande, vérifiera vos pièces justificatives et prendra les empreintes.
+
+Il faut présenter les documents originaux.
+
+Votre passeport
+
+Photo d'identité de moins de 6 mois et conforme aux normes
+
+Justificatif de domicile
+
+Numéro de pré-demande si vous avez fait cette démarche en ligne (sinon, il faut utiliser le formulaire cartonné disponible au guichet)
+
+Gratuit
+
+La carte d'identité n'est pas fabriquée sur place et ne peut donc pas être délivrée immédiatement. Le délai de fabrication dépend du lieu et de la période de la demande. Par exemple, à l'approche des vacances d'été, les délais peuvent augmenter de manière significative.`

@@ -55,6 +55,15 @@ describe('scoreSentences', () => {
     expect(spoofed?.score).toBeGreaterThanOrEqual(0.9)
   })
 
+  it('does not raise a sentence for repeating its neighbours', () => {
+    // Measured on real text: people repeat their own words more than models do.
+    const repeated = Array.from(
+      { length: 6 },
+      () => 'The new system makes the work faster for the whole team every day.',
+    ).join(' ')
+    expect(spans(repeated)[2]?.score).toBeLessThan(0.15)
+  })
+
   it('marks a sentence under eight words as low confidence', () => {
     const [short, long] = spans(
       'Fixed now. The mechanic said the bottom bracket was shot and replaced it.',

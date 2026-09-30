@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { segment } from './segment.ts'
 import { route } from './route.ts'
-import { measure, scan } from './features.ts'
+import { measure, scan, wordReuse } from './features.ts'
 import { technicalMarks } from './forensics.ts'
 import { encodeStego } from '../stego.ts'
 
@@ -83,6 +83,28 @@ describe('measure', () => {
       first(
         'I got the bike back yesterday. The mechanic said the bracket was shot, which explains the noise.',
       )?.repetition,
+    ).toBe(0)
+  })
+
+  it('word reuse: counts content words seen again within the last hundred', () => {
+    const repeating = segment(
+      'The council voted the budget. The council then voted the school budget again, and the council budget passed.',
+    )
+    const varied = segment(
+      'The council voted the budget. Members then approved funding for schools, and the proposal passed easily tonight.',
+    )
+    const text = (seg: ReturnType<typeof segment>) => seg
+    expect(
+      wordReuse(
+        'The council voted the budget. The council then voted the school budget again, and the council budget passed.',
+        text(repeating),
+      ).share,
+    ).toBeGreaterThan(0.3)
+    expect(
+      wordReuse(
+        'The council voted the budget. Members then approved funding for schools, and the proposal passed easily tonight.',
+        text(varied),
+      ).share,
     ).toBe(0)
   })
 

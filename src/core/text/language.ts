@@ -32,6 +32,8 @@ const WEAK = 0.05
 const PLAUSIBLE = 0.1
 /** franc-min is treated as an opinion only when its winner has this lead. */
 const FRANC_LEAD = 0.15
+/** A French or English candidate this strong, confirmed by franc-min, is an answer for routing. */
+const AGREED = 0.3
 /** Enough characters to identify a language; more only costs time. */
 const SAMPLE = 4000
 
@@ -251,7 +253,8 @@ const MIN_LETTERS = 20
  * that second opinion was most of the time spent.
  */
 function sureLanguage(sample: string): string | undefined {
-  const [first, second] = detectAll(sample)
+  const ranked = detectAll(sample)
+  const [first, second] = ranked
   if (!first) return undefined
   const lead = first.accuracy - (second?.accuracy ?? 0)
   if (first.accuracy >= SURE && lead >= LEAD) return first.lang
@@ -264,6 +267,15 @@ function sureLanguage(sample: string): string | undefined {
   // its stricter rule in `identify`.
   if (first.accuracy >= WEAK && lead >= LEAD && first.accuracy >= 4 * (second?.accuracy ?? 0)) {
     return first.lang
+  }
+  // Routing only needs to tell French from English. When TinyLD rates one of
+  // them highly and franc-min ranks that same one first, the two agree on the
+  // only question asked, whatever TinyLD's own winner was: Latin binomials in
+  // a real English abstract had it answer Berber 0.50 over English 0.44.
+  const supported = ranked.find((entry) => entry.lang === 'fr' || entry.lang === 'en')
+  if (supported && supported.accuracy >= AGREED) {
+    const francFirst = francAll(sample, { minLength: 10 })[0]?.[0]
+    if (francFirst && iso1(francFirst) === supported.lang) return supported.lang
   }
   return undefined
 }

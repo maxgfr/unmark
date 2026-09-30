@@ -6,9 +6,10 @@
 // families are split by what they read, and a style metric that a catalogue
 // already reads is left out of the stylometry signal:
 //
-//   spans       sentence texture: repetition, diversity, dashes
+//   spans       sentence texture: narrow vocabulary, dashes
 //   lexicon     flagged vocabulary, by tier and density
 //   discourse   structural and rhetorical habits
+//   variation   words not reused: a synonym each time instead of the same word
 //   stylometry  document shape no catalogue reads: rhythm, recap, outline
 //   forensic    chat residue and technical marks
 //
@@ -62,7 +63,15 @@ export interface SignalInput {
   hits: readonly Hit[]
   marks: readonly Finding[]
   style: StyleReport
+  /** Content-word reuse, from `wordReuse`. */
+  reuse: { share: number; tokens: number }
 }
+
+/** Reuse at or above this reads as a person's; at or below `REUSE_LOW`, as generated. */
+const REUSE_HIGH = 0.2
+const REUSE_LOW = 0.06
+/** Fewer content words than this and the share is noise. */
+const MIN_REUSE_TOKENS = 60
 
 /**
  * The style metrics the stylometry signal reads, per language.
@@ -101,9 +110,7 @@ export function builtInSignals(
   if (countedWords > 0) {
     const sum = counted.reduce((total, span) => {
       const f = span.features
-      return (
-        total + span.words * ((0.2 * f.repetition + 0.1 * f.diversity + 0.1 * f.typography) / 0.4)
-      )
+      return total + span.words * ((f.diversity + f.typography) / 2)
     }, 0)
     texture = round(Math.min(1, (2 * sum) / countedWords))
   }
@@ -145,7 +152,7 @@ export function builtInSignals(
       value: texture,
       weight: weights.spans,
       label: 'Sentence texture',
-      detail: 'repeated phrasing, narrow vocabulary and dashes, sentence by sentence',
+      detail: 'narrow vocabulary and dashes, sentence by sentence',
       evidenceLabel: 'MEASURED_FEATURE',
     },
     {
@@ -163,6 +170,19 @@ export function builtInSignals(
       label: 'Sentence structure',
       detail: `${round(discourseWeight)} weighted structural habits in ${counted.length} sentences`,
       evidenceLabel: 'STYLE_HEURISTIC',
+    },
+    {
+      id: 'variation',
+      value:
+        input.reuse.tokens < MIN_REUSE_TOKENS
+          ? null
+          : round(
+              Math.min(1, Math.max(0, (REUSE_HIGH - input.reuse.share) / (REUSE_HIGH - REUSE_LOW))),
+            ),
+      weight: weights.variation,
+      label: 'Word variation',
+      detail: `${Math.round(input.reuse.share * 100)} % of content words reused within a hundred`,
+      evidenceLabel: 'MEASURED_FEATURE',
     },
     {
       id: 'stylometry',

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { detectAuthorship } from './index.ts'
 import { DISCLAIMER } from './report.ts'
+import { CALIBRATION } from './calibration.ts'
 import { AI_FR, HUMAN_FR } from '../../../test/authorship-samples.ts'
 
 describe('detectAuthorship', () => {
@@ -28,7 +29,7 @@ describe('detectAuthorship', () => {
   it('always carries the disclaimer and the calibration it used', () => {
     const report = detectAuthorship(HUMAN_FR)
     expect(report.disclaimer).toBe(DISCLAIMER)
-    expect(report.calibration.id).toBe('provisional-0')
+    expect(report.calibration.id).toBe(CALIBRATION.id)
     expect(report.notEvidence.length).toBeGreaterThan(3)
   })
 
