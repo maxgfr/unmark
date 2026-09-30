@@ -243,14 +243,19 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
   out.push('## What is not evidence', '', ...report.notEvidence.map((line) => `- ${line}`), '')
 
   out.push('## How to fix', '')
-  const byPattern = new Map<string, { count: number; fix: string }>()
+  // Grouped by what to do rather than by pattern: nine patterns that all say
+  // "cut the connector" are one piece of advice, not nine.
+  const byFix = new Map<string, { count: number; patterns: Set<string> }>()
   for (const finding of report.findings) {
-    const entry = byPattern.get(finding.patternId)
-    if (entry) entry.count += 1
-    else byPattern.set(finding.patternId, { count: 1, fix: finding.fixHint })
+    const entry = byFix.get(finding.fixHint) ?? { count: 0, patterns: new Set<string>() }
+    entry.count += 1
+    entry.patterns.add(finding.patternId)
+    byFix.set(finding.fixHint, entry)
   }
-  const groups = [...byPattern.entries()].sort((a, b) => b[1].count - a[1].count)
-  for (const [id, { count, fix }] of groups) out.push(`- \`${id}\` (${count}×): ${fix}`)
+  const groups = [...byFix.entries()].sort((a, b) => b[1].count - a[1].count)
+  for (const [fix, { count, patterns }] of groups) {
+    out.push(`- ${fix} — ${count}×: ${[...patterns].map((id) => `\`${id}\``).join(', ')}`)
+  }
   if (groups.length > 0) out.push('')
   out.push(
     'For a checked rewrite: `unmark brief` lists what must change and what must survive, `unmark rewrite` does it, `unmark verify` rejects a rewrite that broke a fact. Run `unmark detect` again afterwards.',

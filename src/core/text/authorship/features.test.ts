@@ -61,17 +61,15 @@ describe('scan', () => {
 })
 
 describe('measure', () => {
-  it('phrase: fires on flagged vocabulary', () => {
-    expect(first('Plongeons dans le sujet, dans un monde où tout change vite.', 'fr')?.phrase).toBe(
-      1,
-    )
+  it('phrase: one tier-1 phrase is enough to saturate it', () => {
+    expect(first('Plongeons dans le sujet sans tarder dès ce matin.', 'fr')?.phrase).toBe(1)
     expect(first('Le conseil a voté le budget mardi soir après deux heures.', 'fr')?.phrase).toBe(0)
   })
 
   it('structure: fires on a structural habit', () => {
     expect(
       first('Que vous soyez débutant ou expert, cet outil vous aidera.', 'fr')?.structure,
-    ).toBe(0.5)
+    ).toBe(1)
     expect(first('Cet outil aide les débutants comme les experts.', 'fr')?.structure).toBe(0)
   })
 

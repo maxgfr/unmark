@@ -198,8 +198,11 @@ export function measure(
 
   seg.sentences.forEach((sentence, index) => {
     const features = out[index] as SentenceFeatures
-    features.phrase = Math.min(phrase[index] ?? 0, 2) / 2
-    features.structure = Math.min(structure[index] ?? 0, 2) / 2
+    // One counted tier-1 habit saturates its component. A sentence built
+    // around "Plongeons dans" is flagged for it; a second stock phrase in the
+    // same sentence does not make it twice as generated.
+    features.phrase = Math.min(phrase[index] ?? 0, 1)
+    features.structure = Math.min(structure[index] ?? 0, 1)
     const dashes = [...text.slice(sentence.start, sentence.end).matchAll(DASH)].filter(
       (match) => seg.mask[sentence.start + match.index] !== 1,
     ).length

@@ -23,7 +23,7 @@ const LEXICON_REASON: Record<Tier, string> = {
 
 const LEXICON_FIX: Record<Tier, string> = {
   1: 'say the specific thing; if the sentence stands without the phrase, cut it',
-  2: 'keep one connector per paragraph at most, and let the logic carry the rest',
+  2: 'one formal phrase per paragraph is register; cut the others or say them plainly',
   3: 'nothing to do on its own; fix what else the sentence was flagged for',
 }
 

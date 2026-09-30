@@ -31,7 +31,7 @@ Engine: unmark 0.1.0 · calibration \`provisional-0\` (not yet calibrated: thres
 
 ## How to fix
 
-- \`fr.lex.plongeons\` (1×): say the specific thing
+- say the specific thing — 1×: \`fr.lex.plongeons\`
 
 For a checked rewrite: \`unmark brief\` lists what must change and what must survive, \`unmark rewrite\` does it, \`unmark verify\` rejects a rewrite that broke a fact. Run \`unmark detect\` again afterwards.
 "

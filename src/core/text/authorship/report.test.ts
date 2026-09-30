@@ -120,6 +120,24 @@ describe('renderMarkdown', () => {
   })
 })
 
+describe('how to fix', () => {
+  it('groups the advice by what to do, most frequent first', () => {
+    const finding = REPORT.findings[0] as AuthorshipReport['findings'][number]
+    const markdown = renderMarkdown({
+      ...REPORT,
+      findings: [
+        finding,
+        { ...finding, id: 'b@1', patternId: 'fr.lex.a', start: 20 },
+        { ...finding, id: 'c@2', patternId: 'fr.lex.b', start: 30, fixHint: 'other advice' },
+      ],
+    })
+    const section = markdown.slice(markdown.indexOf('## How to fix'))
+    const lines = section.split('\n').filter((line) => line.startsWith('- '))
+    expect(lines[0]).toBe('- say the specific thing — 2×: `fr.lex.plongeons`, `fr.lex.a`')
+    expect(lines[1]).toBe('- other advice — 1×: `fr.lex.b`')
+  })
+})
+
 describe('toJSON', () => {
   it('round-trips through JSON with the disclaimer', () => {
     const parsed = JSON.parse(toJSON(REPORT))
