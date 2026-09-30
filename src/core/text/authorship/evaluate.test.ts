@@ -7,6 +7,7 @@ import {
   fitWeights,
   mulberry32,
   splitOf,
+  splitOfGroup,
   tprAtFpr,
 } from './evaluate.ts'
 
@@ -99,5 +100,25 @@ describe('splitOf', () => {
     const train = ids.filter((id) => splitOf(id) === 'train').length
     expect(train).toBeGreaterThan(400)
     expect(train).toBeLessThan(600)
+  })
+})
+
+describe('splitOfGroup', () => {
+  it('puts a document in the split of the root it derives from', () => {
+    // A generated twin and a humanised copy of it must never be tested on a
+    // subject the fit already saw under the other label.
+    const parents = new Map([
+      ['ai-1', 'human-1'],
+      ['humanized-1', 'ai-1'],
+    ])
+    const parent = (id: string) => parents.get(id)
+    expect(splitOfGroup('humanized-1', parent)).toBe(splitOf('human-1'))
+    expect(splitOfGroup('ai-1', parent)).toBe(splitOf('human-1'))
+    expect(splitOfGroup('human-1', parent)).toBe(splitOf('human-1'))
+  })
+
+  it('stops on a cycle instead of looping', () => {
+    const parent = (id: string) => (id === 'a' ? 'b' : 'a')
+    expect(['train', 'test']).toContain(splitOfGroup('a', parent))
   })
 })

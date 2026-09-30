@@ -25,20 +25,20 @@ export interface Calibration {
 }
 
 export const CALIBRATION: Calibration = {
-  id: 'fit-2026-09-30-ba0e67364077-a56b9f',
+  id: 'fit-2026-09-30-ba0e67364077-b1fdb0',
   calibrated: true,
   date: '2026-09-30',
   corpus: 'ba0e67364077',
   weights: {
     spans: 0,
-    lexicon: 0.41,
-    discourse: 0.053,
-    variation: 0.298,
-    stylometry: 0.139,
+    lexicon: 0.402,
+    discourse: 0.073,
+    variation: 0.279,
+    stylometry: 0.147,
     forensic: 0.1,
   },
   thresholds: {
-    human: 0.05,
+    human: 0,
     ai: 0.5,
   },
 }

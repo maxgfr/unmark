@@ -180,3 +180,28 @@ function fnv1a(text: string): number {
 
 /** A document's split, from its id alone, so it never moves between runs. */
 export const splitOf = (id: string): 'train' | 'test' => (fnv1a(id) % 2 === 0 ? 'train' : 'test')
+
+/**
+ * The split of the document a derived one comes from, followed to its root.
+ *
+ * A generated twin shares its human original's subject, and a humanised text
+ * its generated source's words. Splitting each by its own id put 179 twin
+ * pairs of the binoculars-eu corpus on both sides of the split, so the fit
+ * saw subjects the test then scored.
+ */
+export function splitOfGroup(
+  id: string,
+  parentOf: (id: string) => string | undefined,
+): 'train' | 'test' {
+  let root = id
+  const seen = new Set([root])
+  for (
+    let parent = parentOf(root);
+    parent !== undefined && !seen.has(parent);
+    parent = parentOf(root)
+  ) {
+    seen.add(parent)
+    root = parent
+  }
+  return splitOf(root)
+}

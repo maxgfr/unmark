@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { detectAuthorship, weightedScore } from '../src/core/text/authorship/index.ts'
+import { decide } from '../src/core/text/authorship/verdict.ts'
 import { CALIBRATION } from '../src/core/text/authorship/calibration.ts'
 import {
   auroc,
@@ -32,7 +33,7 @@ import {
   fitLogistic,
   fitThresholds,
   fitWeights,
-  splitOf,
+  splitOfGroup,
   tprAtFpr,
 } from '../src/core/text/authorship/evaluate.ts'
 import { MIN_AUTHORSHIP_WORDS } from '../src/core/text/authorship/index.ts'
@@ -81,7 +82,7 @@ async function pinnedDocuments() {
   return { documents, hash: createHash('sha256').update(raw).digest('hex').slice(0, 12) }
 }
 
-async function binocularsDocuments() {
+async function binocularsDocuments(committedBinoculars = []) {
   if (!existsSync(join(CORPUS_DIR, 'binoculars-eu-corpus-fr-v1.1.jsonl'))) return []
   const read = async (file) =>
     (await readFile(join(CORPUS_DIR, file), 'utf8'))
@@ -97,6 +98,7 @@ async function binocularsDocuments() {
       genre: row.label === 'human' ? (BINOCULARS_GENRE[row.source] ?? row.source) : 'generated',
       source: row.source,
       text: row.text,
+      parent: row.meta?.twin_of,
     })
   }
   for (const file of [
@@ -111,6 +113,7 @@ async function binocularsDocuments() {
         genre: 'ood',
         source: row.source,
         text: row.text,
+        parent: row.meta?.twin_of,
       })
     }
   }
@@ -122,14 +125,36 @@ async function binocularsDocuments() {
       genre: 'humanized',
       source: row.source,
       text: row.text,
+      parent: row.meta?.source_id,
     })
   }
-  return documents.map((doc) => ({
-    ...doc,
-    corpus: 'binoculars',
-    format: 'Text',
-    split: splitOf(doc.id),
-  }))
+  // Split by group, not by document: a twin goes where its human original
+  // goes, a humanised text where its generated source goes. Groups that also
+  // sit in the committed corpus are left out here, so no document or subject
+  // is counted twice under two splits.
+  const byId = new Map(documents.map((doc) => [doc.id, doc]))
+  const parentOf = (id) => {
+    const parent = byId.get(id)?.parent
+    return parent ? `bin-${parent}` : undefined
+  }
+  const rootOf = (id) => {
+    let root = id
+    const seen = new Set([root])
+    for (let next = parentOf(root); next && !seen.has(next); next = parentOf(root)) {
+      seen.add(next)
+      root = next
+    }
+    return root
+  }
+  const committed = new Set(committedBinoculars.map((id) => rootOf(`bin-${id}`)))
+  return documents
+    .filter((doc) => !committed.has(rootOf(doc.id)))
+    .map((doc) => ({
+      ...doc,
+      corpus: 'binoculars',
+      format: 'Text',
+      split: splitOfGroup(doc.id, parentOf),
+    }))
 }
 
 // ------------------------------------------------------------------ scoring
@@ -152,7 +177,9 @@ function measure(doc, calibration) {
     split: doc.split,
     words: report.words,
     verdict: report.verdict,
+    abstainReason: report.abstainReason,
     residue: report.findings.some((f) => f.category === 'residue'),
+    technical: report.technicalMarks.length > 0,
     values,
     signals: report.signals,
     spans: doc.mixedSpans ? report.spans : undefined,
@@ -169,17 +196,24 @@ function scoreOf(sample, calibration) {
   return weightedScore(signals, sample.residue, calibration.thresholds.ai)
 }
 
-/** The verdict under `calibration`, recomputed from the stored signals. */
+/**
+ * The verdict under `calibration`, from the stored signals, through the same
+ * `decide` the detector uses: a second copy of the rules would drift, and the
+ * confusion table is meant to show what a user sees.
+ */
 function verdictOf(sample, calibration) {
-  if (sample.verdict === 'insufficient_evidence') return sample.verdict
-  const score = scoreOf(sample, calibration)
-  const strong = sample.signals.filter((s) => s.value !== null && s.value >= 0.5).length
-  if (score >= calibration.thresholds.ai) return strong >= 2 ? 'likely_ai' : 'uncertain'
-  if (score < calibration.thresholds.human) {
-    const marked = sample.residue || (sample.values.forensic ?? 0) > 0
-    return marked ? 'uncertain' : 'likely_human'
-  }
-  return 'uncertain'
+  const signals = sample.signals.map((signal) => ({
+    ...signal,
+    weight: calibration.weights[signal.id] ?? signal.weight,
+  }))
+  return decide({
+    words: sample.words,
+    unsupported: sample.abstainReason === 'unsupported_language',
+    signals,
+    residue: sample.residue,
+    technical: sample.technical,
+    calibration,
+  }).verdict
 }
 
 // ------------------------------------------------------------------ fitting
@@ -432,7 +466,11 @@ function markdown(summary, meta) {
 
 const pinned =
   corpusOption === 'binoculars' ? { documents: [], hash: null } : await pinnedDocuments()
-const binoculars = corpusOption === 'pinned' ? [] : await binocularsDocuments()
+// binoculars-eu rows copied into the committed corpus, by their original id.
+const committedBinoculars = pinned.documents
+  .map((doc) => /^binoculars-eu@\S+ (\S+)$/.exec(doc.source ?? '')?.[1])
+  .filter(Boolean)
+const binoculars = corpusOption === 'pinned' ? [] : await binocularsDocuments(committedBinoculars)
 const documents = [...pinned.documents, ...binoculars]
 if (documents.length === 0) {
   console.error(
