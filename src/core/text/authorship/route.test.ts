@@ -44,6 +44,15 @@ describe('route', () => {
     expect(seg.sentences.every((s) => s.lang === undefined)).toBe(true)
   })
 
+  it('routes jargon-heavy English prose that the detectors score low but agree on', () => {
+    // A real HAL abstract (CC BY 4.0). TinyLD puts English far ahead of
+    // everything else, but under its absolute threshold, and routing used to
+    // call the whole document "no supported language".
+    const abstract = `The presence of antimicrobial residues in food-producing animals can lead to harmful effects on the consumer (e.g., allergies, antimicrobial resistance, toxicological effects) and cause issues in food transformation (i.e., cheese, yogurts production). Therefore, to control antimicrobial residues in food products of animal origin, screening methods are of utmost importance. Microbiological and immunological methods (e.g., ELISA, dipsticks) are conventional screening methods. Biosensors are an innovative solution for the development of more performant screening methods. Among the different kinds of biosensing elements (e.g., antibodies, aptamers, molecularly imprinted polymers (MIP), enzymes), aptamers for targeting antimicrobial residues are in continuous development since 2000. Therefore, this review has highlighted recent advances in the development of aptasensors, which present multiple advantages over immunosensors. Most of the aptasensors described in the literature for the detection of antimicrobial residues in animal-derived food products are either optical or electrochemical sensors. In this review, I have focused on optical aptasensors and showed how nanotechnologies (nanomaterials, micro/nanofluidics, and signal amplification techniques) largely contribute to the improvement of their performance (sensitivity, specificity, miniaturization, portability). Finally, I have explored different techniques to develop multiplex screening methods. Multiplex screening methods are necessary for the wide spectrum detection of antimicrobials authorized for animal treatment (i.e., having maximum residue limits).`
+    const seg = segment(abstract)
+    expect(route(abstract, seg).document).toBe('en')
+  })
+
   it('takes the language it is given over the one it would detect', () => {
     const seg = segment(EN)
     const routed = route(EN, seg, 'fr')

@@ -253,8 +253,18 @@ const MIN_LETTERS = 20
 function sureLanguage(sample: string): string | undefined {
   const [first, second] = detectAll(sample)
   if (!first) return undefined
-  if (first.accuracy >= SURE && first.accuracy - (second?.accuracy ?? 0) >= LEAD) return first.lang
+  const lead = first.accuracy - (second?.accuracy ?? 0)
+  if (first.accuracy >= SURE && lead >= LEAD) return first.lang
   if (first.accuracy >= WEAK && confidentFranc(sample) === first.lang) return first.lang
+  // Routing only: a winner far ahead of every other language is an answer
+  // even when its own score is low. Jargon drags TinyLD's absolute score down
+  // — a real English abstract on aptasensors scored 0.17 against 0.02 for the
+  // runner-up — and franc-min, which weighs Latinate vocabulary alike across
+  // languages, could not break the tie it did not see. The rewrite gate keeps
+  // its stricter rule in `identify`.
+  if (first.accuracy >= WEAK && lead >= LEAD && first.accuracy >= 4 * (second?.accuracy ?? 0)) {
+    return first.lang
+  }
   return undefined
 }
 
