@@ -27,7 +27,8 @@
 // its sentence statistics decided by its code blocks.
 
 import type { Finding, Verdict } from '../report.ts'
-import { blocksOf, paragraphsOf } from './regions.ts'
+import { blocksOf, paragraphBlocksOf, paragraphsOf } from './regions.ts'
+import { JARGON, MARKERS } from './lexicon/en.ts'
 
 export type StyleLayer = 'phrase' | 'structure' | 'silhouette'
 
@@ -84,112 +85,38 @@ export const MIN_PARAGRAPHS = 5
 
 const WORD = /[\p{L}\p{N}'’-]+/gu
 
-// Single words and phrases that turn up far more often in generated prose than
-// in the wild. Lowercased; phrases are matched with their spaces.
-const MARKERS = [
-  'delve',
-  'delving',
-  'tapestry',
-  'testament to',
-  'realm of',
-  'underscore',
-  'underscores',
-  'pivotal',
-  'crucial',
-  'leverage',
-  'leveraging',
-  'robust',
-  'seamless',
-  'seamlessly',
-  'intricate',
-  'nuanced',
-  'multifaceted',
-  'landscape',
-  'navigating',
-  'foster',
-  'fostering',
-  'unlock',
-  'elevate',
-  'embark',
-  'myriad',
-  'plethora',
-  'paradigm',
-  'holistic',
-  'synergy',
-  'cutting-edge',
-  'game-changer',
-  'deep dive',
-  'resonate',
-  'showcase',
-  'spearhead',
-  'meticulous',
-  'meticulously',
-  'boasts',
-  'vibrant',
-  'bustling',
-  'treasure trove',
-  "in today's",
-  'fast-paced',
-  'ever-evolving',
-  "it's worth noting",
-  "it's important to note",
-  'that said',
-  'moreover',
-  'furthermore',
-]
-
-/** unslop's business-jargon triggers: the register, rather than the vocabulary. */
-const JARGON = [
-  'navigate challenges',
-  'leverage synergies',
-  'circle back',
-  'move the needle',
-  'low-hanging fruit',
-  'actionable insights',
-  'drive value',
-  'unlock potential',
-  'best practices',
-  'thought leadership',
-  'value proposition',
-  'core competency',
-  'double down',
-  'north star',
-  'boil the ocean',
-  'table stakes',
-]
-
 // "not just X, but Y" and its family. The construction is not rare in human
 // writing; the density of it is what the metric measures.
-const NEGATIVE_PARALLELISM =
+export const NEGATIVE_PARALLELISM =
   /\bnot (?:just|only|merely|simply|about)\b[^.!?;]{1,80}?\b(?:but|it(?:'|’)s)\b/giu
 
 // "A, B, and C" — the cadence, counted per sentence rather than per document so
 // a long essay is not penalised for containing lists.
-const RULE_OF_THREE = /\b[\p{L}]+,\s+[\p{L}]+,\s+(?:and|or)\s+[\p{L}]+/giu
+export const RULE_OF_THREE = /\b[\p{L}]+,\s+[\p{L}]+,\s+(?:and|or)\s+[\p{L}]+/giu
 
-const EM_DASH = /[—–]/gu
+export const EM_DASH = /[—–]/gu
 
 /** "Experts argue", "studies show" — authority with nobody behind it. */
-const VAGUE_ATTRIBUTION =
+export const VAGUE_ATTRIBUTION =
   /\b(?:experts?|observers?|analysts?|critics?|researchers?)\s+(?:argue|say|note|believe|suggest|have noted)\b|\b(?:studies|reports?|research)\s+(?:show|shows|suggest|suggests|indicate|indicates)\b|\bit is (?:widely )?believed\b|\bindustry reports?\b|\bsome critics\b/giu
 
 /** Transitions that announce a turn instead of taking one. */
-const SIGNPOST =
+export const SIGNPOST =
   /(?:^|[.!?]\s|\n)\s*(?:however|moreover|furthermore|additionally|importantly|notably|ultimately|overall|consequently|nevertheless|nonetheless|that said|in conclusion|first(?:ly)?|second(?:ly)?|third(?:ly)?|finally)\b[,\s]/giu
 
 /** "serves as", "stands as", "boasts" — anything but "is". */
-const COPULA_AVOIDANCE =
+export const COPULA_AVOIDANCE =
   /\b(?:serves?|stands?|functions?)\s+as\b|\brepresents?\s+an?\b|\bboasts?\b|\bfeatures?\s+an?\b|\boffers?\s+an?\b/giu
 
 /** "from the Big Bang to the cosmic web" — a range whose ends share no scale. */
-const FALSE_RANGE = /\bfrom\s+[^.!?]{3,40}?\s+to\s+[^.!?]{3,40}?(?=[,.;!?]|$)/giu
+export const FALSE_RANGE = /\bfrom\s+[^.!?]{3,40}?\s+to\s+[^.!?]{3,40}?(?=[,.;!?]|$)/giu
 
 /** "X is the language of Y", "X becomes a trap" — a claim dressed as a proverb. */
-const APHORISM =
+export const APHORISM =
   /\bis the (?:language|currency|architecture|backbone|lifeblood|engine) of\b|\bbecomes? a trap\b|\bis not a \w+ but a \w+\b/giu
 
 /** Headings a generic outline produces regardless of subject. */
-const GENERIC_HEADING =
+export const GENERIC_HEADING =
   /^(?:introduction|overview|background|key (?:benefits|features|takeaways|points)|benefits|challenges(?: and \w+)?|use cases|best practices|future (?:outlook|prospects|directions)|conclusion|final thoughts|summary|getting started|why it matters)$/i
 
 /**
@@ -222,19 +149,29 @@ function variation(values: number[]): number {
   return Math.sqrt(spread) / mean
 }
 
-function phraseHits(lower: string, list: readonly string[]): number {
-  let hits = 0
-  for (const phrase of list) {
+/**
+ * One case-insensitive pattern per phrase.
+ *
+ * Matched against the text as written, never a lowercased copy: `toLowerCase`
+ * can change a string's length ("İ" becomes two code units), and every offset
+ * after such a letter would then point one place too far right.
+ */
+function phrasePatterns(list: readonly string[]): RegExp[] {
+  return list.map((phrase) => {
     const escaped = phrase.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
     // \b does not fire next to an apostrophe, so phrases starting with one are
     // matched on a looser boundary.
-    const pattern = /^[\p{L}]/u.test(phrase)
+    return /^[\p{L}]/u.test(phrase)
       ? new RegExp(String.raw`\b${escaped}\b`, 'giu')
       : new RegExp(escaped, 'giu')
-    hits += countMatches(lower, pattern)
-  }
-  return hits
+  })
 }
+
+const MARKER_PATTERNS = phrasePatterns(MARKERS)
+const JARGON_PATTERNS = phrasePatterns(JARGON)
+
+const phraseHits = (text: string, patterns: readonly RegExp[]): number =>
+  patterns.reduce((hits, pattern) => hits + countMatches(text, pattern), 0)
 
 const STOP_WORDS = new Set([
   'the',
@@ -366,7 +303,6 @@ function staccatoRun(sentences: readonly string[]): number {
 export function analyzeStyle(text: string): StyleReport {
   const paragraphs = paragraphsOf(text)
   const prose = paragraphs.join('\n\n')
-  const lower = prose.toLowerCase()
   const sentences = sentencesOf(prose)
   const words = wordsIn(prose)
 
@@ -393,7 +329,7 @@ export function analyzeStyle(text: string): StyleReport {
       label: 'Marker vocabulary',
       layer: 'phrase',
       signal: 'vocabulary',
-      value: perThousand(phraseHits(lower, MARKERS)),
+      value: perThousand(phraseHits(prose, MARKER_PATTERNS)),
       threshold: 25,
       triggered: false,
       detail: 'flagged words and phrases per 1000 words',
@@ -403,7 +339,7 @@ export function analyzeStyle(text: string): StyleReport {
       label: 'Business jargon',
       layer: 'phrase',
       signal: 'jargon',
-      value: perThousand(phraseHits(lower, JARGON)),
+      value: perThousand(phraseHits(prose, JARGON_PATTERNS)),
       threshold: 6,
       triggered: false,
       detail: 'jargon collocations per 1000 words',
@@ -593,6 +529,58 @@ export function analyzeStyle(text: string): StyleReport {
     measurable,
     metrics,
   }
+}
+
+/** One located occurrence of a phrase- or structure-layer tell. */
+export interface StyleHit {
+  /** The `StyleMetric.id` this occurrence counts toward. */
+  metricId: string
+  /** UTF-16 offsets into the text as given. */
+  start: number
+  end: number
+}
+
+/** The metrics whose count is a count of places, each with what it matches. */
+const LOCATABLE: readonly (readonly [string, readonly RegExp[]])[] = [
+  ['marker_vocabulary', MARKER_PATTERNS],
+  ['business_jargon', JARGON_PATTERNS],
+  ['vague_attribution', [VAGUE_ATTRIBUTION]],
+  ['em_dash', [EM_DASH]],
+  ['rule_of_three', [RULE_OF_THREE]],
+  ['negative_parallelism', [NEGATIVE_PARALLELISM]],
+  ['signpost_density', [SIGNPOST]],
+  ['false_range', [FALSE_RANGE]],
+  ['copula_avoidance', [COPULA_AVOIDANCE]],
+  ['aphorism', [APHORISM]],
+]
+
+/**
+ * Where each counted tell sits, in the offsets of the original text.
+ *
+ * `analyzeStyle` measures a string built by joining the paragraphs, whose
+ * offsets map back to nothing. This walks the same paragraph blocks one at a
+ * time instead, so every hit can be shown at its line. It locates; it does not
+ * judge — the rates and thresholds stay in `analyzeStyle`.
+ */
+export function styleHits(text: string): StyleHit[] {
+  const hits: StyleHit[] = []
+  for (const block of paragraphBlocksOf(text)) {
+    const paragraph = text.slice(block.start, block.end)
+    for (const [metricId, patterns] of LOCATABLE) {
+      for (const pattern of patterns) {
+        for (const match of paragraph.matchAll(pattern)) {
+          let start = match.index
+          const end = start + match[0].length
+          // The signpost pattern starts on the punctuation before the word.
+          if (metricId === 'signpost_density') {
+            start += match[0].search(/\p{L}/u)
+          }
+          hits.push({ metricId, start: block.start + start, end: block.start + end })
+        }
+      }
+    }
+  }
+  return hits.sort((a, b) => a.start - b.start || a.end - b.end)
 }
 
 const round = (value: number) => Math.round(value * 100) / 100

@@ -4,8 +4,10 @@ import {
   distinctSignals,
   MIN_SENTENCES,
   MIN_WORDS,
+  styleHits,
   stylometryFindings,
 } from './stylometry.ts'
+import { JARGON as EN_JARGON, MARKERS as EN_MARKERS } from './lexicon/en.ts'
 
 const triggered = (text: string) =>
   analyzeStyle(text)
@@ -373,3 +375,44 @@ describe('measuring prose only', () => {
 })
 
 const wordsOf = (text: string) => [...text.matchAll(/[\p{L}\p{N}'’-]+/gu)].length
+
+describe('styleHits', () => {
+  it('locates each tell at its offset in the original text', () => {
+    const text = '# Title\n\nWe delve into it.\n\nThe plan is fast, cheap, and good — mostly.'
+    const hits = styleHits(text)
+    const at = (id: string) => hits.filter((hit) => hit.metricId === id)
+
+    const delve = at('marker_vocabulary')[0]
+    expect(delve && text.slice(delve.start, delve.end)).toBe('delve')
+
+    const three = at('rule_of_three')[0]
+    expect(three && text.slice(three.start, three.end)).toBe('fast, cheap, and good')
+
+    const dash = at('em_dash')[0]
+    expect(dash && text.slice(dash.start, dash.end)).toBe('—')
+  })
+
+  it('matches without lowercasing, so offsets survive a letter that changes length', () => {
+    // "İ".toLowerCase() is two code units. Matching against a lowercased copy
+    // put every hit after it one place to the right.
+    const text = 'İİİ and then we Delve deeper.'
+    const hit = styleHits(text).find((h) => h.metricId === 'marker_vocabulary')
+    expect(hit && text.slice(hit.start, hit.end)).toBe('Delve')
+  })
+
+  it('points a signpost at its word, not at the full stop before it', () => {
+    const text = 'It rained. Moreover, it was cold.'
+    const hit = styleHits(text).find((h) => h.metricId === 'signpost_density')
+    expect(hit && text.slice(hit.start, hit.end)).toMatch(/^Moreover/)
+  })
+
+  it('ignores code, headings and quotation blocks the metrics never read', () => {
+    const text = '```\nwe delve here\n```\n\n> a pivotal quote\n\n## A robust heading'
+    expect(styleHits(text)).toEqual([])
+  })
+
+  it('reads the phrase lists from the shared lexicon', () => {
+    expect(EN_MARKERS).toContain('delve')
+    expect(EN_JARGON).toContain('circle back')
+  })
+})

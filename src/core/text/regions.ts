@@ -433,8 +433,12 @@ export function proseBlocks(text: string): Block[] {
  * density of twelve per thousand words hides completely.
  */
 export function paragraphsOf(text: string): string[] {
-  return proseBlocks(text)
-    .filter((block) => block.kind === 'paragraph')
-    .map((block) => text.slice(block.start, block.end))
-    .filter((paragraph) => paragraph.trim().length > 0)
+  return paragraphBlocksOf(text).map((block) => text.slice(block.start, block.end))
+}
+
+/** The same paragraphs as `paragraphsOf`, as blocks, so a caller can keep offsets. */
+export function paragraphBlocksOf(text: string): Block[] {
+  return proseBlocks(text).filter(
+    (block) => block.kind === 'paragraph' && text.slice(block.start, block.end).trim().length > 0,
+  )
 }
