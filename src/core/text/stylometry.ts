@@ -85,10 +85,14 @@ export const MIN_PARAGRAPHS = 5
 
 const WORD = /[\p{L}\p{N}'’-]+/gu
 
+// The English patterns that open on \b carry `gi`, not `giu`: V8 before 13
+// (Node 22) drops its fast scan for \b under `iu`, which made each of them
+// fifty times slower there, and \b is ASCII-only with or without `u`.
+
 // "not just X, but Y" and its family. The construction is not rare in human
 // writing; the density of it is what the metric measures.
 export const NEGATIVE_PARALLELISM =
-  /\bnot (?:just|only|merely|simply|about)\b[^.!?;]{1,80}?\b(?:but|it(?:'|’)s)\b/giu
+  /\bnot (?:just|only|merely|simply|about)\b[^.!?;]{1,80}?\b(?:but|it(?:'|’)s)\b/gi
 
 // "A, B, and C" — the cadence, counted per sentence rather than per document so
 // a long essay is not penalised for containing lists.
@@ -98,7 +102,7 @@ export const EM_DASH = /[—–]/gu
 
 /** "Experts argue", "studies show" — authority with nobody behind it. */
 export const VAGUE_ATTRIBUTION =
-  /\b(?:experts?|observers?|analysts?|critics?|researchers?)\s+(?:argue|say|note|believe|suggest|have noted)\b|\b(?:studies|reports?|research)\s+(?:show|shows|suggest|suggests|indicate|indicates)\b|\bit is (?:widely )?believed\b|\bindustry reports?\b|\bsome critics\b/giu
+  /\b(?:experts?|observers?|analysts?|critics?|researchers?)\s+(?:argue|say|note|believe|suggest|have noted)\b|\b(?:studies|reports?|research)\s+(?:show|shows|suggest|suggests|indicate|indicates)\b|\bit is (?:widely )?believed\b|\bindustry reports?\b|\bsome critics\b/gi
 
 /** Transitions that announce a turn instead of taking one. */
 export const SIGNPOST =
@@ -106,14 +110,14 @@ export const SIGNPOST =
 
 /** "serves as", "stands as", "boasts" — anything but "is". */
 export const COPULA_AVOIDANCE =
-  /\b(?:serves?|stands?|functions?)\s+as\b|\brepresents?\s+an?\b|\bboasts?\b|\bfeatures?\s+an?\b|\boffers?\s+an?\b/giu
+  /\b(?:serves?|stands?|functions?)\s+as\b|\brepresents?\s+an?\b|\bboasts?\b|\bfeatures?\s+an?\b|\boffers?\s+an?\b/gi
 
 /** "from the Big Bang to the cosmic web" — a range whose ends share no scale. */
-export const FALSE_RANGE = /\bfrom\s+[^.!?]{3,40}?\s+to\s+[^.!?]{3,40}?(?=[,.;!?]|$)/giu
+export const FALSE_RANGE = /\bfrom\s+[^.!?]{3,40}?\s+to\s+[^.!?]{3,40}?(?=[,.;!?]|$)/gi
 
 /** "X is the language of Y", "X becomes a trap" — a claim dressed as a proverb. */
 export const APHORISM =
-  /\bis the (?:language|currency|architecture|backbone|lifeblood|engine) of\b|\bbecomes? a trap\b|\bis not a \w+ but a \w+\b/giu
+  /\bis the (?:language|currency|architecture|backbone|lifeblood|engine) of\b|\bbecomes? a trap\b|\bis not a \w+ but a \w+\b/gi
 
 /** Headings a generic outline produces regardless of subject. */
 export const GENERIC_HEADING =
@@ -162,7 +166,7 @@ function phrasePatterns(list: readonly string[]): RegExp[] {
     // \b does not fire next to an apostrophe, so phrases starting with one are
     // matched on a looser boundary.
     return /^[\p{L}]/u.test(phrase)
-      ? new RegExp(String.raw`\b${escaped}\b`, 'giu')
+      ? new RegExp(String.raw`\b${escaped}\b`, 'gi')
       : new RegExp(escaped, 'giu')
   })
 }

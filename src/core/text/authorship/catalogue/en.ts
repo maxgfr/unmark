@@ -148,7 +148,7 @@ const structure: Pattern[] = [
     lang: 'en',
     tier: 1,
     category: 'structure',
-    pattern: /\bwhether you(?:['’]re| are) (?:a |an )?[^.!?\n,]{1,40}? or (?:a |an )?/giu,
+    pattern: /\bwhether you(?:['’]re| are) (?:a |an )?[^.!?\n,]{1,40}? or (?:a |an )?/gi,
     reason: '"Whether you\'re X or Y" addresses an imagined audience instead of a reader',
     fixHint: 'say who this is for, or drop the address and make the point',
     samples: ["Whether you're a beginner or an expert, it helps."],
@@ -160,7 +160,7 @@ const structure: Pattern[] = [
     tier: 1,
     category: 'structure',
     pattern:
-      /\bit['’]s not (?:just |only |merely )?about [^.!?\n]{1,60}?[,;—–-] ?it['’]s about\b/giu,
+      /\bit['’]s not (?:just |only |merely )?about [^.!?\n]{1,60}?[,;—–-] ?it['’]s about\b/gi,
     reason: 'the "it\'s not about X, it\'s about Y" pivot, a staple of generated prose',
     fixHint: FIX['negative_parallelism'] as string,
     samples: ["It's not about speed, it's about care."],
