@@ -53,6 +53,27 @@ if (!/^description:\s*\S/m.test(frontmatter)) {
   failures.push('SKILL.md frontmatter has no description — agents match on it')
 }
 
+// Model-invocable, but only on request: the hosts may load it, and the
+// description keeps the agent from reaching for it on its own.
+if (/^disable-model-invocation:\s*true\s*$/m.test(frontmatter)) {
+  failures.push('SKILL.md still sets disable-model-invocation: true')
+}
+if (/opencode\/autoinvoke:\s*['"]?false['"]?\s*$/m.test(frontmatter)) {
+  failures.push('SKILL.md still sets opencode/autoinvoke to false')
+}
+if (!/Use only when the user explicitly asks for unmark/.test(frontmatter)) {
+  failures.push('SKILL.md description no longer restricts the skill to explicit requests')
+}
+const codexPolicy = await readFile(
+  join(ROOT, 'skills', 'unmark', 'agents', 'openai.yaml'),
+  'utf8',
+).catch(() => '')
+if (
+  !/^policy:\s*\n(?:[ \t]+[^\n]*\n)*?[ \t]+allow_implicit_invocation:\s*true\s*$/m.test(codexPolicy)
+) {
+  failures.push('agents/openai.yaml does not allow implicit invocation')
+}
+
 // Staleness. In CI the checkout is clean, so any diff here is a bundle that was
 // not rebuilt from the core it claims to ship.
 try {
