@@ -6,6 +6,7 @@
 // which some decoders treat as corruption. So the flags are rewritten too.
 
 import type { Finding, FindingKind, Verdict } from '../report.ts'
+import { withC2pa } from './c2pa.ts'
 import {
   ascii,
   concat,
@@ -46,13 +47,18 @@ export function cleanWebp(bytes: Uint8Array): ContainerResult {
 
     const rule = RULES[fourcc]
     if (rule) {
-      findings.push({
+      const finding: Finding = {
         kind: rule.kind,
         verdict: rule.verdict,
         offset,
         length: total,
         label: `${fourcc.trim()} — ${rule.what}`,
-      })
+      }
+      findings.push(
+        fourcc === 'C2PA'
+          ? withC2pa(finding, bytes.subarray(offset + 8, offset + 8 + size))
+          : finding,
+      )
       clearedFlags |= rule.clears
     } else {
       // Copy rather than reference: the VP8X flags byte is patched in place

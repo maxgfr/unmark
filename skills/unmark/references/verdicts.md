@@ -19,16 +19,18 @@ anything, and saying otherwise trains people to ignore the tool.
 
 ## Outcome — what was actually done
 
-| Outcome     | Means                                                         |
-| ----------- | ------------------------------------------------------------- |
-| `removed`   | Stripped from the output                                      |
-| `kept`      | Matched, deliberately left in place; the reason is on the row |
-| `available` | A style pass would act on this, and the option is off         |
-| `reported`  | Named only; nothing here removes it                           |
+| Outcome     | Means                                                              |
+| ----------- | ------------------------------------------------------------------ |
+| `removed`   | Stripped from the output (`clean` only)                            |
+| `removable` | `clean` would strip it; `inspect` and `audit` change nothing, ever |
+| `kept`      | Matched, deliberately left in place; the reason is on the row      |
+| `available` | A style pass would act on this, and the option is off              |
+| `reported`  | Named only; nothing here removes it                                |
 
 A `confirmed` emoji joiner is `kept`. A merely `probable` XMP packet is
-`removed`. The two columns are independent and you need both to say what
-happened.
+`removed` by `clean` and `removable` in `inspect`. The two columns are
+independent and you need both to say what happened. Never tell a user an
+`inspect` removed anything: the file is byte-identical to what went in.
 
 ## `confirmed` is for technical marks
 

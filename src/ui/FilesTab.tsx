@@ -30,6 +30,8 @@ interface Entry {
    */
   input: Uint8Array | undefined
   textual: boolean
+  /** What was looked at inside the file, so "nothing found" can be told from "not searched". */
+  coverage: string[]
 }
 
 /**
@@ -192,6 +194,7 @@ export function FilesTab() {
             output: result.output,
             input: input.length <= KEEPABLE ? input : undefined,
             textual: result.textual,
+            coverage: result.coverage ?? [],
           },
           ...current,
         ])
@@ -326,6 +329,13 @@ export function FilesTab() {
               shared table would put a file-shaped concern into the component the
               text tab uses too. */}
           <Window entry={entry} open={open} />
+          {entry.coverage.length > 0 ? (
+            <ul className="mt-2 text-xs text-[var(--color-muted)]">
+              {entry.coverage.map((line) => (
+                <li key={line}>Scanned: {line}</li>
+              ))}
+            </ul>
+          ) : undefined}
         </Section>
       ))}
 

@@ -15,7 +15,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { main } from './main.ts'
-import { png, textChunkData } from '../test/containers.ts'
+import { jpeg, pdf, png, textChunkData, zip, exifSegment } from '../test/containers.ts'
+import { c2paStore, CLAUDE_STORE } from '../test/c2pa.ts'
 import { encodeStego } from '../core/text/stego.ts'
 import { AI_FR, HUMAN_FR } from '../test/authorship-samples.ts'
 
@@ -89,6 +90,74 @@ describe('inspect', () => {
     const path = await file('marked.txt', MARKED)
     await main(['inspect', path])
     expect(await readFile(path, 'utf8')).toBe(MARKED)
+  })
+
+  it('says removable, never removed, because it changed nothing', async () => {
+    await main(['inspect', await file('marked.txt', MARKED)])
+    expect(stdout()).toContain('removable')
+    expect(stdout()).not.toMatch(/\bremoved\b/)
+    expect(stdout()).toMatch(/\d+ removable — nothing was changed, `unmark clean` removes them/)
+  })
+
+  it('decodes a C2PA manifest and places the picture in a Word document', async () => {
+    const docx = zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      {
+        name: 'word/document.xml',
+        content:
+          '<w:document><w:body><w:p><w:r><w:drawing><a:blip r:embed="rId1"/></w:drawing></w:r></w:p>' +
+          '<w:p><w:r><w:t>Figure 4. Classification.</w:t></w:r></w:p></w:body></w:document>',
+      },
+      {
+        name: 'word/_rels/document.xml.rels',
+        content:
+          '<Relationships><Relationship Id="rId1" Target="media/image1.png"/></Relationships>',
+      },
+      {
+        name: 'word/media/image1.png',
+        content: png([{ type: 'caBX', data: c2paStore(CLAUDE_STORE) }]),
+      },
+    ])
+    const path = await file('thesis.docx', docx)
+    expect(await main(['inspect', path])).toBe(1)
+    const text = stdout()
+    expect(text).toContain('file passed through an AI tool (Claude')
+    expect(text).toContain('Anthropic Files 1.0.0')
+    expect(text).toContain('“Claude provided this file at the request of a user.”')
+    expect(text).toContain('paragraph 1 — Figure 4. Classification.')
+    expect(text).toContain('Pictures in the document')
+
+    out = []
+    await main(['inspect', path, '--json'])
+    const report = JSON.parse(stdout())
+    expect(report.media).toEqual([
+      expect.objectContaining({
+        part: 'word/media/image1.png',
+        paragraph: 1,
+        caption: 'Figure 4. Classification.',
+      }),
+    ])
+    const c2pa = report.findings.find((finding: { kind: string }) => finding.kind === 'c2pa')
+    expect(c2pa.c2pa.origin).toBe('ai_tool')
+    expect(c2pa.placement).toEqual({ paragraph: 1, caption: 'Figure 4. Classification.' })
+  })
+
+  it('says what it scanned inside a PDF', async () => {
+    const path = await file(
+      'export.pdf',
+      pdf({
+        images: [
+          { data: jpeg([{ marker: 0xe1, data: exifSegment('x') }]), filters: ['DCTDecode'] },
+        ],
+      }),
+    )
+    await main(['inspect', path])
+    expect(stdout()).toContain('scanned: 1 image XObject (1 JPEG): 0 C2PA, 1 EXIF, 0 XMP')
+    expect(stdout()).toContain('scanned: 0 attached files: 0 C2PA')
+
+    out = []
+    await main(['inspect', path, '--json'])
+    expect(JSON.parse(stdout()).coverage).toHaveLength(2)
   })
 
   it('folds a crowd of carriers into a line per codepoint', async () => {
@@ -166,6 +235,12 @@ describe('clean', () => {
     const path = await file('marked.txt', MARKED)
     expect(await main(['clean', path, '--in-place'])).toBe(0)
     expect(await readFile(path, 'utf8')).toBe('Quarterly results.')
+  })
+
+  it('says removed once it has actually removed something', async () => {
+    await main(['clean', await file('marked.txt', MARKED), '--in-place'])
+    expect(stderr()).toMatch(/\d+ removed/)
+    expect(stderr()).not.toContain('removable')
   })
 
   it('refuses --in-place on stdin instead of guessing what to write', async () => {

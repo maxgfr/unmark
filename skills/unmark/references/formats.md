@@ -18,6 +18,30 @@ what is deliberately kept, and what is refused.
 profile, which is kept, or an **MPF block, which can hold an entire second
 photograph**. That is the one worth naming to a user.
 
+### What a C2PA manifest says
+
+Every C2PA manifest — PNG `caBX`, JPEG APP11 (reassembled across segments),
+WebP `C2PA`, HEIC/AVIF/MP4 `uuid` and `jumb`, a PDF attachment or JPEG 2000
+image — is **decoded, not only detected**: the JUMBF boxes, the CBOR claim and
+assertions, and the signer's name from the COSE certificate. The report gives
+the claim generator (`Anthropic Files 1.0.0`), every action with its software
+agent and digital source type, any action description, and the certificate's
+subject and issuer — read, **not verified**: no hash is recomputed and no
+signature checked.
+
+The label then classifies the file, and the difference matters:
+
+| Origin                           | Meaning                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| `created by generative AI`       | an action declares `trainedAlgorithmicMedia` or `compositeWithTrained…`               |
+| `file passed through an AI tool` | an AI product opened, provided or signed it — **no claim the content was made by AI** |
+| `edited`                         | actions declared, no AI involved                                                      |
+| `signed … no actions declared`   | a manifest with nothing in it but its generator                                       |
+| `could not be decoded`           | present, unreadable — never reported as absent                                        |
+
+Relay the second one carefully. `c2pa.opened` by Claude says a chat assistant
+handed the file back; it does not say the chart was drawn by a model.
+
 **Chunk removal, not re-encoding.** Dropping a PNG chunk leaves every other
 chunk's CRC valid, and JPEG's scan is copied verbatim, so two real camera JPEGs
 come out byte-identical in their pixels after EXIF and XMP are stripped.
@@ -49,7 +73,7 @@ that says why beats a plausible broken video.
 |                        | **tracked-change authors and timestamps**, comments, `word/people.xml`     |
 |                        | **RSIDs** — revision save ids that link documents to one machine           |
 |                        | **`docProps/thumbnail.*`** — a rendered picture of page one                |
-|                        | **EXIF inside `word/media/*`** — including GPS                             |
+|                        | **EXIF, XMP and C2PA inside `word/media/*`** — including GPS               |
 | **ODT**                | `meta.xml`, `Pictures/*` the same way                                      |
 | **EPUB**               | OPF `dc:creator`, `dc:contributor`, `dc:publisher`, `dc:date`, `calibre:*` |
 
@@ -63,6 +87,16 @@ relationship in `_rels/.rels`, and a relationship pointing at a part that is no
 longer there is how you get "the file is corrupt and cannot be opened".
 
 Zip timestamps are zeroed on write. A timestamp is metadata like any other.
+
+**Pictures in a Word document are placed.** `inspect` lists every picture in
+`word/media/` — marked or not — with the paragraph that anchors it (counted
+from 1 over every paragraph of the body, empty ones included) and the caption
+beside it: `word/media/image24.png  paragraph 606 — Figure 4. Classification…`.
+The caption is read from the picture's own paragraph, else the nearest caption
+above or below; when there is one on each side, the one on the same page (as
+Word last rendered it) wins, then the side the rest of the document uses. A
+picture used only in a header, footer or comment is listed as "not in the
+body". The same placement rides on each finding as `placement` in `--json`.
 
 **Not handled**: encrypted zips, ZIP64, multi-disk archives, OLE objects in
 `word/embeddings/`, and the _text_ of comments (only their authorship goes).
@@ -81,6 +115,32 @@ out fresh:
   written — this is the one that matters when a black rectangle was called a
   redaction
 
+**Pictures and attachments** — every image XObject reachable from the catalog
+is opened:
+
+- `/DCTDecode` alone is a JPEG byte for byte, so EXIF, XMP, IPTC and C2PA come
+  off the way they would from a `.jpg`, and the scan data is copied
+- a JPEG under another filter (`/FlateDecode /DCTDecode`) or a JPEG 2000
+  codestream is searched — C2PA, XMP, EXIF — and **reported, not rewritten**
+- raw pixel data (Flate, LZW, CCITT, JBIG2) has nowhere to keep metadata
+
+Attached files are opened too: a C2PA manifest store (`/AFRelationship
+/C2PA_Manifest`, or a store found in the bytes) is decoded and unlinked from
+`/AF` and the `/EmbeddedFiles` tree; an attached picture is reported.
+
+Every PDF report ends with what was scanned, whether or not anything turned up,
+so "nothing found" can be told from "not looked for":
+
+```
+scanned: 11 image XObjects (1 JPEG, 10 raw pixel data, which holds no metadata): 0 C2PA, 0 EXIF, 1 XMP
+scanned: 0 attached files: 0 C2PA
+```
+
+A PDF exported from Pages or Word re-encodes PNG figures as raw pixel data, so
+a manifest on a figure in the source document is gone from the PDF — the
+coverage line is how you can say so rather than guess. In `--json` it is the
+`coverage` array.
+
 Object streams are **expanded, not recompressed**, so no compression mismatch
 can corrupt anything. Every other stream's bytes are copied verbatim with its
 original filter.
@@ -97,11 +157,11 @@ than removing them.
 
 **Three refusals**
 
-| Condition                 | What happens                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------- |
-| `/Encrypt`                | Nothing is read and nothing is written. Reported `confirmed`.                    |
-| `/Sig` or `/ByteRange`    | Unchanged. Any edit voids the signature; `--force` proceeds and says it is void. |
-| A parse or verify failure | Falls back to the byte pass and states what that leaves behind.                  |
+| Condition                 | What happens                                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/Encrypt`                | Nothing is read and nothing is written. Reported `confirmed`.                                                                           |
+| `/Sig` or `/ByteRange`    | Unchanged; pictures and attachments are still scanned, read-only. Any edit voids the signature; `--force` proceeds and says it is void. |
+| A parse or verify failure | Falls back to the byte pass and states what that leaves behind.                                                                         |
 
 The encryption refusal fixes a bug that shipped: encrypted strings do not match
 the byte pass's patterns, so an encrypted PDF used to be reported **clean**.

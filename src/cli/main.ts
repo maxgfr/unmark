@@ -37,9 +37,10 @@ import {
   outcomeOf,
   type Finding,
   type Outcome,
+  type ReportMode,
   type Verdict,
 } from '../core/report.ts'
-import { decodeUtf8 } from '../core/container/types.ts'
+import { decodeUtf8, type MediaEntry } from '../core/container/types.ts'
 
 const USAGE = `unmark ${VERSION} — find, decode and strip watermarks and provenance marks
 
@@ -118,6 +119,7 @@ const colourVerdict = (verdict: Verdict) => paint(VERDICT_COLOR[verdict], verdic
 // report that answers only the second leaves the reader guessing at the first.
 const OUTCOME_COLOR: Record<Outcome, string> = {
   removed: '31',
+  removable: '33',
   kept: '32',
   available: '36',
   reported: '2',
@@ -127,7 +129,7 @@ const colourOutcome = (outcome: Outcome) => paint(OUTCOME_COLOR[outcome], outcom
 
 const pad = (text: string, width: number) => text.padEnd(width)
 
-function renderFindings(all: readonly Finding[], out: string[]): void {
+function renderFindings(all: readonly Finding[], out: string[], mode: ReportMode): void {
   if (all.length === 0) {
     out.push(dim('  nothing found'))
     return
@@ -149,7 +151,7 @@ function renderFindings(all: readonly Finding[], out: string[]): void {
   const indent = ' '.repeat(outcomeWidth + verdictWidth + kindWidth + positionWidth + 4)
 
   for (const finding of findings) {
-    const outcome = outcomeOf(finding)
+    const outcome = outcomeOf(finding, mode)
     // A byte offset into a zip is the same number for every part in it, so the
     // formats built on one say which part instead. `-` stays for the findings
     // that describe the whole document and have no position to give.
@@ -163,17 +165,63 @@ function renderFindings(all: readonly Finding[], out: string[]): void {
         `${finding.where ? `${dim(finding.where)} ` : ''}${dim(finding.label)}`,
     )
     if (finding.evidence) out.push(`  ${indent}${dim('└')} ${finding.evidence}`)
+    for (const action of finding.c2pa?.manifests.at(-1)?.actions ?? []) {
+      if (action.description)
+        out.push(`  ${indent}${dim(`${action.action}: “${action.description}”`)}`)
+    }
+    if (finding.placement) out.push(`  ${indent}${dim(placementOf(finding.placement))}`)
     if (finding.preserved) out.push(`  ${indent}${dim(finding.preserved)}`)
     if (finding.noFix) out.push(`  ${indent}${dim(finding.noFix)}`)
   }
 }
 
-function summarise(findings: readonly Finding[], out: string[]): void {
-  const counts: Record<Outcome, number> = { removed: 0, kept: 0, available: 0, reported: 0 }
-  for (const finding of findings) counts[outcomeOf(finding)] += 1
+const placementOf = (placement: { paragraph?: number; caption?: string }): string =>
+  [
+    placement.paragraph === undefined ? 'not in the body' : `paragraph ${placement.paragraph}`,
+    placement.caption,
+  ]
+    .filter(Boolean)
+    .join(' — ')
+
+/**
+ * Every picture in a Word document with where it sits, marked or not.
+ *
+ * A finding on `word/media/image24.png` is half an answer: the author knows
+ * their figures by number, not by part name. Listing the clean pictures too is
+ * what lets "two of these carry a manifest" be read as "Figures 4 and 7 do".
+ */
+function renderMedia(media: readonly MediaEntry[], out: string[]): void {
+  if (media.length === 0) return
+  out.push('', `  ${bold('Pictures in the document')}`)
+  const width = Math.max(...media.map((entry) => entry.part.length))
+  const where = Math.min(60, Math.max(...media.map((entry) => placementOf(entry).length)))
+  for (const entry of media) {
+    const marks =
+      entry.c2pa ??
+      (entry.marks > 0 ? `${entry.marks} mark${entry.marks === 1 ? '' : 's'}` : 'no marks')
+    out.push(
+      `  ${pad(entry.part, width)} ${dim(pad(placementOf(entry), where))}${
+        entry.marks > 0 ? `  ${paint('33', marks)}` : `  ${dim(marks)}`
+      }`,
+    )
+  }
+}
+
+function summarise(findings: readonly Finding[], out: string[], mode: ReportMode): void {
+  const counts: Record<Outcome, number> = {
+    removed: 0,
+    removable: 0,
+    kept: 0,
+    available: 0,
+    reported: 0,
+  }
+  for (const finding of findings) counts[outcomeOf(finding, mode)] += 1
 
   const parts = [
     counts.removed > 0 ? `${counts.removed} removed` : '',
+    counts.removable > 0
+      ? `${counts.removable} removable — nothing was changed, \`unmark clean\` removes them`
+      : '',
     counts.kept > 0 ? `${counts.kept} kept as legitimate` : '',
     counts.available > 0 ? `${counts.available} available behind an option` : '',
     counts.reported > 0 ? `${counts.reported} reported only` : '',
@@ -292,8 +340,12 @@ async function commandInspect(target: string, options: Options): Promise<number>
     )
   } else {
     const out = [`${bold(source.name)} ${dim(`· ${report.format}`)}`, '']
-    renderFindings([...report.findings, ...stylometry], out)
-    summarise([...report.findings, ...stylometry], out)
+    renderFindings([...report.findings, ...stylometry], out, 'inspect')
+    renderMedia(report.media ?? [], out)
+    if (report.coverage && report.coverage.length > 0) {
+      out.push('', ...report.coverage.map((line) => dim(`  scanned: ${line}`)))
+    }
+    summarise([...report.findings, ...stylometry], out, 'inspect')
     process.stdout.write(`${out.join('\n')}\n`)
   }
 
@@ -338,8 +390,8 @@ async function commandClean(target: string, options: Options): Promise<number> {
     }
 
     const out = [`${bold(source.name)} ${dim(`· ${result.format} · written in place`)}`, '']
-    renderFindings([...result.findings, ...result.preserved], out)
-    summarise([...result.findings, ...result.preserved], out)
+    renderFindings([...result.findings, ...result.preserved], out, 'clean')
+    summarise([...result.findings, ...result.preserved], out, 'clean')
     process.stderr.write(`${out.join('\n')}\n`)
     return 0
   }
@@ -509,7 +561,7 @@ async function commandAudit(target: string, options: Options): Promise<number> {
   const out: string[] = []
   for (const entry of marked) {
     out.push(`${bold(entry.file)} ${dim(`· ${entry.format}`)}`)
-    renderFindings(entry.findings, out)
+    renderFindings(entry.findings, out, 'inspect')
     out.push('')
   }
   out.push(dim(`  ${marked.length} file(s) carrying marks`))

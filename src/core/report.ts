@@ -5,6 +5,8 @@
 // people to ignore it. Separating what we *know* from what we *suspect* is the
 // difference between a report and an alarm.
 
+import type { C2paSummary } from './container/c2pa.ts'
+
 /** How confident the engine is that a finding is a real, deliberate mark. */
 export type Verdict =
   /** Structurally certain: a C2PA manifest, a tag-char run decoding to ASCII. */
@@ -113,6 +115,23 @@ export interface Finding {
    * them says nothing eleven times.
    */
   where?: string
+  /**
+   * What a C2PA manifest says, decoded: generator, actions, signer, and whether
+   * it declares AI-generated content or only that an AI tool handled the file.
+   */
+  c2pa?: C2paSummary
+  /**
+   * Where a picture embedded in a document sits in its text: the paragraph
+   * that anchors it, counted from 1 in document order, and the caption next to
+   * it. `word/media/image24.png` means nothing to the person who wrote the
+   * thesis; "paragraph 412, Figure 4" does.
+   */
+  placement?: Placement
+}
+
+export interface Placement {
+  paragraph: number
+  caption?: string
 }
 
 export interface CleanResult<T> {
@@ -137,15 +156,27 @@ export const isRemovable = (finding: Finding): boolean =>
  * the verdict, which answers a different question: a `confirmed` emoji joiner
  * is kept, a merely `probable` XMP packet is removed.
  */
-export type Outcome = 'removed' | 'kept' | 'available' | 'reported'
+export type Outcome = 'removed' | 'removable' | 'kept' | 'available' | 'reported'
 
-export const outcomeOf = (finding: Finding): Outcome =>
+/**
+ * Which command produced the findings.
+ *
+ * `inspect` changes nothing, so nothing it reports was removed: what `clean`
+ * would take out is `removable` there. Printing "28 removed" over a file that
+ * is byte-identical to the one that went in sent a reader to `shasum` to find
+ * out which of the two was lying.
+ */
+export type ReportMode = 'clean' | 'inspect'
+
+export const outcomeOf = (finding: Finding, mode: ReportMode = 'clean'): Outcome =>
   finding.available
     ? 'available'
     : finding.preserved
       ? 'kept'
       : isRemovable(finding)
-        ? 'removed'
+        ? mode === 'inspect'
+          ? 'removable'
+          : 'removed'
         : 'reported'
 
 /** What each machine-readable kind is called in a sentence. */
@@ -304,13 +335,23 @@ export const worstVerdict = (findings: readonly Finding[]): Verdict | undefined 
  * Lives here rather than beside the table because it is arithmetic over
  * findings, not a component — and the CLI needs the same three numbers.
  */
-export function summariseOutcomes(findings: readonly Finding[]): string {
+export function summariseOutcomes(
+  findings: readonly Finding[],
+  mode: ReportMode = 'clean',
+): string {
   if (findings.length === 0) return ''
-  const counts: Record<Outcome, number> = { removed: 0, kept: 0, available: 0, reported: 0 }
-  for (const finding of findings) counts[outcomeOf(finding)] += 1
+  const counts: Record<Outcome, number> = {
+    removed: 0,
+    removable: 0,
+    kept: 0,
+    available: 0,
+    reported: 0,
+  }
+  for (const finding of findings) counts[outcomeOf(finding, mode)] += 1
 
   return [
     counts.removed > 0 ? `${counts.removed} removed` : '',
+    counts.removable > 0 ? `${counts.removable} removable` : '',
     counts.kept > 0 ? `${counts.kept} kept` : '',
     counts.available > 0 ? `${counts.available} available` : '',
     counts.reported > 0 ? `${counts.reported} reported` : '',

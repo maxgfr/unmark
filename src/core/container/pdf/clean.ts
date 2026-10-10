@@ -48,6 +48,7 @@ import { countPages, loadDocument, lookup, reachable, resolve } from './objects.
 import type { PdfDocument, StoredObject } from './objects.ts'
 import { readXref } from './xref.ts'
 import { writePdf } from './write.ts'
+import { scanPdfMedia } from './media.ts'
 
 export interface PdfCleanOptions {
   /**
@@ -275,6 +276,9 @@ async function xmpEvidence(stream: PdfStream): Promise<string> {
 interface Rebuilt {
   output: Uint8Array
   findings: Finding[]
+  /** Marks found and left: inside an image whose stream cannot be rewritten as it is. */
+  preserved: Finding[]
+  coverage: string[]
   pages: number
 }
 
@@ -301,6 +305,12 @@ async function rebuild(doc: PdfDocument, signed: boolean): Promise<Rebuilt> {
   if (rootRef?.type !== 'ref') throw new Error('pdf: the trailer has no /Root reference')
   const catalog = asDict(resolve(doc, rootRef))
   if (!catalog) throw new Error('pdf: the catalog is missing')
+
+  // Pictures and attachments first: an image's own /Metadata stream is
+  // counted there before the pass below removes it with every other one.
+  const media = await scanPdfMedia(doc, reachable(doc, [rootRef]), true)
+  const preserved = media.findings.filter((found) => found.preserved)
+  findings.push(...media.findings.filter((found) => !found.preserved))
 
   // /Info: reported entry by entry, then unlinked from the trailer.
   const infoRef = doc.trailer.entries.get('Info')
@@ -430,7 +440,13 @@ async function rebuild(doc: PdfDocument, signed: boolean): Promise<Rebuilt> {
   }
   if (!objects.has(rootRef.num)) throw new Error('pdf: the catalog is not in the object map')
 
-  return { output: writePdf({ objects, root: rootRef }), findings, pages }
+  return {
+    output: writePdf({ objects, root: rootRef }),
+    findings,
+    preserved,
+    coverage: media.coverage,
+    pages,
+  }
 }
 
 // ---------------------------------------------------------------- verify
@@ -513,6 +529,7 @@ export async function cleanPdf(
     return {
       output: bytes,
       findings: [],
+      coverage: ['images and attached files not scanned: the document is encrypted'],
       preserved: [
         refusal(
           'Encrypted PDF — nothing was read and nothing was changed (no pass ran)',
@@ -527,10 +544,23 @@ export async function cleanPdf(
 
   const signed = isSigned(doc, src.text)
   if (signed && !options.force) {
+    // Read-only, so the signature survives: the pictures are still worth
+    // reporting on, and every mark found is kept with the same reason.
+    const rootRef = doc?.trailer.entries.get('Root')
+    const media =
+      doc && rootRef?.type === 'ref'
+        ? await scanPdfMedia(doc, reachable(doc, [rootRef]), false)
+        : undefined
     return {
       output: bytes,
       findings: [],
+      coverage: media?.coverage ?? [
+        'images and attached files not scanned: the document could not be parsed',
+      ],
       preserved: [
+        ...(media?.findings ?? []).map((found) =>
+          Object.assign(found, { preserved: 'a signed document — left exactly as it arrived' }),
+        ),
         refusal(
           'Digitally signed — the file was left exactly as it arrived (no pass ran)',
           'A signature covers a byte range of this file, so any edit voids it, including ' +
@@ -549,9 +579,10 @@ export async function cleanPdf(
       if (reason === undefined) {
         // Nothing found means nothing to change. Handing back a byte-identical
         // file is a stronger statement than handing back an equivalent one.
+        const { coverage, preserved } = rebuilt
         return rebuilt.findings.length === 0
-          ? { output: bytes, findings: [], preserved: [] }
-          : { output: rebuilt.output, findings: rebuilt.findings, preserved: [] }
+          ? { output: bytes, findings: [], preserved, coverage }
+          : { output: rebuilt.output, findings: rebuilt.findings, preserved, coverage }
       }
     } catch (error) {
       reason = messageOf(error)
@@ -573,5 +604,9 @@ export async function cleanPdf(
       ...fallback.findings,
     ],
     preserved: [],
+    coverage: [
+      'images and attached files not scanned: the document could not be rebuilt, and the ' +
+        'in-place pass does not open streams',
+    ],
   }
 }

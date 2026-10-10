@@ -49,6 +49,12 @@ If the report says the tells are `rule_of_three`, `marker_vocabulary`,
 ## The loop for marks
 
 1. **`inspect`** — changes nothing, prints what is there, where, and how sure.
+   What `clean` would strip is marked `removable`; never say it was removed.
+   A C2PA manifest is decoded — generator, actions, signer — and labelled
+   either _created by generative AI_ or _file passed through an AI tool_; only
+   the first says a model made the content. A Word document also lists every
+   picture with its paragraph and caption (`Figure 4…`), and a PDF report ends
+   with a `scanned:` line saying how many images and attachments were opened.
 2. **`decode`** when the report mentions a `stego_payload`. Carriers usually
    _encode_ something — a name, an ID, a URL. Deleting them without reading them
    throws away the only evidence of who marked the text and with what.

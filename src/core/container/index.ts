@@ -18,7 +18,7 @@ import { cleanIsobmff, sniffIsobmff } from './isobmff/index.ts'
 import { cleanZipDocument } from './zipdoc.ts'
 import { ooxmlFlavour, readZip, sniffZip, zipDocumentKind } from './zip.ts'
 import { cleanHtml, cleanMarkdown, cleanSvg, type TextCleanResult } from './markup.ts'
-import { decodeUtf8, encode, type ContainerResult } from './types.ts'
+import { decodeUtf8, encode, type ContainerResult, type MediaEntry } from './types.ts'
 
 import type { ContainerFormat } from './formats.ts'
 export type { ContainerFormat } from './formats.ts'
@@ -225,9 +225,22 @@ export async function inspectContainer(
   findings: Finding[]
   preserved: Finding[]
   textual: boolean
+  coverage?: string[]
+  media?: MediaEntry[]
 }> {
-  const { format, findings, preserved, textual } = await cleanContainer(bytes, name, options)
-  return { format, findings: [...findings, ...preserved].sort(byPosition), preserved, textual }
+  const { format, findings, preserved, textual, coverage, media } = await cleanContainer(
+    bytes,
+    name,
+    options,
+  )
+  return {
+    format,
+    findings: [...findings, ...preserved].sort(byPosition),
+    preserved,
+    textual,
+    ...(coverage ? { coverage } : {}),
+    ...(media ? { media } : {}),
+  }
 }
 
 export {
@@ -243,4 +256,4 @@ export {
   readZip,
 }
 export { writeZip } from './zip.ts'
-export type { ContainerResult, TextCleanResult }
+export type { ContainerResult, MediaEntry, TextCleanResult }

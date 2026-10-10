@@ -6,6 +6,7 @@ import {
   isRemovable,
   KIND_LABEL,
   outcomeOf,
+  summariseOutcomes,
   worstVerdict,
   type Finding,
 } from './report.ts'
@@ -183,6 +184,24 @@ describe('outcomeOf', () => {
 
   it('calls a style tell reported', () => {
     expect(outcomeOf(finding({ kind: 'stylometry', verdict: 'probable' }))).toBe('reported')
+  })
+
+  it('never says removed for a read-only pass', () => {
+    // inspect changes nothing; "28 removed" over an untouched file sent a
+    // reader to shasum to find out which of the two was wrong.
+    const xmp = finding({ kind: 'xmp', verdict: 'probable' })
+    expect(outcomeOf(xmp, 'inspect')).toBe('removable')
+    expect(outcomeOf(xmp, 'clean')).toBe('removed')
+    expect(outcomeOf(finding({ preserved: 'kept' }), 'inspect')).toBe('kept')
+  })
+})
+
+describe('summariseOutcomes', () => {
+  it('counts removable in inspect and removed in clean', () => {
+    const findings = [finding({ kind: 'xmp' }), finding({ kind: 'exif' })]
+    expect(summariseOutcomes(findings, 'inspect')).toBe('2 removable')
+    expect(summariseOutcomes(findings)).toBe('2 removed')
+    expect(summariseOutcomes([])).toBe('')
   })
 })
 

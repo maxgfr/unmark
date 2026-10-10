@@ -330,6 +330,10 @@ export interface PdfOptions {
   pieceInfo?: boolean
   /** A document-level script the viewer runs on open. */
   javaScript?: boolean
+  /** Image XObjects on page 1: the stream's bytes and the filters it claims, in order. */
+  images?: { data: Uint8Array; filters: string[] }[]
+  /** Files attached through the catalog's /EmbeddedFiles name tree and its /AF array. */
+  attachments?: { name: string; data: Uint8Array; subtype?: string; relationship?: string }[]
 }
 
 const pad10 = (value: number) => String(value).padStart(10, '0')
@@ -374,6 +378,8 @@ export function pdf(options: PdfOptions = {}): Uint8Array {
   const FIELD = take(options.signature === true)
   const ENCRYPT = take(options.encrypted === true)
   const LINEAR = take(options.linearized === true)
+  const IMAGES = (options.images ?? []).map(() => take())
+  const ATTACHMENTS = (options.attachments ?? []).map(() => ({ spec: take(), file: take() }))
   const OBJSTM = take(useObjStm)
   const XREF_STREAM = take(useXrefStream || options.hybrid === true)
   // One last number, handed out and then never given a body: a free object.
@@ -381,7 +387,16 @@ export function pdf(options: PdfOptions = {}): Uint8Array {
 
   const catalog = ['/Type /Catalog', `/Pages ${PAGES} 0 R`]
   if (options.xmp) catalog.push(`/Metadata ${METADATA} 0 R`)
-  if (options.javaScript) catalog.push(`/Names << /JavaScript ${JAVASCRIPT} 0 R >>`)
+  const names: string[] = []
+  if (options.javaScript) names.push(`/JavaScript ${JAVASCRIPT} 0 R`)
+  if (ATTACHMENTS.length > 0) {
+    const leaf = (options.attachments ?? [])
+      .map((attachment, index) => `(${attachment.name}) ${ATTACHMENTS[index]?.spec} 0 R`)
+      .join(' ')
+    names.push(`/EmbeddedFiles << /Names [${leaf}] >>`)
+    catalog.push(`/AF [${ATTACHMENTS.map((at) => `${at.spec} 0 R`).join(' ')}]`)
+  }
+  if (names.length > 0) catalog.push(`/Names << ${names.join(' ')} >>`)
   if (options.pieceInfo) {
     catalog.push('/PieceInfo << /SomeEditor << /Private (session-4711) >> >>')
   }
@@ -397,8 +412,37 @@ export function pdf(options: PdfOptions = {}): Uint8Array {
   bodies.set(
     PAGE,
     `<< /Type /Page /Parent ${PAGES} 0 R /MediaBox [0 0 200 100] ` +
-      `/Resources << /Font << /F1 ${FONT} 0 R >> >> /Contents ${CONTENTS} 0 R >>`,
+      `/Resources << /Font << /F1 ${FONT} 0 R >>${
+        IMAGES.length > 0
+          ? ` /XObject << ${IMAGES.map((num, index) => `/Im${index + 1} ${num} 0 R`).join(' ')} >>`
+          : ''
+      } >> /Contents ${CONTENTS} 0 R >>`,
   )
+  for (const [index, image] of (options.images ?? []).entries()) {
+    bodies.set(
+      IMAGES[index] as number,
+      streamObject(
+        '/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB ' +
+          `/BitsPerComponent 8 /Filter [${image.filters.map((filter) => `/${filter}`).join(' ')}]`,
+        image.data,
+      ),
+    )
+  }
+  for (const [index, attachment] of (options.attachments ?? []).entries()) {
+    const at = ATTACHMENTS[index] as { spec: number; file: number }
+    bodies.set(
+      at.spec,
+      `<< /Type /Filespec /F (${attachment.name}) /UF (${attachment.name}) /EF << /F ${at.file} 0 R >>` +
+        `${attachment.relationship ? ` /AFRelationship /${attachment.relationship}` : ''} >>`,
+    )
+    bodies.set(
+      at.file,
+      streamObject(
+        `/Type /EmbeddedFile${attachment.subtype ? ` /Subtype /${attachment.subtype}` : ''}`,
+        attachment.data,
+      ),
+    )
+  }
   const payload = options.compressedContent ? zlibStored(content) : content
   const filter = options.compressedContent ? '/Filter /FlateDecode ' : ''
   bodies.set(

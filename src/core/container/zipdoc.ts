@@ -8,7 +8,8 @@
 // editing time and the revision count are all gone.
 
 import type { Finding, Verdict } from '../report.ts'
-import { decodeUtf8, encode, snippet, type ContainerResult } from './types.ts'
+import { decodeUtf8, encode, snippet, type ContainerResult, type MediaEntry } from './types.ts'
+import { placeMedia } from './docx-media.ts'
 import { readZip, writeZip, zipDocumentKind, type ZipEntry } from './zip.ts'
 import { cleanPng, sniffPng } from './png.ts'
 import { cleanJpeg, sniffJpeg } from './jpeg.ts'
@@ -340,6 +341,12 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
   const isEpub = zipDocumentKind(entries) === 'epub'
   const findings: Finding[] = []
   const rebuilt: ZipEntry[] = []
+  // Only a Word body has paragraphs to place a picture in. Every picture is
+  // listed, marked or not, so "image24 carries a manifest" can be read next to
+  // "and it is Figure 4" — and so a clean picture is visibly clean.
+  const isWord = entries.some((entry) => entry.name === 'word/document.xml')
+  const placements = isWord ? placeMedia(entries) : new Map()
+  const media: MediaEntry[] = []
 
   for (const entry of entries) {
     const rule = PARTS[entry.name]
@@ -452,9 +459,19 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
     if (MEDIA_PATH.test(entry.name) || (isEpub && IMAGE_FILE.test(entry.name))) {
       // eslint-disable-next-line no-await-in-loop -- entries are cleaned in order
       const cleaned = await cleanEmbeddedImage(entry.data)
+      const placement = placements.get(entry.name)
+      if (isWord && entry.name.startsWith('word/media/')) {
+        const c2pa = cleaned?.findings.find((finding) => finding.c2pa)?.c2pa
+        media.push({
+          part: entry.name,
+          ...placement,
+          marks: cleaned?.findings.length ?? 0,
+          ...(c2pa ? { c2pa: c2pa.statement } : {}),
+        })
+      }
       if (cleaned && cleaned.findings.length > 0) {
         for (const finding of cleaned.findings) {
-          findings.push({ ...finding, where: entry.name })
+          findings.push({ ...finding, where: entry.name, ...(placement ? { placement } : {}) })
         }
         rebuilt.push({
           name: entry.name,
@@ -468,8 +485,18 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
     rebuilt.push(entry)
   }
 
-  return { output: await writeZip(rebuilt), findings, preserved: [] }
+  return {
+    output: await writeZip(rebuilt),
+    findings,
+    preserved: [],
+    ...(isWord ? { media: media.sort(byParagraph) } : {}),
+  }
 }
+
+/** Document order, with the pictures the body never uses at the end. */
+const byParagraph = (a: MediaEntry, b: MediaEntry): number =>
+  (a.paragraph ?? Number.POSITIVE_INFINITY) - (b.paragraph ?? Number.POSITIVE_INFINITY) ||
+  a.part.localeCompare(b.part, undefined, { numeric: true })
 
 /**
  * Where a package keeps the pictures someone put in it.

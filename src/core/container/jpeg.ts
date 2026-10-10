@@ -6,7 +6,16 @@
 // quality to remove a text field.
 
 import type { Finding, FindingKind, Verdict } from '../report.ts'
-import { ascii, concat, decodeUtf8, snippet, startsWith, type ContainerResult } from './types.ts'
+import {
+  ascii,
+  concat,
+  decodeUtf8,
+  readU32,
+  snippet,
+  startsWith,
+  type ContainerResult,
+} from './types.ts'
+import { withC2pa } from './c2pa.ts'
 
 export const sniffJpeg = (bytes: Uint8Array) => startsWith(bytes, [0xff, 0xd8, 0xff])
 
@@ -116,10 +125,26 @@ function classify(marker: number, data: Uint8Array): Segment | undefined {
   return undefined
 }
 
+/**
+ * One JUMBF box split across APP11 segments, keyed by its box instance number.
+ *
+ * A segment holds at most 64 KB, and a C2PA store with a certificate chain and
+ * a thumbnail is routinely bigger. JPEG XT splits it: every segment starts with
+ * `JP`, the instance number and a sequence number, and every segment after the
+ * first repeats the box's own length and type before carrying on.
+ */
+interface JumbfRun {
+  /** Index in `findings` of the first segment's finding, which gets the decoded manifest. */
+  index: number
+  header: number
+  parts: Uint8Array[]
+}
+
 export function cleanJpeg(bytes: Uint8Array): ContainerResult {
   const findings: Finding[] = []
   const preserved: Finding[] = []
   const kept: Uint8Array[] = [bytes.subarray(0, 2)] // SOI
+  const jumbf = new Map<number, JumbfRun>()
 
   let offset = 2
   while (offset + 4 <= bytes.length) {
@@ -165,6 +190,16 @@ export function cleanJpeg(bytes: Uint8Array): ContainerResult {
         preserved.push(finding)
         kept.push(bytes.subarray(offset, offset + 2 + length))
       } else {
+        if (marker === 0xeb && data[0] === 0x4a && data[1] === 0x50 && data.length > 16) {
+          const instance = ((data[2] ?? 0) << 8) | (data[3] ?? 0)
+          const run = jumbf.get(instance)
+          if (run) {
+            run.parts.push(data.subarray(8 + run.header))
+          } else {
+            const header = readU32(data, 8) === 1 ? 16 : 8
+            jumbf.set(instance, { index: findings.length, header, parts: [data.subarray(8)] })
+          }
+        }
         findings.push(finding)
       }
     } else {
@@ -177,6 +212,11 @@ export function cleanJpeg(bytes: Uint8Array): ContainerResult {
   // A truncated or unparseable tail is still the user's file: copy the rest
   // rather than silently returning a shorter image.
   if (offset < bytes.length) kept.push(bytes.subarray(offset))
+
+  for (const run of jumbf.values()) {
+    const first = findings[run.index]
+    if (first) findings[run.index] = withC2pa(first, concat(run.parts))
+  }
 
   return { output: concat(kept), findings, preserved }
 }

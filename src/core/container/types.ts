@@ -14,6 +14,31 @@ export interface ContainerResult {
   findings: Finding[]
   /** Metadata matched but deliberately kept, with the reason on each. */
   preserved: Finding[]
+  /**
+   * What was looked at, one line each, whether or not anything turned up.
+   *
+   * "Nothing found" and "not looked for" read the same in a list of findings,
+   * and only the first is reassuring. A PDF whose images were never opened is
+   * the case that made this necessary: its report showed `/Info` and nothing
+   * else, and nobody could tell whether a manifest had been lost on export or
+   * simply not searched for. Not findings, so `audit` does not count them.
+   */
+  coverage?: string[]
+  /** Every picture in a document, with where it sits, marked or not. */
+  media?: MediaEntry[]
+}
+
+export interface MediaEntry {
+  /** The part inside the package: `word/media/image24.png`. */
+  part: string
+  /** The paragraph that anchors it, from 1 in document order; absent when the body never uses it. */
+  paragraph?: number
+  /** The caption beside it — "Figure 4. …" — when one is near enough to be its own. */
+  caption?: string
+  /** How many findings the picture itself carries. */
+  marks: number
+  /** The C2PA classification when the picture carries a manifest. */
+  c2pa?: string
 }
 
 export const startsWith = (bytes: Uint8Array, signature: readonly number[]): boolean =>

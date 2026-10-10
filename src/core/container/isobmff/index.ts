@@ -28,6 +28,7 @@
 
 import { byPosition, type Finding } from '../../report.ts'
 import { ascii, concat, decodeUtf8, readU32, snippet, type ContainerResult } from '../types.ts'
+import { withC2pa } from '../c2pa.ts'
 import {
   collect,
   containerChildren,
@@ -103,6 +104,21 @@ function printableRuns(data: Uint8Array, minimum = 6): string[] {
 }
 
 /**
+ * The JUMBF store inside C2PA's `uuid` box.
+ *
+ * The C2PA BMFF binding puts a full-box header, a NUL-terminated purpose
+ * string and, for `manifest`, a 64-bit Merkle offset in front of the store.
+ */
+function c2paPayload(bytes: Uint8Array, box: Box): Uint8Array {
+  const purposeStart = box.body + 4
+  const nul = bytes.indexOf(0, purposeStart)
+  if (nul === -1 || nul >= box.end) return bytes.subarray(box.end, box.end)
+  const purpose = ascii(bytes, purposeStart, nul - purposeStart)
+  const start = nul + 1 + (purpose === 'manifest' ? 8 : 0)
+  return bytes.subarray(Math.min(start, box.end), box.end)
+}
+
+/**
  * What a box is, or undefined to copy it through untouched.
  *
  * A finding that carries `preserved` is one to report and leave alone; anything
@@ -121,7 +137,10 @@ function classify(
 
   if (box.type === 'uuid') {
     if (box.uuid === C2PA_UUID) {
-      return { kind: 'c2pa', verdict: 'confirmed', ...at, label: 'uuid — C2PA manifest' }
+      return withC2pa(
+        { kind: 'c2pa', verdict: 'confirmed', ...at, label: 'uuid — C2PA manifest' },
+        c2paPayload(bytes, box),
+      )
     }
     if (box.uuid === XMP_UUID) {
       const packet = decodeUtf8(bytes.subarray(box.body, box.end))
@@ -139,7 +158,10 @@ function classify(
 
   // JUMBF is the box C2PA signs its manifest into when it is not using a UUID.
   if (box.type === 'jumb') {
-    return { kind: 'c2pa', verdict: 'confirmed', ...at, label: 'jumb — JUMBF / C2PA provenance' }
+    return withC2pa(
+      { kind: 'c2pa', verdict: 'confirmed', ...at, label: 'jumb — JUMBF / C2PA provenance' },
+      bytes.subarray(box.start, box.end),
+    )
   }
 
   if (box.type === 'colr') {
