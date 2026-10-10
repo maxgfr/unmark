@@ -24,8 +24,28 @@ export type Tier = 1 | 2 | 3
  *   lexicon            vocabulary                         → lexicon
  *   structure, discourse  the shape of sentences and turns → discourse
  *   residue, formatting   left over from a chat window      → forensic
+ *   register           formulas of a register (academic), read only when
+ *                      asked for, tier 3                   → discourse
+ *   hedging, phrasing  the phrases `--humanise` rewrites, and stacked
+ *                      hedges                              → none yet
+ *
+ * hedging and phrasing are found, located and reported, and weigh nothing:
+ * the calibration was fitted without them, and a habit that has not been
+ * measured on the corpus does not get to move a verdict. They count once a
+ * refit has given them a weight.
  */
-export type Category = 'lexicon' | 'structure' | 'discourse' | 'residue' | 'formatting'
+export type Category =
+  | 'lexicon'
+  | 'structure'
+  | 'discourse'
+  | 'residue'
+  | 'formatting'
+  | 'register'
+  | 'hedging'
+  | 'phrasing'
+
+/** Categories that are reported but weigh nothing in a score, until a refit. */
+export const UNWEIGHTED: ReadonlySet<Category> = new Set<Category>(['hedging', 'phrasing'])
 
 export interface Pattern {
   /** `lang.category.name`, stable: reports and judges cite it. */

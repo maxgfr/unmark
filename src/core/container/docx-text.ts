@@ -35,6 +35,8 @@ export interface DocParagraph {
 export interface DocText {
   /** Kept paragraphs, separated by a blank line. */
   text: string
+  /** Every paragraph's text, kept or not, one per line: what a quote is checked against. */
+  raw: string
   paragraphs: DocParagraph[]
   /** Paragraphs left out, by reason. */
   skipped: Record<SkipReason, number>
@@ -335,6 +337,7 @@ export async function docxText(bytes: Uint8Array): Promise<DocText | undefined> 
   const paged = declaredPages > 1 && breaks + 1 >= 0.9 * declaredPages
 
   const parts: string[] = []
+  const all: string[] = []
   const paragraphs: DocParagraph[] = []
   let length = 0
   let page = 1
@@ -348,6 +351,7 @@ export async function docxText(bytes: Uint8Array): Promise<DocText | undefined> 
     const startPage = page
     page += p.breaksAfter
     if (!text) continue
+    all.push(text)
     const index = p.ordinal
 
     const name = styleName(styles, p.style)
@@ -413,5 +417,5 @@ export async function docxText(bytes: Uint8Array): Promise<DocText | undefined> 
     })
   }
 
-  return { text: parts.join('\n\n'), paragraphs, skipped, paged }
+  return { text: parts.join('\n\n'), raw: all.join('\n'), paragraphs, skipped, paged }
 }

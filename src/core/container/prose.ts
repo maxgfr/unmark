@@ -7,7 +7,12 @@
 // returned text belongs to, so a report can point at the document a reader
 // holds rather than at an intermediate text file.
 
-import { layoutFromPages, type Layout, type PageText } from '../text/authorship/locate.ts'
+import {
+  layoutFromPages,
+  withoutFolio,
+  type Layout,
+  type PageText,
+} from '../text/authorship/locate.ts'
 import { docxText, type SkipReason } from './docx-text.ts'
 import { readTextual } from './index.ts'
 import { pdfText } from './pdf/text.ts'
@@ -34,6 +39,8 @@ export interface Prose {
   format: ContainerFormat
   layout?: Layout
   source?: ProseSource
+  /** The container's whole text, nothing left out: what a quote is checked against. */
+  raw?: string
 }
 
 async function isDocx(bytes: Uint8Array): Promise<boolean> {
@@ -57,6 +64,7 @@ export async function readProse(bytes: Uint8Array, name?: string): Promise<Prose
     const { text, layout } = layoutFromPages(read.pages)
     return {
       text,
+      raw: read.pages.map((page) => withoutFolio(page.text)).join('\n'),
       format: 'Text',
       layout,
       source: {
@@ -76,6 +84,7 @@ export async function readProse(bytes: Uint8Array, name?: string): Promise<Prose
     ) as Partial<Record<SkipReason, number>>
     return {
       text: read.text,
+      raw: read.raw,
       format: 'Text',
       layout: { paragraphs: read.paragraphs },
       source: {

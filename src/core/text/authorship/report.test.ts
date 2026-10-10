@@ -76,6 +76,8 @@ const REPORT: AuthorshipReport = {
   ],
   technicalMarks: [],
   fileMarks: [],
+  recaps: [],
+  coverage: { register: 'general', academicCues: false, patterns: 300, matched: 1, counted: 1 },
   style: { words: 412, sentences: 21, paragraphs: 4, measurable: true, metrics: [] },
   notEvidence: NOT_EVIDENCE,
   disclaimer: DISCLAIMER,

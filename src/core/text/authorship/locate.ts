@@ -42,6 +42,14 @@ export function searchable(text: string): string {
     .replaceAll(/[^\p{L}\p{N}]+/gu, '')
 }
 
+/**
+ * A page's text without its folio: a paragraph that is only a page number,
+ * first or last. Left in, it sits in the middle of every sentence that runs
+ * across a page break, and the sentence is no longer found.
+ */
+export const withoutFolio = (text: string): string =>
+  text.replace(/^\s*[\divxlc]{1,6}[^\S\n]*\n+/iu, '').replace(/\n+[^\S\n]*[\divxlc]{1,6}\s*$/iu, '')
+
 /** A needle long enough to be unique, short enough to survive an extraction slip. */
 const NEEDLE = 48
 /** Shorter than this and a match says little about where the paragraph is. */
@@ -61,7 +69,7 @@ function indexPages(pages: readonly PageText[]): PageIndex {
   for (const page of pages) {
     starts.push(haystack.length)
     numbers.push(page.page)
-    haystack += searchable(page.text)
+    haystack += searchable(withoutFolio(page.text))
   }
   return { haystack, starts, numbers }
 }

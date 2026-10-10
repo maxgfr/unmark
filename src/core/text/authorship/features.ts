@@ -13,7 +13,15 @@
 // so each token enters and leaves a window once.
 
 import type { Finding, FindingKind } from '../../report.ts'
-import { CATALOGUE, applies, matchesOf, type Pattern } from './catalogue/index.ts'
+import {
+  ACADEMIC,
+  CATALOGUE,
+  UNWEIGHTED,
+  applies,
+  matchesOf,
+  type Pattern,
+} from './catalogue/index.ts'
+import { hedgingHits } from './hedges.ts'
 import { tokens, type Lang, type Segmentation } from './segment.ts'
 
 export interface Hit {
@@ -76,6 +84,15 @@ function sealed(mask: Uint8Array, start: number, end: number): boolean {
 const isResidue = (entry: Pattern) =>
   entry.category === 'residue' || entry.category === 'formatting'
 
+const unweighted = (entry: Pattern) => UNWEIGHTED.has(entry.category)
+
+/** Which register's formulas are read on top of the general catalogue. */
+export type Register = 'general' | 'academic'
+
+/** The entries a scan reads, for a register. */
+export const entriesFor = (register: Register = 'general'): readonly Pattern[] =>
+  register === 'academic' ? [...CATALOGUE, ...ACADEMIC] : CATALOGUE
+
 /**
  * Every catalogue match in `text` that the tier rules let count.
  *
@@ -83,9 +100,14 @@ const isResidue = (entry: Pattern) =>
  * is read everywhere. A match that touches a sealed span — a quotation, code —
  * is dropped: quoting "I hope this helps" is not writing it.
  */
-export function scan(text: string, seg: Segmentation, format?: string): Hit[] {
+export function scan(
+  text: string,
+  seg: Segmentation,
+  format?: string,
+  register: Register = 'general',
+): Hit[] {
   const hits: Hit[] = []
-  for (const entry of CATALOGUE) {
+  for (const entry of entriesFor(register)) {
     if (!applies(entry, format)) continue
     for (const { start, end } of matchesOf(entry, text)) {
       if (sealed(seg.mask, start, end)) continue
@@ -116,6 +138,9 @@ export function scan(text: string, seg: Segmentation, format?: string): Hit[] {
     const paragraph = hit.sentence === -1 ? -1 : (seg.sentences[hit.sentence]?.paragraphIndex ?? -1)
     if (hit.entry.tier === 1 || (hit.entry.tier === 2 && (tierTwo.get(paragraph) ?? 0) >= 2)) {
       hit.counted = true
+      // An unweighted habit is reported and weighs nothing, and so it cannot
+      // be the company a tier-3 entry needs either.
+      if (unweighted(hit.entry)) continue
       hit.weight = TIER_WEIGHT[hit.entry.tier]
       if (hit.sentence !== -1) backed.add(hit.sentence)
     }
@@ -127,7 +152,8 @@ export function scan(text: string, seg: Segmentation, format?: string): Hit[] {
     }
   }
 
-  return hits
+  hits.push(...hedgingHits(text, seg))
+  return hits.sort((a, b) => a.start - b.start)
 }
 
 /** How far back a content word counts as "said already". */
@@ -172,8 +198,12 @@ export function wordReuse(text: string, seg: Segmentation): { share: number; tok
  * où" — are two habits and both count.
  */
 function oneHitPerPhrase(hits: readonly Hit[], length: number): Hit[] {
+  // Unweighted entries rank below every weighted one, so a phrase they share
+  // stays with the entry that scores it and the score does not move.
   const strength = (hit: Hit) =>
-    (hit.entry.category === 'residue' ? 0 : hit.entry.tier) * 10_000 - (hit.end - hit.start)
+    (unweighted(hit.entry) ? 10 : 0) * 10_000 +
+    (hit.entry.category === 'residue' ? 0 : hit.entry.tier) * 10_000 -
+    (hit.end - hit.start)
   const ranked = [...hits].sort((a, b) => strength(a) - strength(b) || a.start - b.start)
   const owner = new Int32Array(length).fill(-1)
   const kept: Hit[] = []
@@ -234,7 +264,7 @@ export function measure(
   const phrase = new Float64Array(out.length)
   const structure = new Float64Array(out.length)
   for (const hit of hits) {
-    if (!hit.counted || hit.sentence === -1) continue
+    if (!hit.counted || hit.sentence === -1 || unweighted(hit.entry)) continue
     const features = out[hit.sentence] as SentenceFeatures
     const at = hit.sentence
     if (hit.entry.category === 'lexicon') phrase[at] = (phrase[at] ?? 0) + hit.weight

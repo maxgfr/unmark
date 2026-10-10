@@ -21,7 +21,10 @@ import { protectedMask } from '../regions.ts'
 import { lineIndex } from '../lines.ts'
 import { analyzeStyle } from '../stylometry.ts'
 import { CALIBRATION, type Calibration } from './calibration.ts'
-import { measure, scan, wordReuse, type Hit } from './features.ts'
+import { entriesFor, measure, scan, wordReuse, type Hit, type Register } from './features.ts'
+import { UNWEIGHTED } from './catalogue/index.ts'
+import { recaps } from './recap.ts'
+import { blocksOf } from '../regions.ts'
 import { technicalMarks } from './forensics.ts'
 import { locator, type Layout } from './locate.ts'
 import {
@@ -54,6 +57,11 @@ export interface DetectOptions {
   calibration?: Calibration
   /** List every sentence in `spans`, not only those in a band. For evaluation. */
   allSpans?: boolean
+  /**
+   * List the catalogue matches the tier rules did not count too, marked
+   * `counted: false`. For `sweep`, which lists every habit however isolated.
+   */
+  allFindings?: boolean
   /** Paragraphs, sections and pages of the document the text came from. */
   layout?: Layout
   /** Marks of the file the text came from, from `inspect`. */
@@ -62,6 +70,20 @@ export interface DetectOptions {
   singleBlock?: boolean
   /** What the text was read from, carried into the report as it is. */
   document?: DocumentSource
+  /** Also read the formulas of a register, tier 3: `academic`. */
+  register?: Register
+}
+
+/** Markers of academic prose, per thousand words, above which the text reads as academic. */
+const ACADEMIC_CUES =
+  /\[\d{1,3}(?:\s*[,–-]\s*\d{1,3})*\]|\bet al\.|\b(?:95\s?%\s?CI|IC\s?(?:à\s)?95\s?%)|\bp\s?[<=>]\s?0[.,]\d/gu
+const ACADEMIC_RATE = 2
+
+/** The register a text reads as, from its citations and statistics. */
+export function readsAcademic(text: string, words: number): boolean {
+  if (words === 0) return false
+  const cues = [...text.matchAll(ACADEMIC_CUES)].length
+  return (cues / words) * 1000 >= ACADEMIC_RATE
 }
 
 /**
@@ -119,9 +141,11 @@ function htmlAsProse(html: string): string {
 const severityOf = (hit: Hit): Severity =>
   hit.entry.category === 'residue'
     ? 'high'
-    : hit.entry.category === 'formatting' || hit.entry.tier === 1
-      ? 'medium'
-      : 'low'
+    : UNWEIGHTED.has(hit.entry.category) || hit.entry.category === 'register'
+      ? 'low'
+      : hit.entry.category === 'formatting' || hit.entry.tier === 1
+        ? 'medium'
+        : 'low'
 
 const labelOf = (hit: Hit): EvidenceLabel =>
   hit.entry.category === 'residue' || hit.entry.category === 'formatting'
@@ -282,7 +306,8 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
   // Lines and columns always address the input as given, not its prose view.
   const seg = segment(text, protectedMask(text), lineIndex(input))
   const routing = route(text, seg, options.lang ?? 'auto')
-  const hits = scan(text, seg, options.format)
+  const register = options.register ?? 'general'
+  const hits = scan(text, seg, options.format, register)
   const marks = technicalMarks(input)
   const scored = scoreSentences(seg, measure(text, seg, hits, marks), hits)
   const style = analyzeStyle(text)
@@ -323,7 +348,8 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
     humanReachable: result.humanReachable,
   }
 
-  const findings: AuthorshipFinding[] = counted.map((hit) => {
+  const listedHits = options.allFindings === true ? hits : counted
+  const findings: AuthorshipFinding[] = listedHits.map((hit) => {
     const at = seg.index.locate(hit.start)
     const [from, to] = contextOf(text, seg, hit)
     return {
@@ -340,6 +366,7 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
       fixHint: hit.entry.fixHint,
       evidenceLabel: labelOf(hit),
       severity: severityOf(hit),
+      ...(hit.counted ? {} : { counted: false }),
       ...located(hit.start, hit.end),
     }
   })
@@ -415,6 +442,60 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
     })
   })
 
+  // The formulas of a register, found alone, are named as what they are.
+  const isolated = new Map<string, { sample: string; count: number }>()
+  for (const hit of hits) {
+    if (hit.entry.category !== 'register' || hit.counted) continue
+    const phrase = text.slice(hit.start, hit.end).replaceAll(/\s+/gu, ' ').toLowerCase()
+    const entry = isolated.get(hit.entry.id) ?? { sample: phrase, count: 0 }
+    entry.count += 1
+    isolated.set(hit.entry.id, entry)
+  }
+  const notEvidence =
+    isolated.size === 0
+      ? NOT_EVIDENCE
+      : [
+          ...NOT_EVIDENCE,
+          `Formulas of the academic register, each on its own here and so not counted: ${[...isolated.values()].map((e) => `“${e.sample}”${e.count > 1 ? ` ×${e.count}` : ''}`).join(', ')}.`,
+        ]
+
+  const langs = new Set<string>(['any', ...routing.paragraphs.filter(Boolean)] as string[])
+  const read = entriesFor(register).filter((entry) => langs.has(entry.lang))
+  const coverage = {
+    register,
+    academicCues: readsAcademic(text, seg.words),
+    patterns: read.length,
+    matched: new Set(hits.map((hit) => hit.entry.id)).size,
+    counted: new Set(hits.filter((hit) => hit.counted).map((hit) => hit.entry.id)).size,
+  }
+
+  const headings = blocksOf(text)
+    .filter((block) => block.kind === 'heading')
+    .map((block) => ({
+      start: block.start,
+      title: text
+        .slice(block.start, block.end)
+        .replace(/^#+\s*/u, '')
+        .trim(),
+    }))
+  const sectionOf = (offset: number, paragraph: number): string => {
+    if (options.layout) return where(offset)?.section ?? '(before the first heading)'
+    const heading = headings.findLast((h) => h.start <= offset)
+    return heading?.title ?? `¶${paragraph + 1}`
+  }
+  const loops = options.singleBlock
+    ? []
+    : recaps(text, seg, sectionOf, options.layout ? '(before the first heading)' : undefined).map(
+        (recap) => ({
+          ...recap,
+          occurrences: recap.occurrences.map((o) => ({
+            ...o,
+            line: seg.index.locate(o.start).line,
+            ...located(o.start, o.end),
+          })),
+        }),
+      )
+
   return {
     schemaVersion: 1,
     engine: { name: 'unmark', version: VERSION },
@@ -471,8 +552,10 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
           },
         }
       : {}),
+    recaps: loops,
+    coverage,
     style,
-    notEvidence: NOT_EVIDENCE,
+    notEvidence,
     disclaimer: DISCLAIMER,
   }
 }
@@ -480,6 +563,7 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
 export {
   ABSENCE_NOTE,
   authorshipFindings,
+  coverageSentence,
   DISCLAIMER,
   documentSentence,
   foundNothing,
@@ -496,13 +580,22 @@ export type {
   DocumentSource,
   FileMark,
   LanguageBlock,
+  Coverage,
   LocatedFinding,
   Location,
+  RecapLoop,
   RenderOptions,
   UnsupportedSegment,
 } from './report.ts'
 export type { Layout, LayoutParagraph, PageText } from './locate.ts'
-export { describeLocation, layoutFromPages, searchable, sectionLabel } from './locate.ts'
+export type { Register } from './features.ts'
+export {
+  describeLocation,
+  layoutFromPages,
+  searchable,
+  sectionLabel,
+  withoutFolio,
+} from './locate.ts'
 export type { AuthorshipVerdict, Confidence, AbstainReason } from './verdict.ts'
 export type { ExternalSignal, Signal, EvidenceLabel } from './signals.ts'
 export type { Calibration } from './calibration.ts'

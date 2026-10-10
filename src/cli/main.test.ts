@@ -765,3 +765,91 @@ describe('detect on a .docx or a PDF', () => {
     expect(stderr()).toContain('--pages needs a PDF')
   })
 })
+
+describe('sweep', () => {
+  const ARTICLE = [
+    '## Discussion',
+    '',
+    'To our knowledge, this is the longest series [12]. These data cannot be directly extrapolated, but they could support the plausibility of a risk [32].',
+    '',
+    'The result could potentially change with a larger series [4].',
+  ].join('\n')
+  const parse = () => JSON.parse(stdout())
+
+  it('lists every sentence with a habit, quoted and checked against the file', async () => {
+    const path = await file('article.md', ARTICLE)
+    expect(await main(['sweep', path, '--json'])).toBe(0)
+    const { rows, counts } = parse()
+    expect(rows.length).toBe(3)
+    expect(counts.stacked_hedge).toBeGreaterThanOrEqual(1)
+    for (const row of rows) expect(row.quote.found).toEqual([path])
+    expect(rows.at(-1).rewrite).toMatchObject({ verified: true, source: 'rule' })
+  })
+
+  it('renders the table current text → replace with', async () => {
+    await main(['sweep', await file('article.md', ARTICLE), '--format', 'md'])
+    expect(stdout()).toContain('| Where | Current text | Replace with |')
+    expect(stdout()).toContain('## Discussion')
+  })
+
+  it('prints the prompt for an agent and applies its answer through the gate', async () => {
+    const path = await file('article.md', ARTICLE)
+    await main(['sweep', path, '--print-prompt'])
+    const prompt = stdout()
+    const id = /"id": "(S\d+)"/.exec(prompt.slice(prompt.indexOf('cannot be directly') - 200))?.[1]
+    expect(id).toBeDefined()
+    out = []
+    const answers = await file(
+      'rewrites.json',
+      JSON.stringify([
+        { id, rewrite: 'These data concern another device, but they make a risk plausible [32].' },
+      ]),
+    )
+    await main(['sweep', path, '--apply', answers, '--json'])
+    const row = parse().rows.find((r: { id: string }) => r.id === id)
+    expect(row.rewrite).toMatchObject({ source: 'agent', verified: true })
+  })
+
+  it('marks a rewrite that lost a reference call as rejected, never proposed', async () => {
+    const path = await file('article.md', ARTICLE)
+    await main(['sweep', path, '--json'])
+    const { id } = parse().rows.find((r: { text: string }) => r.text.includes('cannot be'))
+    out = []
+    const answers = await file(
+      'rewrites.json',
+      JSON.stringify([{ id, rewrite: 'A risk is plausible.' }]),
+    )
+    await main(['sweep', path, '--apply', answers, '--format', 'md'])
+    expect(stdout()).toContain('rewrite rejected')
+  })
+
+  it('refuses an --apply file that is not JSON', async () => {
+    const code = await main([
+      'sweep',
+      await file('a.md', ARTICLE),
+      '--apply',
+      await file('r.json', '{'),
+    ])
+    expect(code).toBe(2)
+  })
+})
+
+describe('detect --top and --register', () => {
+  it('lists the n sentences scoring highest, even below every band', async () => {
+    await main(['detect', await file('fiche.md', HUMAN_EN), '--top', '3', '--json'])
+    expect(JSON.parse(stdout()).spans).toHaveLength(3)
+  })
+
+  it('says Top n in the terminal', async () => {
+    await main(['detect', await file('fiche.md', HUMAN_EN), '--top', '2'])
+    expect(stdout()).toContain('Top 2')
+  })
+
+  it('reads the academic register when asked, and checks its value', async () => {
+    const text = `To our knowledge, nobody has done this. ${HUMAN_EN}`
+    await main(['detect', await file('a.md', text), '--register', 'academic', '--json'])
+    expect(JSON.parse(stdout()).coverage.register).toBe('academic')
+    expect(await main(['detect', await file('a.md', text), '--register', 'legal'])).toBe(2)
+    expect(await main(['detect', await file('a.md', text), '--top', 'x'])).toBe(2)
+  })
+})

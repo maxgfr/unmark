@@ -64,6 +64,8 @@ export interface Facts {
   names: string[]
   urls: string[]
   quotes: string[]
+  /** Reference calls: `[1]`, `[1–3]`, `[17,18]`, `(Smith 2019)`, `(Smith et al., 2019)`, a DOI. */
+  citations: string[]
 }
 
 export interface Brief {
@@ -113,6 +115,13 @@ const DATE =
   /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{0,4}|\b(?:19|20)\d{2}\b)/gi
 const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"'\])}]+/gi
 const QUOTED = /"[^"\n]{4,300}"|“[^”\n]{4,300}”/g
+/**
+ * A reference call, numbered or author-year, or a DOI. A rewrite that moves a
+ * sentence around must take its calls with it: a figure that lost its [33] is
+ * a figure that lost its source.
+ */
+const CITATION =
+  /\[\d{1,4}(?:\s*[,;–—-]\s*\d{1,4})*\]|\((?:[\p{Lu}][\p{L}'’-]+(?: (?:et al\.|and|&|et) ?[\p{Lu}]?[\p{L}'’-]*)?,? (?:19|20)\d{2}[a-z]?(?:; ?)?)+\)|\b10\.\d{4,9}\/[^\s"<>]+/gu
 
 /**
  * Words the document capitalises mid-sentence, which makes them names.
@@ -165,6 +174,13 @@ export function extractFacts(text: string): Facts {
     // having lost it.
     urls: collect(text, URL_IN_TEXT).map((url) => url.replace(/[.,;:!?)\]]+$/, '')),
     quotes: collect(text, QUOTED),
+    citations: collect(text, CITATION).map((c) =>
+      c.startsWith('10.')
+        ? c.replace(/[.,;:)\]]+$/, '')
+        : c.startsWith('[')
+          ? c.replaceAll(/\s+/g, '').replaceAll(/[—-]/g, '–')
+          : c.replaceAll(/\s+/g, ' '),
+    ),
   }
 }
 
@@ -397,6 +413,7 @@ export function verifyRewrite(original: string, rewrite: string, brief: Brief): 
     ['dates', 'date'],
     ['urls', 'link'],
     ['quotes', 'quotation'],
+    ['citations', 'reference call'],
     ['names', 'name'],
   ]
   for (const [key, noun] of checks) {

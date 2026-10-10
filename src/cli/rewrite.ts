@@ -215,3 +215,28 @@ export async function runRewrite(
   for (const message of result.notes) note(message)
   return { ...result, notes }
 }
+
+/**
+ * One prompt, one answer, from the same transports as the rewrite loop:
+ * Ollama on 127.0.0.1 by default, a remote provider only when `model` names
+ * one — and then the note says the text leaves the machine.
+ */
+export async function askModel(
+  prompt: string,
+  options: Pick<RewriteOptions, 'model' | 'endpoint' | 'timeoutMs' | 'onNote'> = {},
+): Promise<string> {
+  options.onNote?.(
+    options.model
+      ? `Sending these sentences to ${options.model}. They leave this machine.`
+      : 'Local only: 127.0.0.1. Nothing leaves this machine.',
+  )
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 300_000)
+  try {
+    return options.model
+      ? await askRemote(options.model, prompt, controller.signal)
+      : await askOllama(options.endpoint ?? OLLAMA, prompt, controller.signal)
+  } finally {
+    clearTimeout(timer)
+  }
+}

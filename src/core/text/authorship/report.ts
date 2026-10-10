@@ -117,6 +117,8 @@ export interface AuthorshipFinding {
   fixHint: string
   evidenceLabel: EvidenceLabel
   severity: Severity
+  /** Present, and false, on a match the tier rules did not count (`allFindings`). */
+  counted?: false
   location?: Location
 }
 
@@ -140,6 +142,38 @@ export interface LocatedFinding extends Finding {
   line: number
   col: number
   location?: Location
+}
+
+/** A key phrase copied word for word into two sections or more. */
+export interface RecapLoop {
+  phrase: string
+  words: number
+  /** A copy sits in an abstract or a summary, which restates the body by design. */
+  summary: boolean
+  occurrences: {
+    start: number
+    end: number
+    line: number
+    section: string
+    location?: Location
+  }[]
+}
+
+/**
+ * How much of the catalogue applied to this text, so a score of 0 can be read
+ * as "looked and found nothing" or as "out of the catalogue's reach".
+ */
+export interface Coverage {
+  /** The register whose formulas were read: `academic` with `--register academic`. */
+  register: 'general' | 'academic'
+  /** Citations, "et al.", confidence intervals: the text reads as academic. */
+  academicCues: boolean
+  /** Catalogue entries read for the languages of this text. */
+  patterns: number
+  /** Entries that matched at least once, counted or not. */
+  matched: number
+  /** Entries whose matches counted. */
+  counted: number
 }
 
 /** What the prose was read from, when it was not plain text. */
@@ -190,6 +224,9 @@ export interface AuthorshipReport {
   fileMarks: FileMark[]
   /** What the prose was read from, when that was a .docx or a PDF. */
   document?: DocumentSource
+  /** Key phrases recopied across sections (recap loops), each with every copy. */
+  recaps: RecapLoop[]
+  coverage: Coverage
   style: StyleReport
   notEvidence: readonly string[]
   disclaimer: string
@@ -307,6 +344,16 @@ const fixed = (value: number) => value.toFixed(2)
 export interface RenderOptions {
   /** Sentences below this score are not listed. The verdict never changes. */
   minScore?: number
+  /** The spans are the n highest-scoring sentences (`--top`), not a band. */
+  top?: number
+}
+
+/** How much of the catalogue applied, in one sentence. */
+export function coverageSentence(coverage: Coverage): string {
+  const base = `Catalogue: ${coverage.patterns} patterns read${coverage.register === 'academic' ? ', the academic register included' : ''}; ${coverage.matched} matched, ${coverage.counted} counted.`
+  return coverage.register === 'general' && coverage.academicCues
+    ? `${base} The text reads as academic (citations, statistics): --register academic also reads that register's formulas.`
+    : base
 }
 
 /** The report as Markdown, for a file, a pull request or a skill to rework. */
@@ -373,7 +420,12 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
   const at = (item: { line: number; location?: Location }) =>
     located ? place(item) : String(item.line)
 
-  out.push('## Passages', '')
+  out.push(options.top === undefined ? '## Passages' : `## Top ${options.top} sentences`, '')
+  if (options.top !== undefined)
+    out.push(
+      'The sentences scoring highest, whatever their band: material for a judge, not evidence.',
+      '',
+    )
   if (listed.length === 0 && loose.length === 0) {
     out.push(`No passage scored ${fixed(minScore)} or more.`, '')
   } else {
@@ -451,6 +503,42 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
     )
   }
 
+  if (report.recaps.length > 0) {
+    out.push(
+      '## Repeated formulas',
+      '',
+      'The same phrase copied word for word into several sections.',
+      '',
+      '| Phrase | Copies | Where |',
+      '| --- | ---: | --- |',
+    )
+    for (const recap of report.recaps) {
+      out.push(
+        `| « ${cell(recap.phrase)} »${recap.summary ? ' (one copy in a summary)' : ''} | ${recap.occurrences.length} | ${cell(recap.occurrences.map((o) => describeLocation(o.location) ?? `line ${o.line}`).join(' · '))} |`,
+      )
+    }
+    out.push('')
+  }
+
+  const unweighted = report.findings.filter(
+    (f) => f.category === 'hedging' || f.category === 'phrasing',
+  )
+  if (unweighted.length > 0) {
+    out.push(
+      '## Hedging and wordy phrasing',
+      '',
+      'Reported, located, and not scored: the calibration has not measured them yet.',
+      '',
+      `| ${located ? 'Where' : 'Line'} | Excerpt | Pattern | Fix |`,
+      '| --- | --- | --- | --- |',
+      ...unweighted.map(
+        (f) => `| ${at(f)} | ${cell(f.excerpt)} | ${cell(f.patternId)} | ${cell(f.fixHint)} |`,
+      ),
+      '',
+    )
+  }
+
+  out.push(coverageSentence(report.coverage), '')
   out.push('## What is not evidence', '', ...report.notEvidence.map((line) => `- ${line}`), '')
 
   out.push('## How to fix', '')

@@ -286,3 +286,16 @@ it('rejects echoed report instructions for a short message', () => {
   ).toBe(false)
   expect(verifyRewrite(source, 'Bonjour, c cool', buildBrief(source)).ok).toBe(true)
 })
+
+describe('reference calls', () => {
+  it('are facts a rewrite must keep', async () => {
+    const { extractFacts } = await import('./rewrite.ts')
+    expect(
+      extractFacts('As shown [17,18] and [1–3], (Smith et al., 2019), doi 10.1000/xyz123.')
+        .citations,
+    ).toEqual(['[17,18]', '[1–3]', '(Smith et al., 2019)', '10.1000/xyz123'])
+    const original = 'The rate was 13 % at one year [19,26].'
+    const verdict = verifyRewrite(original, 'The rate was 13 % at one year.', buildBrief(original))
+    expect(verdict.failures.map((f) => f.what)).toContain('reference call [19,26]')
+  })
+})

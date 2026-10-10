@@ -15,9 +15,11 @@ import { decodeStego } from '../core/text/stego.ts'
 import { analyzeStyle, PLAIN, stylometryFindings } from '../core/text/index.ts'
 import {
   ABSENCE_NOTE,
+  coverageSentence,
   describeLocation,
   detectAuthorship,
   documentSentence,
+  withoutFolio,
   fileMarksFrom,
   foundNothing,
   renderMarkdown,
@@ -27,9 +29,19 @@ import {
   type AuthorshipReport,
   type AuthorshipVerdict,
   type DocumentSource,
+  type Layout,
+  type PageText,
 } from '../core/text/authorship/index.ts'
 import { buildBrief, verifyRewrite, type RewriteVerdict } from '../core/rewrite.ts'
-import { runRewrite } from './rewrite.ts'
+import { askModel, runRewrite } from './rewrite.ts'
+import {
+  applyRewrites,
+  HABIT_LABEL,
+  renderSweep,
+  sweep,
+  sweepPrompt,
+  type SweepRow,
+} from '../core/text/authorship/sweep.ts'
 import {
   collapseRuns,
   KIND_LABEL,
@@ -51,6 +63,8 @@ USAGE
   unmark audit   <dir>           walk a tree and report every marked file
   unmark detect  <file|->        assess whether the prose reads as AI-written,
                                  with every passage located. Not proof.
+  unmark sweep   <file|->        every sentence carrying a habit, however isolated,
+                                 with a checked rewrite: current text → replace with
 
   unmark brief   <file|->        what a rewrite must fix and must not break (JSON)
   unmark rewrite <file|->        run the rewrite loop; local model by default
@@ -90,6 +104,10 @@ DETECT (French and English; an assessment of writing habits, never proof)
                       placed on its page ("p. 29, §2.6.3")
   --source <file>     the .docx or PDF a text file was extracted from: its marks
                       (a C2PA manifest on an image…) are listed as file marks
+  --top <n>           also list the n sentences scoring highest, below the bands
+  --register academic also read the formulas of academic writing ("to our
+                      knowledge", "c'est dans ce contexte que"), tier 3; alone,
+                      they are listed as not evidence
 
   detect reads .txt, .md, .html, and the body of a .docx (tables, captions,
   contents and reference list left out) or a PDF, page by page. A document
@@ -97,6 +115,18 @@ DETECT (French and English; an assessment of writing habits, never proof)
 
   Exit codes: 0 few signals or uncertain · 1 likely AI-written ·
   2 usage error or unreadable input · 3 not enough text (under 150 words)
+
+SWEEP (the judge's worksheet: every habit, located, quoted, with a fix)
+  --pages, --register, --lang, --format text|md|json   as for detect
+                      (the register defaults to academic when the text cites)
+  --print-prompt      print the prompt for the rewrites an agent writes, as
+                      [{"id": …, "rewrite": …}]; no network
+  --apply <file.json> check those rewrites and put the ones that pass in the table
+  --rewrite           ask the local model (Ollama on 127.0.0.1) for the rewrites;
+                      with --model, a remote provider — the sentences LEAVE YOUR MACHINE
+  Every rewrite must keep the sentence's numbers and reference calls; one that
+  does not is marked rejected and never proposed. Every quote is checked against
+  the source file (and the --pages PDF).
 
 FORMATS
   Text, Markdown, HTML, SVG, PNG, JPEG, WebP, GIF, HEIC, AVIF, MP4/MOV, PDF,
@@ -310,6 +340,10 @@ interface Options {
   minScore?: number
   pages?: string
   source?: string
+  top?: number
+  register?: 'general' | 'academic'
+  apply?: string
+  rewrite?: boolean
 }
 
 const textOptions = (options: Options) => ({
@@ -603,7 +637,12 @@ const placeOf = (item: {
 
 const BLOCK_LANGUAGE = { fr: 'French', en: 'English', other: 'other language' } as const
 
-function renderAuthorship(name: string, report: AuthorshipReport, minScore: number): string {
+function renderAuthorship(
+  name: string,
+  report: AuthorshipReport,
+  minScore: number,
+  top?: number,
+): string {
   const out = [
     `${bold(name)} ${dim(`· ${LANGUAGE_NAME[report.language.document]} · ${report.words} words`)}`,
     '',
@@ -641,7 +680,9 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
   const listed = report.spans.filter((span) => span.score >= minScore)
   const width = Math.max(10, ...listed.map((span) => placeOf(span).length))
   if (listed.length > 0) {
-    out.push(`  ${bold('Passages')} ${dim(`scoring ${minScore.toFixed(2)} or more`)}`)
+    out.push(
+      `  ${bold(top === undefined ? 'Passages' : `Top ${top}`)} ${dim(top === undefined ? `scoring ${minScore.toFixed(2)} or more` : 'the sentences scoring highest, whatever their band')}`,
+    )
     for (const span of listed) {
       const own = report.findings.filter((f) => f.start >= span.start && f.start < span.end)
       out.push(
@@ -679,6 +720,33 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
     out.push('')
   }
 
+  if (report.recaps.length > 0) {
+    out.push(
+      `  ${bold('Repeated formulas')} ${dim('the same phrase copied into several sections')}`,
+    )
+    for (const recap of report.recaps) {
+      out.push(
+        `  « ${recap.phrase} » ${dim(`×${recap.occurrences.length}${recap.summary ? ' · one copy in a summary, which restates by design' : ''}`)}`,
+        `    ${dim(recap.occurrences.map((o) => describeLocation(o.location) ?? `line ${o.line}`).join(' · '))}`,
+      )
+    }
+    out.push('')
+  }
+
+  const unweighted = report.findings.filter(
+    (f) => f.category === 'hedging' || f.category === 'phrasing',
+  )
+  if (unweighted.length > 0) {
+    out.push(
+      `  ${bold('Hedging and wordy phrasing')} ${dim('reported, not scored until a refit has measured them')}`,
+    )
+    for (const finding of unweighted.slice(0, 15)) {
+      out.push(`  ${pad(placeOf(finding), width)} ${finding.patternId}  ${finding.excerpt}`)
+    }
+    if (unweighted.length > 15) out.push(dim(`  … ${unweighted.length - 15} more in --json`))
+    out.push('')
+  }
+
   if (report.fileMarks.length > 0) {
     out.push(
       `  ${bold('File marks')} ${dim('in the file the text came from — about the file, not the prose')}`,
@@ -706,6 +774,7 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
     out.push('')
   }
 
+  out.push(dim(`  ${coverageSentence(report.coverage)}`))
   out.push(
     dim(
       `  Not evidence: ${report.notEvidence.map((line) => line.replace(/\.$/, '').toLowerCase()).join('; ')}.`,
@@ -715,20 +784,34 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
   return `${out.join('\n')}\n`
 }
 
-async function commandDetect(target: string, options: Options): Promise<number> {
+interface LoadedProse {
+  source: Source
+  prose: NonNullable<Awaited<ReturnType<typeof readProse>>>
+  layout: Layout | undefined
+  document: DocumentSource | undefined
+  pages: PageText[] | undefined
+}
+
+/** The prose of `target`, with its layout and its --pages, or an exit code. */
+async function loadProse(
+  target: string,
+  options: Options,
+  command: string,
+): Promise<LoadedProse | number> {
   const source = await readSource(target)
   const prose = await readProse(source.bytes, source.name)
   if (!prose) {
     process.stderr.write(
-      `unmark: ${source.name} has no prose detect can read. It reads text (.txt, .md, .html), .docx and PDF.\n`,
+      `unmark: ${source.name} has no prose ${command} can read. It reads text (.txt, .md, .html), .docx and PDF.\n`,
     )
     return 2
   }
 
   let layout = prose.layout
   let document: DocumentSource | undefined = prose.source
+  let pages: PageText[] | undefined
   if (options.pages) {
-    const pages = await printedPages(new Uint8Array(await readFile(options.pages)))
+    pages = await printedPages(new Uint8Array(await readFile(options.pages)))
     if (!pages) {
       process.stderr.write(`unmark: --pages needs a PDF, and ${options.pages} is not one\n`)
       return 2
@@ -740,6 +823,29 @@ async function commandDetect(target: string, options: Options): Promise<number> 
       pagesFrom: options.pages,
     }
   }
+  return { source, prose, layout, document, pages }
+}
+
+/**
+ * The n sentences scoring highest, in document order.
+ *
+ * Ties — most often at 0.00 on a careful text — are broken by how many habits
+ * the sentence carries, counted or not, so a sentence with two stacked hedges
+ * comes before one with nothing at all.
+ */
+function topSpans(report: AuthorshipReport, n: number): AuthorshipReport['spans'] {
+  const habits = (span: AuthorshipReport['spans'][number]) =>
+    report.findings.filter((f) => f.start >= span.start && f.start < span.end).length
+  return [...report.spans]
+    .sort((a, b) => b.score - a.score || habits(b) - habits(a) || a.start - b.start)
+    .slice(0, n)
+    .sort((a, b) => a.start - b.start)
+}
+
+async function commandDetect(target: string, options: Options): Promise<number> {
+  const loaded = await loadProse(target, options, 'detect')
+  if (typeof loaded === 'number') return loaded
+  const { source, prose, layout, document } = loaded
 
   // The container's own marks: the input's when it is a .docx or a PDF, or
   // those of the file named by --source when the input was extracted from one.
@@ -759,20 +865,174 @@ async function commandDetect(target: string, options: Options): Promise<number> 
     lang: options.lang ?? 'auto',
     ...(layout ? { layout } : {}),
     ...(document ? { document } : {}),
+    ...(options.register ? { register: options.register } : {}),
+    ...(options.top === undefined ? {} : { allSpans: true }),
     fileMarks,
   })
-  const minScore = options.minScore ?? 0.35
+  const minScore = options.top === undefined ? (options.minScore ?? 0.35) : 0
+  const shown =
+    options.top === undefined ? report : { ...report, spans: topSpans(report, options.top) }
 
   const format = options.json ? 'json' : (options.format ?? 'text')
   if (format === 'json') {
-    const listed = { ...report, spans: report.spans.filter((span) => span.score >= minScore) }
+    const listed = { ...shown, spans: shown.spans.filter((span) => span.score >= minScore) }
     process.stdout.write(`${toJSON(listed)}\n`)
   } else if (format === 'md') {
-    process.stdout.write(renderMarkdown(report, { minScore }))
+    process.stdout.write(
+      renderMarkdown(shown, {
+        minScore,
+        ...(options.top === undefined ? {} : { top: options.top }),
+      }),
+    )
   } else {
-    process.stdout.write(renderAuthorship(source.name, report, minScore))
+    process.stdout.write(renderAuthorship(source.name, shown, minScore, options.top))
   }
   return EXIT_FOR[report.verdict]
+}
+
+// ----------------------------------------------------------------- sweep
+//
+// The judge's worksheet. Not a verdict: the sentences that carry a habit,
+// whoever wrote them, with a rewrite that kept every number and every call.
+
+const CONFIDENCE_COLOUR = { high: '33', medium: '37', low: '2' } as const
+
+function renderSweepText(name: string, rows: readonly SweepRow[]): string {
+  const out = [
+    `${bold(name)} ${dim(`· ${rows.length} sentences carry a habit · not proof of anything`)}`,
+    '',
+  ]
+  let section: string | undefined
+  for (const row of rows) {
+    const here = row.section
+    if (here !== section) {
+      section = here
+      if (here) out.push(`  ${bold(here)}`)
+    }
+    const place = describeLocation(row.location) ?? `line ${row.line}`
+    out.push(
+      `  ${pad(place, 16)} ${paint(CONFIDENCE_COLOUR[row.confidence], pad(row.confidence, 6))} ${row.habits.map((h) => HABIT_LABEL[h.type]).join(', ')}${row.registerExplained ? dim(' · the register explains it') : ''}`,
+      `  ${' '.repeat(17)}« ${row.text} »${row.quote.checked.length > 0 && row.quote.found.length < row.quote.checked.length ? paint('31', ' — not found in the source') : ''}`,
+    )
+    if (row.rewrite?.verified)
+      out.push(
+        `  ${' '.repeat(17)}${paint('32', '→')} ${row.rewrite.text || dim('delete the sentence')}`,
+      )
+    else if (row.rewrite)
+      out.push(
+        `  ${' '.repeat(17)}${dim(`rewrite rejected: ${row.rewrite.failures?.[0] ?? 'failed the gate'}`)}`,
+      )
+  }
+  out.push(
+    '',
+    dim(
+      '  --format md for the table "current text → replace with" · --print-prompt / --apply or --rewrite for rewrites',
+    ),
+  )
+  return `${out.join('\n')}\n`
+}
+
+async function commandSweep(target: string, options: Options): Promise<number> {
+  const loaded = await loadProse(target, options, 'sweep')
+  if (typeof loaded === 'number') return loaded
+  const { source, prose, layout, document, pages } = loaded
+
+  const sources: Record<string, { text: string; loose?: boolean }> = {
+    [source.name]: { text: prose.raw ?? prose.text, loose: prose.source?.container === 'PDF' },
+    ...(pages && options.pages
+      ? {
+          [options.pages]: { text: pages.map((p) => withoutFolio(p.text)).join('\n'), loose: true },
+        }
+      : {}),
+  }
+  const result = sweep(prose.text, {
+    format: prose.format,
+    lang: options.lang ?? 'auto',
+    ...(layout ? { layout } : {}),
+    ...(document ? { document } : {}),
+    ...(options.register ? { register: options.register } : {}),
+    sources,
+  })
+  let rows = result.rows
+
+  if (options.printPrompt) {
+    process.stdout.write(`${sweepPrompt(rows)}\n`)
+    return 0
+  }
+  if (options.apply) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(decodeUtf8(new Uint8Array(await readFile(options.apply))))
+    } catch {
+      process.stderr.write(`unmark: ${options.apply} is not JSON: [{"id": …, "rewrite": …}]\n`)
+      return 2
+    }
+    rows = applyRewrites(rows, rewritesFrom(parsed), 'agent')
+  }
+  if (options.rewrite) {
+    try {
+      const answer = await askModel(sweepPrompt(rows), {
+        ...(options.model ? { model: options.model } : {}),
+        onNote: (note) => process.stderr.write(`${dim(note)}\n`),
+      })
+      rows = applyRewrites(rows, rewritesFrom(jsonIn(answer)), 'model')
+    } catch (error) {
+      process.stderr.write(
+        `unmark: no rewrites — ${error instanceof Error ? error.message : String(error)}. Use --print-prompt and --apply instead.\n`,
+      )
+    }
+  }
+
+  const final = { ...result, rows }
+  const format = options.json ? 'json' : (options.format ?? 'text')
+  if (format === 'json') {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          file: source.name,
+          rows,
+          counts: result.counts,
+          verdict: result.report.verdict,
+          score: result.report.score,
+          coverage: result.report.coverage,
+          ...(result.report.document ? { document: result.report.document } : {}),
+          disclaimer: result.report.disclaimer,
+        },
+        undefined,
+        2,
+      )}\n`,
+    )
+  } else if (format === 'md') {
+    process.stdout.write(renderSweep(final, describeLocation))
+  } else {
+    process.stdout.write(renderSweepText(source.name, rows))
+  }
+  return 0
+}
+
+/** `[{id, rewrite}]`, from a parsed JSON value, ignoring anything else. */
+function rewritesFrom(value: unknown): { id: string; rewrite: string }[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) =>
+    item &&
+    typeof item === 'object' &&
+    typeof item.id === 'string' &&
+    typeof item.rewrite === 'string'
+      ? [{ id: item.id as string, rewrite: item.rewrite as string }]
+      : [],
+  )
+}
+
+/** The JSON array in a model's answer, fenced or not. */
+function jsonIn(answer: string): unknown {
+  const start = answer.indexOf('[')
+  const end = answer.lastIndexOf(']')
+  if (start === -1 || end <= start) return []
+  try {
+    return JSON.parse(answer.slice(start, end + 1))
+  } catch {
+    return []
+  }
 }
 
 /** Paragraphs of a plain text, separated by blank lines, numbered from 1. */
@@ -912,6 +1172,10 @@ const KNOWN_FLAGS = new Set([
   '--min-score',
   '--pages',
   '--source',
+  '--top',
+  '--register',
+  '--apply',
+  '--rewrite',
   '--version',
   '-V',
   '--help',
@@ -959,6 +1223,9 @@ export async function main(argv: readonly string[]): Promise<number> {
     '--min-score',
     '--pages',
     '--source',
+    '--top',
+    '--register',
+    '--apply',
   ]) {
     const at = argv.indexOf(name)
     const next = at === -1 ? undefined : argv[at + 1]
@@ -992,7 +1259,16 @@ export async function main(argv: readonly string[]): Promise<number> {
   // nothing is read, rather than quietly falling back to a default. A flag
   // with no value at all is the same mistake: `--format` alone used to print
   // text, which is the one format the caller had not asked for.
-  for (const name of ['--format', '--lang', '--min-score', '--pages', '--source']) {
+  for (const name of [
+    '--format',
+    '--lang',
+    '--min-score',
+    '--pages',
+    '--source',
+    '--top',
+    '--register',
+    '--apply',
+  ]) {
     if (flags.has(name) && value(name) === undefined) {
       process.stderr.write(`unmark: ${name} needs a value\n`)
       return 2
@@ -1017,6 +1293,17 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2
   }
 
+  const top = value('--top')
+  if (top !== undefined && !/^[1-9]\d*$/.test(top)) {
+    process.stderr.write(`unmark: --top needs a whole number of sentences, not "${top}"\n`)
+    return 2
+  }
+  const register = value('--register')
+  if (register !== undefined && !['general', 'academic'].includes(register)) {
+    process.stderr.write(`unmark: --register takes general or academic, not "${register}"\n`)
+    return 2
+  }
+
   const options: Options = {
     json: flags.has('--json'),
     inPlace: flags.has('--in-place'),
@@ -1032,6 +1319,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     ...(minScore === undefined ? {} : { minScore: Number(minScore) }),
     ...(value('--pages') ? { pages: value('--pages') as string } : {}),
     ...(value('--source') ? { source: value('--source') as string } : {}),
+    ...(top ? { top: Number(top) } : {}),
+    ...(register ? { register: register as 'general' | 'academic' } : {}),
+    ...(value('--apply') ? { apply: value('--apply') as string } : {}),
+    rewrite: flags.has('--rewrite'),
     // --plain is one name for the pair, defined once in the core so the page's
     // button and this flag cannot drift into two different presets.
     typography: flags.has('--typography') || (flags.has('--plain') && PLAIN.typography === true),
@@ -1062,6 +1353,9 @@ export async function main(argv: readonly string[]): Promise<number> {
       }
       case 'detect': {
         return await commandDetect(target, options)
+      }
+      case 'sweep': {
+        return await commandSweep(target, options)
       }
       case 'audit': {
         return await commandAudit(target === '-' ? '.' : target, options)

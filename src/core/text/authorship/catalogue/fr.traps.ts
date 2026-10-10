@@ -32,6 +32,10 @@ export const FR_TRAPS: readonly { register: string; text: string }[] = [
     text: `Dans un premier temps, nous présentons le corpus, constitué de 312 entretiens semi-directifs menés entre 2014 et 2017. Dans un second temps, nous analysons les trajectoires professionnelles des enquêtés. Cependant, l'échantillon reste limité, et les résultats doivent être lus comme exploratoires plutôt que représentatifs.`,
   },
   {
+    register: 'académique (précautions)',
+    text: `Ces résultats suggèrent un lien entre l'épaisseur sclérale et l'exposition. Une étude prospective permettrait de le confirmer. L'échantillon reste limité, et les comparaisons restent exploratoires. Le mécanisme pourrait relever d'un remodelage tissulaire. Les données manquent sur ce point.`,
+  },
+  {
     register: 'journalistique',
     text: `Mardi soir, les élus ont longuement débattu de la rénovation de l'école primaire, dont la toiture fuit depuis deux hivers. Le maire a rappelé que le devis dépassait de 40 % l'enveloppe prévue. « Nous n'avons pas le choix », a-t-il dit, avant de proposer un emprunt sur quinze ans.`,
   },
