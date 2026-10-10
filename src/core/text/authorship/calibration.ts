@@ -25,9 +25,9 @@ export interface Calibration {
 }
 
 export const CALIBRATION: Calibration = {
-  id: 'fit-2026-09-30-ba0e67364077-b1fdb0',
+  id: 'fit-2026-10-10-ba0e67364077-16791e',
   calibrated: true,
-  date: '2026-09-30',
+  date: '2026-10-10',
   corpus: 'ba0e67364077',
   weights: {
     spans: 0,
@@ -38,7 +38,7 @@ export const CALIBRATION: Calibration = {
     forensic: 0.1,
   },
   thresholds: {
-    human: 0,
+    human: 0.1,
     ai: 0.5,
   },
 }

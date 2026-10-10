@@ -6,6 +6,8 @@ import {
   NOT_EVIDENCE,
   renderMarkdown,
   toJSON,
+  UNREACHABLE_NOTE,
+  verdictSentence,
   type AuthorshipReport,
 } from './report.ts'
 
@@ -19,7 +21,7 @@ const REPORT: AuthorshipReport = {
   language: { document: 'fr', unsupportedShare: 0 },
   words: 412,
   sentences: 21,
-  thresholds: { human: 0.3, ai: 0.7 },
+  thresholds: { human: 0.3, ai: 0.7, humanReachable: true },
   signals: [
     {
       id: 'lexicon',
@@ -186,5 +188,38 @@ describe('excerptOf', () => {
     expect(excerpt).toContain('TARGET')
     expect(excerpt.startsWith('…')).toBe(true)
     expect(excerptOf('a\n\tb   c', 0, 1, 0, 8)).toBe('a b c')
+  })
+})
+
+describe('a verdict that found nothing', () => {
+  const nothing: AuthorshipReport = {
+    ...REPORT,
+    verdict: 'uncertain',
+    score: 0,
+    spans: [],
+    findings: [],
+  }
+
+  it('says no signal was found, not that the call is close', () => {
+    expect(verdictSentence(nothing)).toBe('No AI-writing signal found')
+    expect(verdictSentence({ ...nothing, score: 0.2 })).toMatch(/^Uncertain/)
+    expect(verdictSentence({ verdict: 'uncertain' })).toMatch(/^Uncertain/)
+  })
+
+  it('reminds the reader that absence is not proof', () => {
+    expect(renderMarkdown(nothing)).toContain('absence of signals is not proof')
+    expect(renderMarkdown({ ...nothing, verdict: 'likely_human' })).toContain(
+      'absence of signals is not proof',
+    )
+    expect(renderMarkdown(REPORT)).not.toContain('absence of signals is not proof')
+  })
+
+  it('says so when the calibration cannot reach likely_human', () => {
+    const unreachable = {
+      ...nothing,
+      thresholds: { human: 0.7, ai: 0.7, humanReachable: false },
+    }
+    expect(renderMarkdown(unreachable)).toContain(UNREACHABLE_NOTE)
+    expect(renderMarkdown(nothing)).not.toContain(UNREACHABLE_NOTE)
   })
 })

@@ -82,7 +82,11 @@ export interface AuthorshipReport {
   /** Words of unsealed prose: what the 150-word threshold counts. */
   words: number
   sentences: number
-  thresholds: { human: number; ai: number }
+  /**
+   * The thresholds applied. `human` is the fitted one raised to the floor;
+   * `humanReachable` is false when no score could ever read as `likely_human`.
+   */
+  thresholds: { human: number; ai: number; humanReachable: boolean }
   signals: Signal[]
   /** Sentences scoring in the low band or above, in document order. */
   spans: AuthorshipSpan[]
@@ -130,16 +134,39 @@ export function excerptOf(
 
 const LANGUAGE: Record<Lang | 'und', string> = { fr: 'French', en: 'English', und: 'undetermined' }
 
+/** Nothing at all was found: a score of zero and no catalogue finding. */
+export const foundNothing = (
+  report: Partial<Pick<AuthorshipReport, 'score' | 'findings' | 'spans'>>,
+): boolean =>
+  report.score === 0 &&
+  (report.findings?.length ?? 0) === 0 &&
+  (report.spans ?? []).every((span) => span.band === 'none')
+
+/** Said under every verdict that rests on finding nothing. */
+export const ABSENCE_NOTE =
+  'The absence of signals is not proof that a person wrote the text: it only says the habits this engine reads were not found.'
+
+/** Said whenever the calibration leaves `likely_human` out of reach. */
+export const UNREACHABLE_NOTE =
+  'The verdict `likely_human` is unreachable with this calibration: its human threshold is not below its AI threshold.'
+
 /** The verdict as the sentence a reader sees. */
 export function verdictSentence(
-  report: Pick<AuthorshipReport, 'verdict' | 'abstainReason'>,
+  report: Pick<AuthorshipReport, 'verdict' | 'abstainReason'> &
+    Partial<Pick<AuthorshipReport, 'score' | 'findings' | 'spans'>>,
 ): string {
   switch (report.verdict) {
     case 'likely_ai': {
       return 'Likely AI-written'
     }
     case 'uncertain': {
-      return 'Uncertain: not enough to call it either way'
+      // "Not enough to call it either way" read as a suspicion on a text where
+      // nothing at all had been found. Uncertain then only means a guard held
+      // the verdict back — a technical mark, or a calibration that cannot say
+      // `likely_human` — and the sentence says what was actually found.
+      return foundNothing(report)
+        ? 'No AI-writing signal found'
+        : 'Uncertain: not enough to call it either way'
     }
     case 'likely_human': {
       return 'Few AI-writing signals found'
@@ -181,6 +208,8 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
     `${report.words} words`,
   ]
   out.push(facts.join(' · '), '', `> ${report.disclaimer}`, '')
+  if (report.verdict === 'likely_human' || foundNothing(report)) out.push(`> ${ABSENCE_NOTE}`, '')
+  if (!report.thresholds.humanReachable) out.push(`> ${UNREACHABLE_NOTE}`, '')
   out.push(
     `Engine: unmark ${report.engine.version} · calibration \`${report.calibration.id}\`` +
       (report.calibration.calibrated

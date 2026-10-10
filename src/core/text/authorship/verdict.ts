@@ -20,6 +20,17 @@ const STRONG = 0.5
 /** Guard A: how many strong signals `likely_ai` needs. */
 const CORROBORATION = 2
 
+/**
+ * The human threshold never sits below this, whatever the fit says.
+ *
+ * Fitted on French prose where a model's text often shows no habit at all, the
+ * human threshold came out at 0.00, and a score can never be below zero: every
+ * text read as `uncertain`, including one where nothing at all was found. A
+ * verdict that cannot take one of its values tells the reader nothing, so the
+ * floor keeps `likely_human` — "few AI-writing signals found" — reachable.
+ */
+export const HUMAN_FLOOR = 0.1
+
 export interface VerdictInput {
   words: number
   unsupported: boolean
@@ -38,6 +49,19 @@ export interface VerdictResult {
   abstainReason?: AbstainReason
   /** The signals that entered the average. */
   used: number
+  /** The human threshold actually applied: the fitted one, floored. */
+  human: number
+  /** False when no score can reach `likely_human` under this calibration. */
+  humanReachable: boolean
+}
+
+/** The fitted human threshold, raised to the floor; and whether it can be met. */
+export function humanThreshold(thresholds: { human: number; ai: number }): {
+  human: number
+  reachable: boolean
+} {
+  const human = Math.max(thresholds.human, HUMAN_FLOOR)
+  return { human, reachable: human > 0 && human < thresholds.ai }
 }
 
 const inMean = (signal: Signal) =>
@@ -60,7 +84,9 @@ export function weightedScore(signals: readonly Signal[], residue: boolean, ai: 
 }
 
 export function decide(input: VerdictInput): VerdictResult {
-  const { human, ai } = input.calibration.thresholds
+  const { ai } = input.calibration.thresholds
+  const { human, reachable } = humanThreshold(input.calibration.thresholds)
+  const floor = { human, humanReachable: reachable }
 
   if (input.words < MIN_WORDS) {
     return {
@@ -69,6 +95,7 @@ export function decide(input: VerdictInput): VerdictResult {
       confidence: 'low',
       abstainReason: 'too_short',
       used: 0,
+      ...floor,
     }
   }
 
@@ -79,6 +106,7 @@ export function decide(input: VerdictInput): VerdictResult {
       confidence: 'low',
       abstainReason: 'unsupported_language',
       used: 0,
+      ...floor,
     }
   }
   const used = input.signals.filter(inMean)
@@ -94,7 +122,7 @@ export function decide(input: VerdictInput): VerdictResult {
   if (score >= ai) {
     // Guard A: one habit, however strong, is a habit.
     verdict = strong >= CORROBORATION ? 'likely_ai' : 'uncertain'
-  } else if (score < human) {
+  } else if (reachable && score < human) {
     // Guard B: no reassurance about a text carrying residue or a mark.
     verdict = input.residue || input.technical ? 'uncertain' : 'likely_human'
   } else {
@@ -111,5 +139,6 @@ export function decide(input: VerdictInput): VerdictResult {
     score: Math.round(score * 1000) / 1000,
     confidence,
     used: used.length,
+    ...floor,
   }
 }

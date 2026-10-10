@@ -7,20 +7,29 @@ too, and generated text can be edited until none of it shows.
 
 ## Verdicts
 
-| Verdict                 | Exit | Say it as                                                          |
-| ----------------------- | ---: | ------------------------------------------------------------------ |
-| `likely_ai`             |    1 | "Likely AI-written" — several independent habits agree             |
-| `uncertain`             |    0 | "Uncertain: not enough to call it either way"                      |
-| `likely_human`          |    0 | "Few AI-writing signals found" — never "written by a person"       |
-| `insufficient_evidence` |    3 | "Not enough text to assess", or the language is not French/English |
+| Verdict                 | Exit | Say it as                                                                                                    |
+| ----------------------- | ---: | ------------------------------------------------------------------------------------------------------------ |
+| `likely_ai`             |    1 | "Likely AI-written" — several independent habits agree                                                       |
+| `uncertain`             |    0 | "Uncertain: not enough to call it either way" — or, at score 0 with no finding, "No AI-writing signal found" |
+| `likely_human`          |    0 | "Few AI-writing signals found" — never "written by a person"                                                 |
+| `insufficient_evidence` |    3 | "Not enough text to assess", or the language is not French/English                                           |
 
 Two guards stand behind `likely_ai`: it needs at least two independent signals
 at 0.5 or more, and chat residue ("I hope this helps", "[Your Name]") lifts the
 score to the threshold without replacing that corroboration. A text carrying
 residue or a technical mark is never called `likely_human`.
 
+The human threshold is floored at 0.10 (`thresholds.human` in the JSON is the
+one applied). Without the floor, a fit that put it at 0.00 made `likely_human`
+unreachable and every text read as `uncertain`. When a calibration still
+cannot reach it, `thresholds.humanReachable` is `false` and the report says so
+in a sentence. A verdict that rests on finding nothing — `likely_human`, or
+score 0 with no finding — carries the reminder that absence of signals is not
+proof.
+
 The report names its **calibration** (`provisional-0` until fitted, then
-`fit-<date>-<corpus>`). Quote it: a verdict is only as good as the corpus its
+`fit-<date>-<corpus>-<hash6>`, the last part a hash of the fitted weights and
+thresholds). Quote it: a verdict is only as good as the corpus its
 thresholds came from.
 
 ## Bands

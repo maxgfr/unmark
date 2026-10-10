@@ -10,6 +10,8 @@
 // split, AUROC with bootstrap intervals, and the true-positive rate at a false
 // positive rate a person could live with — 1 %, not the accuracy at 50 %.
 
+import { HUMAN_FLOOR } from './verdict.ts'
+
 /** Probability that a random positive outranks a random negative; ties count half. */
 export function auroc(positives: readonly number[], negatives: readonly number[]): number {
   if (positives.length === 0 || negatives.length === 0) return Number.NaN
@@ -149,7 +151,9 @@ export const AI_FLOOR = 0.5
  *          0.5: `likely_ai` is a claim, and its false-positive rate is the one
  *          that matters.
  *   human  the highest score under which at most 5 % of generated texts fall,
- *          and never above `ai`.
+ *          never above `ai`, and never below HUMAN_FLOOR: when more than 5 %
+ *          of generated texts show no habit at all the rule gives 0, and no
+ *          score is below 0, so `likely_human` could never be reached.
  */
 export function fitThresholds(
   human: readonly number[],
@@ -165,7 +169,7 @@ export function fitThresholds(
   // The lowest AI score above the allowed tail: everything strictly below it
   // is at most `allowed` documents.
   const tHuman = sorted.length === 0 ? 0 : (sorted[allowed] ?? sorted.at(-1) ?? 0)
-  return { human: round(Math.min(tHuman, tAi)), ai: round(tAi) }
+  return { human: round(Math.min(Math.max(tHuman, HUMAN_FLOOR), tAi)), ai: round(tAi) }
 }
 
 /** FNV-1a: a stable 32-bit hash with no dependency on `node:crypto`. */

@@ -19,8 +19,11 @@ import {
 import { decodeStego } from '../core/text/stego.ts'
 import { analyzeStyle, PLAIN, stylometryFindings } from '../core/text/index.ts'
 import {
+  ABSENCE_NOTE,
   detectAuthorship,
+  foundNothing,
   renderMarkdown,
+  UNREACHABLE_NOTE,
   toJSON,
   verdictSentence,
   type AuthorshipReport,
@@ -540,6 +543,10 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
         : dim(`   score ${report.score.toFixed(2)} · confidence ${report.confidence}`)
     }`,
     `  ${dim(report.disclaimer)}`,
+    ...(report.verdict === 'likely_human' || foundNothing(report)
+      ? [`  ${dim(ABSENCE_NOTE)}`]
+      : []),
+    ...(report.thresholds.humanReachable ? [] : [`  ${dim(UNREACHABLE_NOTE)}`]),
     `  ${dim(
       `calibration ${report.calibration.id}${report.calibration.calibrated ? '' : ' (not yet calibrated: provisional thresholds)'}`,
     )}`,

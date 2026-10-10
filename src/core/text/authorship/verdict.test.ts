@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decide, MIN_WORDS, weightedScore } from './verdict.ts'
+import { decide, HUMAN_FLOOR, humanThreshold, MIN_WORDS, weightedScore } from './verdict.ts'
 import type { Signal } from './signals.ts'
 import type { Calibration } from './calibration.ts'
 
@@ -134,5 +134,25 @@ describe('weightedScore', () => {
     expect(weightedScore(signals, false, 0.7)).toBeCloseTo(0.5)
     expect(decide({ ...base, signals }).score).toBeCloseTo(0.5)
     expect(weightedScore(signals, true, 0.7)).toBeCloseTo(0.7)
+  })
+
+  it('keeps likely_human reachable when the fitted human threshold is zero', () => {
+    const zero = { ...CAL, thresholds: { human: 0, ai: 0.5 } }
+    const result = decide({ ...base, calibration: zero, signals: [signal('a', 0), signal('b', 0)] })
+    expect(result.verdict).toBe('likely_human')
+    expect(result.human).toBe(HUMAN_FLOOR)
+    expect(result.humanReachable).toBe(true)
+    const above = decide({ ...base, calibration: zero, signals: [signal('a', HUMAN_FLOOR)] })
+    expect(above.verdict).toBe('uncertain')
+  })
+
+  it('says when no score can read as likely_human', () => {
+    expect(humanThreshold({ human: 0.6, ai: 0.5 }).reachable).toBe(false)
+    expect(humanThreshold({ human: 0, ai: 0.05 }).reachable).toBe(false)
+    expect(humanThreshold({ human: 0.3, ai: 0.7 })).toEqual({ human: 0.3, reachable: true })
+    const closed = { ...CAL, thresholds: { human: 0.6, ai: 0.5 } }
+    const result = decide({ ...base, calibration: closed, signals: [signal('a', 0)] })
+    expect(result.verdict).toBe('uncertain')
+    expect(result.humanReachable).toBe(false)
   })
 })

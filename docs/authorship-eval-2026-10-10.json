@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "date": "2026-10-10",
+    "split": "test",
+    "corpora": ["pinned 37f8f56fd9ce", "binoculars-eu 575c9fcd22d9"],
+    "calibration": {
+      "id": "fit-2026-10-10-ba0e67364077-16791e"
+    },
+    "fitted": {
+      "id": "fit-2026-10-10-ba0e67364077-16791e",
+      "calibrated": true,
+      "date": "2026-10-10",
+      "corpus": "ba0e67364077",
+      "weights": {
+        "spans": 0,
+        "lexicon": 0.402,
+        "discourse": 0.073,
+        "variation": 0.279,
+        "stylometry": 0.147,
+        "forensic": 0.1
+      },
+      "thresholds": {
+        "human": 0.1,
+        "ai": 0.5
+      },
+      "coefficients": {
+        "spans": -0.663,
+        "lexicon": 3.315,
+        "discourse": 0.599,
+        "variation": 2.299,
+        "stylometry": 1.209
+      },
+      "trainDocuments": 411
+    }
+  },
+  "summary": {
+    "documents": {
+      "total": 420,
+      "human": 142,
+      "ai": 220,
+      "humanized": 56,
+      "atLeast150Words": 181
+    },
+    "auroc": {
+      "value": 0.763,
+      "ci": [0.712, 0.81]
+    },
+    "tprAt1Fpr": {
+      "value": 0.386,
+      "ci": [0.268, 0.459],
+      "threshold": 0.427
+    },
+    "tprAt5Fpr": {
+      "value": 0.45,
+      "ci": [0.364, 0.536]
+    },
+    "humanized": {
+      "auroc": 0.513,
+      "reachingAiThreshold": 0.054
+    },
+    "confusion": {
+      "ai": {
+        "likely_ai": 3,
+        "uncertain": 34,
+        "likely_human": 13,
+        "insufficient_evidence": 170
+      },
+      "human": {
+        "likely_ai": 0,
+        "uncertain": 66,
+        "likely_human": 51,
+        "insufficient_evidence": 25
+      },
+      "humanized": {
+        "likely_ai": 1,
+        "uncertain": 8,
+        "likely_human": 3,
+        "insufficient_evidence": 44
+      },
+      "mixed": {
+        "likely_ai": 0,
+        "uncertain": 0,
+        "likely_human": 2,
+        "insufficient_evidence": 0
+      }
+    },
+    "rates": {
+      "aiCalledLikelyHuman": 0.26,
+      "humanCalledLikelyHuman": 0.436
+    },
+    "strata": [
+      {
+        "stratum": "en/academic",
+        "n": 2,
+        "likelyAi": 0,
+        "abstained": 0,
+        "fpr": 0
+      },
+      {
+        "stratum": "en/admin",
+        "n": 2,
+        "likelyAi": 0,
+        "abstained": 0,
+        "fpr": 0
+      },
+      {
+        "stratum": "en/encyclopedic",
+        "n": 2,
+        "likelyAi": 0,
+        "abstained": 0,
+        "fpr": 0
+      },
+      {
+        "stratum": "en/fiction",
+        "n": 1,
+        "likelyAi": 0,
+        "abstained": 0,
+        "fpr": 0
+      },
+      {
+        "stratum": "en/news",
+        "n": 2,
+        "likelyAi": 0,
+        "abstained": 1,
+        "fpr": 0
+      },
+      {
+        "stratum": "fr/academic",
+        "n": 3,
+        "likelyAi": 0,
+        "abstained": 0,
+        "fpr": 0
+      },
+      {
+        "stratum": "fr/admin",
+        "n": 3,
+        "likelyAi": 0,
+        "abstained": 0,
+        "fpr": 0
+      },
+      {
+        "stratum": "fr/blog",
+        "n": 33,
+        "likelyAi": 0,
+        "abstained": 4,
+        "fpr": 0
+      },
+      {
+        "stratum": "fr/encyclopedic",
+        "n": 41,
+        "likelyAi": 0,
+        "abstained": 6,
+        "fpr": 0
+      },
+      {
+        "stratum": "fr/fiction",
+        "n": 21,
+        "likelyAi": 0,
+        "abstained": 8,
+        "fpr": 0
+      },
+      {
+        "stratum": "fr/news",
+        "n": 32,
+        "likelyAi": 0,
+        "abstained": 6,
+        "fpr": 0
+      }
+    ],
+    "mixed": {
+      "sentenceAuroc": 0.558,
+      "sentences": 32
+    }
+  }
+}

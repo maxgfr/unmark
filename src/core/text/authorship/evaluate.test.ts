@@ -91,6 +91,12 @@ describe('fitThresholds', () => {
     expect(ai.filter((s) => s < tHuman).length / ai.length).toBeLessThanOrEqual(0.05)
     expect(tHuman).toBeLessThanOrEqual(tAi)
   })
+
+  it('never puts the human threshold at zero, where nothing can fall below it', () => {
+    const human = Array.from({ length: 100 }, (_, i) => i / 400)
+    const ai = [...Array.from({ length: 20 }, () => 0), ...Array.from({ length: 80 }, () => 0.6)]
+    expect(fitThresholds(human, ai).human).toBe(0.1)
+  })
 })
 
 describe('splitOf', () => {

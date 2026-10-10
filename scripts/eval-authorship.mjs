@@ -25,7 +25,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { detectAuthorship, weightedScore } from '../src/core/text/authorship/index.ts'
-import { decide } from '../src/core/text/authorship/verdict.ts'
+import { decide, HUMAN_FLOOR } from '../src/core/text/authorship/verdict.ts'
 import { CALIBRATION } from '../src/core/text/authorship/calibration.ts'
 import {
   auroc,
@@ -354,6 +354,14 @@ function summarise(samples, calibration) {
   }
 
   const long = scored.filter((s) => s.words >= MIN_AUTHORSHIP_WORDS)
+  // The cost of keeping `likely_human` reachable, said beside it: the share of
+  // generated documents long enough for a verdict that read as "few signals".
+  const rateOf = (label, verdict) => {
+    const decided = long.filter((s) => s.label === label)
+    return decided.length
+      ? round(decided.filter((s) => s.verdictNow === verdict).length / decided.length)
+      : null
+  }
   return {
     documents: {
       total: scored.length,
@@ -384,6 +392,10 @@ function summarise(samples, calibration) {
         }
       : null,
     confusion,
+    rates: {
+      aiCalledLikelyHuman: rateOf('ai', 'likely_human'),
+      humanCalledLikelyHuman: rateOf('human', 'likely_human'),
+    },
     strata: [...strata.values()]
       .map((e) => ({ ...e, fpr: round(e.likelyAi / e.n) }))
       .sort((a, b) => a.stratum.localeCompare(b.stratum)),
@@ -396,6 +408,8 @@ function summarise(samples, calibration) {
         : null,
   }
 }
+
+const pct = (rate) => (rate === null ? 'n/a' : `${Math.round(rate * 100)} %`)
 
 function markdown(summary, meta) {
   const ci = (m) => (m.ci?.every((v) => v !== null) ? ` (95 % CI ${m.ci[0]}–${m.ci[1]})` : '')
@@ -431,6 +445,8 @@ function markdown(summary, meta) {
     ...Object.entries(summary.confusion).map(
       ([label, row]) => `| ${label} | ${VERDICTS.map((v) => row[v]).join(' | ')} |`,
     ),
+    '',
+    `Of the documents long enough for a verdict, ${pct(summary.rates.humanCalledLikelyHuman)} of human ones and ${pct(summary.rates.aiCalledLikelyHuman)} of generated ones read as \`likely_human\` ("few AI-writing signals found"): the human threshold is floored at ${HUMAN_FLOOR}, so a text with no habit at all is said to have none, and the generated texts that show none are the price of saying so.`,
     '',
     '## False positives by stratum (human documents called `likely_ai`)',
     '',

@@ -161,7 +161,11 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
     },
     words: seg.words,
     sentences: seg.sentences.length,
-    thresholds: { ...calibration.thresholds },
+    thresholds: {
+      human: result.human,
+      ai: calibration.thresholds.ai,
+      humanReachable: result.humanReachable,
+    },
     signals,
     spans: scored
       .filter((span) => options.allSpans === true || span.band !== 'none')
@@ -188,11 +192,14 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
 }
 
 export {
+  ABSENCE_NOTE,
   authorshipFindings,
   DISCLAIMER,
+  foundNothing,
   NOT_EVIDENCE,
   renderMarkdown,
   toJSON,
+  UNREACHABLE_NOTE,
   verdictSentence,
 } from './report.ts'
 export type {
@@ -206,6 +213,6 @@ export type { AuthorshipVerdict, Confidence, AbstainReason } from './verdict.ts'
 export type { ExternalSignal, Signal, EvidenceLabel } from './signals.ts'
 export type { Calibration } from './calibration.ts'
 export { CALIBRATION } from './calibration.ts'
-export { MIN_WORDS as MIN_AUTHORSHIP_WORDS, weightedScore } from './verdict.ts'
+export { HUMAN_FLOOR, MIN_WORDS as MIN_AUTHORSHIP_WORDS, weightedScore } from './verdict.ts'
 export type { LangOption } from './route.ts'
 export { formatOfPaste } from './paste.ts'

@@ -67,6 +67,17 @@ describe('the committed authorship corpus', () => {
     expect(accused).toEqual([])
   })
 
+  it('can still say "few AI-writing signals" about a human document', () => {
+    // A human threshold fitted to 0.00 left every text `uncertain`, a verdict
+    // that told the reader nothing. The floor keeps this value reachable.
+    expect(CALIBRATION.thresholds.human).toBeGreaterThan(0)
+    const reassured = results.filter(
+      (r) => r.doc.label === 'human' && r.report.verdict === 'likely_human',
+    )
+    expect(reassured.length).toBeGreaterThan(0)
+    for (const r of results) expect(r.report.thresholds.humanReachable).toBe(true)
+  })
+
   it('never reassures about a document carrying residue', () => {
     for (const r of results) {
       if (r.report.findings.some((f) => f.category === 'residue')) {

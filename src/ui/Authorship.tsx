@@ -11,8 +11,11 @@
 
 import { useMemo, useState } from 'react'
 import {
+  ABSENCE_NOTE,
   detectAuthorship,
   formatOfPaste,
+  foundNothing,
+  UNREACHABLE_NOTE,
   renderMarkdown,
   verdictSentence,
   type AuthorshipReport,
@@ -200,6 +203,16 @@ function Verdict({ report }: { report: AuthorshipReport }) {
       <p className="max-w-[65ch] text-xs leading-relaxed text-[var(--color-muted)]">
         {report.disclaimer}
       </p>
+      {report.verdict === 'likely_human' || foundNothing(report) ? (
+        <p className="max-w-[65ch] text-xs leading-relaxed text-[var(--color-muted)]">
+          {ABSENCE_NOTE}
+        </p>
+      ) : null}
+      {report.thresholds.humanReachable ? null : (
+        <p className="max-w-[65ch] text-xs leading-relaxed text-[var(--color-muted)]">
+          {UNREACHABLE_NOTE}
+        </p>
+      )}
     </div>
   )
 }
