@@ -336,6 +336,16 @@ const BLANK_THUMBNAIL = Uint8Array.from([
   0x01, 0x00, 0x00, 0x3f, 0x00, 0x37, 0xff, 0xd9,
 ])
 
+/** An XML part whose root element holds nothing: no child, no text, no attribute but namespaces. */
+const isEmptyPart = (xml: string): boolean =>
+  /^\s*(?:<\?xml[^>]*\?>)?\s*<([\w:.-]+)(?:\s+xmlns(?::[\w.-]+)?="[^"]*")*\s*(?:\/>|>\s*<\/\1>)\s*$/u.test(
+    xml,
+  )
+
+/** The same markup, whitespace between tags aside. */
+const sameMarkup = (a: string, b: string): boolean =>
+  a.replaceAll(/>\s+</g, '><').trim() === b.replaceAll(/>\s+</g, '><').trim()
+
 export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResult> {
   const entries = await readZip(bytes)
   const isEpub = zipDocumentKind(entries) === 'epub'
@@ -361,6 +371,14 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
     if (rule || isCustomXml || isOtherProperty) {
       const before = decodeUtf8(entry.data)
       const evidence = describe(before) || snippet(before.replaceAll(/<[^>]*>/g, ' '))
+      const replacement = rule ? rule.replacement : isCustomXml ? '<root/>' : emptyElements(before)
+
+      // A part a clean already emptied holds nothing to remove: counting it
+      // "removable" again told the reader a cleaned file still had four marks.
+      if (!evidence && (isEmptyPart(before) || sameMarkup(before, replacement))) {
+        rebuilt.push(entry)
+        continue
+      }
 
       findings.push({
         kind: 'doc_property',
@@ -371,8 +389,6 @@ export async function cleanZipDocument(bytes: Uint8Array): Promise<ContainerResu
         label: `${rule?.what ?? (isCustomXml ? 'custom XML part' : 'writer-specific properties')}`,
         ...(evidence ? { evidence } : {}),
       })
-
-      const replacement = rule ? rule.replacement : isCustomXml ? '<root/>' : emptyElements(before)
 
       rebuilt.push({
         name: entry.name,

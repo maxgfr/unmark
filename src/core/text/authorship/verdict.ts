@@ -10,7 +10,11 @@ import type { Signal } from './signals.ts'
 
 export type AuthorshipVerdict = 'likely_ai' | 'uncertain' | 'likely_human' | 'insufficient_evidence'
 export type Confidence = 'low' | 'medium' | 'high'
-export type AbstainReason = 'too_short' | 'unsupported_language'
+/**
+ * `unreadable`: the file holds text the reader could not get at — an
+ * encrypted PDF, or one whose every page failed to decode.
+ */
+export type AbstainReason = 'too_short' | 'unsupported_language' | 'unreadable'
 
 /** Below this many words of prose, no verdict. Every rate is noise at this length. */
 export const MIN_WORDS = 150

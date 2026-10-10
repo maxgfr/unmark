@@ -31,6 +31,8 @@ export interface ProseSource {
   unreadablePages?: number[]
   /** DOCX: whether its own page breaks were trusted for page numbers. */
   paged?: boolean
+  /** PDF: encrypted, so its text could not be read. */
+  encrypted?: boolean
 }
 
 export interface Prose {
@@ -72,6 +74,7 @@ export async function readProse(bytes: Uint8Array, name?: string): Promise<Prose
         paragraphs: layout.paragraphs.length,
         pages: read.pages.length,
         ...(read.unreadable.length > 0 ? { unreadablePages: read.unreadable } : {}),
+        ...(read.encrypted ? { encrypted: true } : {}),
       },
     }
   }
@@ -86,7 +89,9 @@ export async function readProse(bytes: Uint8Array, name?: string): Promise<Prose
       text: read.text,
       raw: read.raw,
       format: 'Text',
-      layout: { paragraphs: read.paragraphs },
+      // Word's own pages, when it left enough breaks to give them: labelled
+      // as such, since they drift from the printed ones.
+      layout: { paragraphs: read.paragraphs, ...(read.paged ? { wordPages: true } : {}) },
       source: {
         container: 'DOCX',
         paragraphs: read.paragraphs.length,

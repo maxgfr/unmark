@@ -15,6 +15,7 @@ import { decodeStego } from '../core/text/stego.ts'
 import { analyzeStyle, PLAIN, stylometryFindings } from '../core/text/index.ts'
 import {
   ABSENCE_NOTE,
+  blockSentence,
   coverageSentence,
   describeLocation,
   detectAuthorship,
@@ -23,6 +24,7 @@ import {
   withoutFolio,
   fileMarksFrom,
   foundNothing,
+  placementWarning,
   renderMarkdown,
   UNREACHABLE_NOTE,
   toJSON,
@@ -213,7 +215,9 @@ function renderFindings(all: readonly Finding[], out: string[], mode: ReportMode
         out.push(`  ${indent}${dim(`${action.action}: “${action.description}”`)}`)
     }
     if (finding.placement) out.push(`  ${indent}${dim(placementOf(finding.placement))}`)
-    if (finding.preserved) out.push(`  ${indent}${dim(finding.preserved)}`)
+    // A refusal carries its reason as both: say it once.
+    if (finding.preserved && finding.preserved !== finding.evidence)
+      out.push(`  ${indent}${dim(finding.preserved)}`)
     if (finding.noFix) out.push(`  ${indent}${dim(finding.noFix)}`)
   }
 }
@@ -671,10 +675,10 @@ function renderAuthorship(
   if (report.blocks.length > 1) {
     out.push(`  ${bold('Blocks')} ${dim('consecutive paragraphs in one language, each assessed')}`)
     for (const block of report.blocks) {
-      const from = describeLocation(block.location) ?? `line ${block.line}`
-      const to = describeLocation(block.endLocation) ?? `line ${block.endLine}`
+      const from = describeLocation(block.location, { paragraph: true }) ?? `line ${block.line}`
+      const to = describeLocation(block.endLocation, { paragraph: true }) ?? `line ${block.endLine}`
       out.push(
-        `  ${pad(BLOCK_LANGUAGE[block.lang], 15)} ${pad(`${block.words} words`, 12)} ${pad(verdictSentence(block), 44)} ${dim(
+        `  ${pad(BLOCK_LANGUAGE[block.lang], 15)} ${pad(`${block.words} words`, 12)} ${pad(blockSentence(report, block), 44)} ${dim(
           `${block.score === null ? '' : `score ${block.score.toFixed(2)} · `}${from} → ${to}`,
         )}`,
       )
@@ -822,7 +826,7 @@ async function loadProse(
       return 2
     }
     // A plain text file has no paragraphs of its own: its blank lines are.
-    layout = { paragraphs: layout?.paragraphs ?? paragraphsOf(prose.text), pages }
+    layout = { ...layout, paragraphs: layout?.paragraphs ?? paragraphsOf(prose.text), pages }
     document = {
       ...(document ?? { container: prose.format, paragraphs: layout.paragraphs.length }),
       pagesFrom: options.pages,
@@ -836,18 +840,34 @@ async function loadProse(
  * of the file named by --source when the input was extracted from one.
  * `detect` and `sweep` read the same ones, so they give the same verdict.
  */
-async function fileMarksOf(loaded: LoadedProse, options: Options): Promise<FileMark[]> {
+async function fileMarksOf(loaded: LoadedProse, options: Options): Promise<FileMark[] | number> {
   const { source, prose } = loaded
-  const containerBytes = options.source
-    ? new Uint8Array(await readFile(options.source))
-    : prose.source
-      ? source.bytes
-      : undefined
-  return containerBytes
-    ? fileMarksFrom(
-        (await inspectContainer(containerBytes, options.source ?? source.name)).findings,
+  let containerBytes: Uint8Array | undefined
+  if (options.source) {
+    try {
+      containerBytes = new Uint8Array(await readFile(options.source))
+    } catch (error) {
+      process.stderr.write(
+        `unmark: cannot read --source ${options.source}: ${error instanceof Error ? error.message : String(error)}\n`,
       )
-    : []
+      return 2
+    }
+  } else if (prose.source) containerBytes = source.bytes
+  if (!containerBytes) return []
+  const inspected = await inspectContainer(containerBytes, options.source ?? source.name)
+  // A text file given as --source has no container to read marks from: say
+  // so, rather than report "no file marks" as though a document had none.
+  if (options.source && ['Text', 'Markdown', 'HTML', 'unknown'].includes(inspected.format))
+    process.stderr.write(
+      `unmark: --source ${options.source} is not a document or an image (read as ${inspected.format}): no file marks were read\n`,
+    )
+  return fileMarksFrom(inspected.findings)
+}
+
+/** Said on stderr when few paragraphs were found in the --pages PDF. */
+function warnPlacement(report: AuthorshipReport): void {
+  const warning = report.document ? placementWarning(report.document) : undefined
+  if (warning) process.stderr.write(`unmark: ${warning}\n`)
 }
 
 async function commandDetect(target: string, options: Options): Promise<number> {
@@ -855,6 +875,7 @@ async function commandDetect(target: string, options: Options): Promise<number> 
   if (typeof loaded === 'number') return loaded
   const { source, prose, layout, document } = loaded
   const fileMarks = await fileMarksOf(loaded, options)
+  if (typeof fileMarks === 'number') return fileMarks
 
   const report = detectAuthorship(prose.text, {
     format: prose.format,
@@ -865,6 +886,7 @@ async function commandDetect(target: string, options: Options): Promise<number> 
     ...(options.top === undefined ? {} : { allSpans: true }),
     fileMarks,
   })
+  warnPlacement(report)
   const minScore = options.top === undefined ? (options.minScore ?? 0.35) : 0
   const shown =
     options.top === undefined ? report : { ...report, spans: topSpans(report, options.top) }
@@ -943,15 +965,18 @@ async function commandSweep(target: string, options: Options): Promise<number> {
         }
       : {}),
   }
+  const fileMarks = await fileMarksOf(loaded, options)
+  if (typeof fileMarks === 'number') return fileMarks
   const result = sweep(prose.text, {
     format: prose.format,
     lang: options.lang ?? 'auto',
     ...(layout ? { layout } : {}),
     ...(document ? { document } : {}),
     ...(options.register ? { register: options.register } : {}),
-    fileMarks: await fileMarksOf(loaded, options),
+    fileMarks,
     sources,
   })
+  warnPlacement(result.report)
   let rows = result.rows
   let failed = false
 

@@ -61,6 +61,11 @@ export interface Finding {
   /** Why a removable finding was kept, when it was. */
   preserved?: string
   /**
+   * Not a mark: the reason a file was not read at all — encrypted, signed.
+   * Reported so nobody takes silence for clean, never counted as a mark.
+   */
+  refusal?: true
+  /**
    * The option that would act on this, when one is off.
    *
    * Distinct from `preserved`: an emoji joiner is kept because removing it

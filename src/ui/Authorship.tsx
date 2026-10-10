@@ -25,6 +25,7 @@ import {
   coverageSentence,
   describeLocation,
   detectAuthorship,
+  blockSentence,
   documentSentence,
   formatOfPaste,
   foundNothing,
@@ -387,12 +388,13 @@ function Blocks({ report }: { report: AuthorshipReport }) {
             <tr key={block.start} className="border-t border-[var(--color-rule)]">
               <td className="py-1">{BLOCK_LANGUAGE[block.lang]}</td>
               <td className="tnum py-1 font-mono text-[var(--color-muted)]">
-                {describeLocation(block.location) ?? `line ${block.line}`} →{' '}
-                {describeLocation(block.endLocation) ?? `line ${block.endLine}`}
+                {describeLocation(block.location, { paragraph: true }) ?? `line ${block.line}`} →{' '}
+                {describeLocation(block.endLocation, { paragraph: true }) ??
+                  `line ${block.endLine}`}
               </td>
               <td className="tnum py-1 text-right font-mono">{block.words}</td>
               <td className="py-1">
-                {verdictSentence(block)}
+                {blockSentence(report, block)}
                 {block.score === null ? '' : ` · ${block.score.toFixed(2)}`}
               </td>
             </tr>

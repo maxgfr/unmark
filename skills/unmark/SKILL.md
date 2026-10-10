@@ -186,10 +186,14 @@ page by page. Options, all documented in `--help`:
 
 - `--pages <file.pdf>`: the printed PDF of the same document; every passage is
   placed as `p. 29, §2.6.3` (`location: {paragraph, page, section}` in JSON).
+  Without it, a .docx gives at best Word's own pages, written `Word p. 12`:
+  do not quote those as printed pages. If fewer than half the paragraphs are
+  found in the PDF, the tool warns: check it is the same version.
 - `--source <file>`: the .docx or PDF a text file was extracted from. Its
   container marks (a C2PA manifest on a figure…) come back as `fileMarks`,
   labelled as marks of the file, never of the prose; a confirmed one keeps the
-  verdict at `uncertain` at best, like a mark in the text.
+  verdict at `uncertain` at best, like a mark in the text. A `--source` that is
+  not a document is named on stderr; one that cannot be read exits 2.
 - `--register academic`: also reads the formulas of academic writing ("to our
   knowledge", "c'est dans ce contexte que"), tier 3; alone they are listed under
   not evidence. `coverage` says how much of the catalogue applied, so a 0.00

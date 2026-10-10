@@ -96,4 +96,49 @@ describe('layoutFromPages', () => {
       'Contexte : la fixation sclérale repose sur deux ancrages.',
     ])
   })
+
+  it('joins a paragraph cut by a page break, and undoes the hyphenation', () => {
+    const { text, layout } = layoutFromPages([
+      { page: 25, text: 'The most frequent manifestations were tearing (4 eyes, 9.\n\n25' },
+      { page: 26, text: '8 %) and a mem-' },
+      { page: 27, text: 'brane graft performed once.\n\nA new paragraph.' },
+    ])
+    expect(text.split('\n\n')).toEqual([
+      'The most frequent manifestations were tearing (4 eyes, 9.8 %) and a membrane graft performed once.',
+      'A new paragraph.',
+    ])
+    expect(layout.paragraphs.map((p) => p.page)).toEqual([25, 27])
+  })
+
+  it('leaves out a table of contents', () => {
+    const { text } = layoutFromPages([
+      {
+        page: 9,
+        text: 'Table des matières\n\n1. Introduction ........ 13\n2. Article ........ 17\n3. Conclusion ........ 52\n\nThe first real paragraph of the text.',
+      },
+    ])
+    expect(text).toBe('The first real paragraph of the text.')
+  })
+})
+
+describe('Word’s own page numbers', () => {
+  it('are labelled as Word’s, not as the printed page', () => {
+    const text = 'One paragraph of text here.'
+    const where = locator(text, {
+      paragraphs: [{ start: 0, end: text.length, index: 4, page: 12, section: '2.6 Discussion' }],
+      wordPages: true,
+    })
+    const location = where(0)
+    expect(location).toMatchObject({ page: 12, wordPage: true })
+    expect(describeLocation(location)).toBe('Word p. 12, §2.6')
+  })
+
+  it('gives the paragraph number with the page and section when asked', () => {
+    expect(
+      describeLocation(
+        { paragraph: 327, page: 6, section: '1. Introduction' },
+        { paragraph: true },
+      ),
+    ).toBe('¶327, p. 6, §1')
+  })
 })

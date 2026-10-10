@@ -205,16 +205,25 @@ prose — a layout table), captions (by style, or a leading "Figure 4." /
 follow as `location.section`) and everything under a "References" /
 "Références" / "Bibliographie" heading until the next heading. Pages come from
 Word's rendered page breaks only when they account for the document's page
-count; otherwise pass the PDF with `--pages`.
+count, and they are then labelled `Word p. 12` (`location.wordPage: true`):
+Word's layout drifts from the printed one by a page or two on a long thesis,
+so pass the printed PDF with `--pages` for the pages a reader holds. A title
+typed as a plain paragraph — « Résumé », « Serment d'Hippocrate » — starts a
+section, and a medical thesis's oath is left out (`skipped.boilerplate`).
 
 **PDF**: page by page, from the text operators and each font's `ToUnicode` map
-or encoding. Folios, numbered headings, captions and a numbered reference list
-are left out; every paragraph keeps its page.
+or encoding. Folios, numbered headings, captions, a table of contents, a
+numbered reference list and the oath are left out; a paragraph cut by a page
+break is joined back (a hyphen at the break undone); every paragraph keeps the
+page it starts on. An encrypted PDF gives no text: `detect` abstains with
+`abstainReason: "unreadable"` rather than calling it too short.
 
 `--pages <file.pdf>` places each paragraph of a .docx (or of a text file) on a
 page of the printed PDF, by a search that ignores spacing, hyphenation and
-ligatures, so a passage reads "p. 29, §2.6.3". An image, or a file with no
-prose, is refused with exit 2.
+ligatures, so a passage reads "p. 29, §2.6.3". When fewer than half the
+paragraphs are found in it, `detect` and `sweep` say so on stderr and in the
+report: it is probably another document or another version. An image, or a
+file with no prose, is refused with exit 2.
 
 ## Anything else
 

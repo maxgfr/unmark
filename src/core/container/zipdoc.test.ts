@@ -112,6 +112,12 @@ describe('cleanZipDocument', () => {
     )
     expect(twice.findings.every((f) => !f.evidence)).toBe(true)
   })
+
+  it('does not count as removable a part a clean already emptied', async () => {
+    const once = await cleanZipDocument(docx())
+    const twice = await cleanZipDocument(once.output)
+    expect(twice.findings.filter((f) => f.kind === 'doc_property')).toEqual([])
+  })
 })
 
 // A real .docx carries identity far outside docProps: on every tracked change,

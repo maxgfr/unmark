@@ -31,6 +31,8 @@ export interface PdfText {
   pages: PdfPageText[]
   /** Pages whose content could not be decoded, by number. */
   unreadable: number[]
+  /** The trailer names an /Encrypt dictionary: every string is ciphertext. */
+  encrypted?: true
 }
 
 type Matrix = [number, number, number, number, number, number]
@@ -732,5 +734,5 @@ export async function pdfText(bytes: Uint8Array): Promise<PdfText | undefined> {
       pages.push({ page: at + 1, text: '' })
     }
   }
-  return { pages, unreadable }
+  return { pages, unreadable, ...(doc.trailer.entries.has('Encrypt') ? { encrypted: true } : {}) }
 }

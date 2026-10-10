@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   authorshipFindings,
+  blockSentence,
   DISCLAIMER,
+  documentSentence,
   excerptOf,
   NOT_EVIDENCE,
   renderMarkdown,
@@ -225,5 +227,61 @@ describe('a verdict that found nothing', () => {
     }
     expect(renderMarkdown(unreachable)).toContain(UNREACHABLE_NOTE)
     expect(renderMarkdown(nothing)).not.toContain(UNREACHABLE_NOTE)
+  })
+})
+
+describe('the verdict of a block', () => {
+  const block = {
+    lang: 'fr' as const,
+    start: 0,
+    end: 100,
+    line: 1,
+    endLine: 3,
+    words: 900,
+    verdict: 'uncertain' as const,
+    score: 0.04,
+    confidence: 'medium' as const,
+  }
+  const marked: AuthorshipReport = {
+    ...REPORT,
+    verdict: 'uncertain',
+    score: 0.02,
+    thresholds: { human: 0.1, ai: 0.5, humanReachable: true },
+    findings: [],
+    spans: [],
+    fileMarks: [{ origin: 'file', kind: 'c2pa', verdict: 'confirmed', label: 'caBX — C2PA' }],
+    blocks: [block],
+  }
+
+  it('says what held it back: the file’s mark, not a close call', () => {
+    expect(blockSentence(marked, block)).toBe(
+      'Few AI-writing signals in the prose, but the file carries a technical mark',
+    )
+  })
+
+  it('says nothing was found in a block with nothing in it', () => {
+    expect(blockSentence({ ...marked, fileMarks: [] }, { ...block, score: 0 })).toBe(
+      'No AI-writing signal found',
+    )
+  })
+
+  it('names an encrypted PDF instead of calling its text too short', () => {
+    expect(
+      verdictSentence({ verdict: 'insufficient_evidence', abstainReason: 'unreadable' }),
+    ).toMatch(/could not be read/)
+  })
+})
+
+describe('what the prose was read from', () => {
+  it('says page numbers are Word’s own when no printed PDF was given', () => {
+    expect(documentSentence({ container: 'DOCX', paragraphs: 10, paged: true })).toMatch(
+      /Word’s own page breaks.*--pages/,
+    )
+  })
+
+  it('warns when few paragraphs were found in the --pages PDF', () => {
+    expect(
+      documentSentence({ container: 'DOCX', paragraphs: 366, pagesFrom: 'other.pdf', placed: 13 }),
+    ).toMatch(/only 13 of 366.*same document/)
   })
 })

@@ -112,6 +112,7 @@ const finding = (
 const refusal = (label: string, why: string): Finding => ({
   ...finding('doc_property', 'confirmed', label, why),
   preserved: why,
+  refusal: true,
 })
 
 // ---------------------------------------------------------------- refusals

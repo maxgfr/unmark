@@ -212,6 +212,13 @@ const STYLED = Array.from(
     `This rich tapestry is a testament to the ever-evolving landscape of case ${i}. It is not just robust, but seamless. The result is fast, cheap, and reliable, a pivotal and crucial moment.`,
 ).join(' ')
 
+describe('inspect on an encrypted PDF', () => {
+  it('explains once why nothing was read', async () => {
+    await main(['inspect', await file('locked.pdf', pdf({ encrypted: true }))])
+    expect(stdout().match(/Remove the password/g)).toHaveLength(1)
+  })
+})
+
 describe('decode', () => {
   it('recovers the payload rather than only reporting that one exists', async () => {
     expect(await main(['decode', await file('marked.txt', MARKED)])).toBe(0)
@@ -797,6 +804,38 @@ describe('detect on a .docx or a PDF', () => {
     )
     await main(['detect', await file('thesis.txt', HUMAN_EN), '--source', source, '--json'])
     expect(parse().fileMarks).toHaveLength(1)
+  })
+
+  it('warns when the --pages PDF does not look like the same document', async () => {
+    await main([
+      'detect',
+      await file('thesis.docx', thesis()),
+      '--pages',
+      await file('other.pdf', textPdf(['Something else entirely, about a different subject.'])),
+    ])
+    expect(stderr()).toMatch(/only 0 of 4 paragraphs.*other\.pdf/)
+  })
+
+  it('says when --source cannot be read, or is not a document', async () => {
+    expect(
+      await main(['detect', await file('a.txt', HUMAN_EN), '--source', join(dir, 'missing.docx')]),
+    ).toBe(2)
+    expect(stderr()).toContain('cannot read')
+    err = []
+    await main(['detect', await file('a.txt', HUMAN_EN), '--source', await file('b.txt', HUMAN_EN)])
+    expect(stderr()).toContain('no file marks')
+  })
+
+  it('names an encrypted PDF as unreadable, not as too short', async () => {
+    const code = await main([
+      'detect',
+      await file('locked.pdf', pdf({ encrypted: true })),
+      '--json',
+    ])
+    const report = parse()
+    expect(code).toBe(3)
+    expect(report.abstainReason).toBe('unreadable')
+    expect(report.fileMarks).toEqual([])
   })
 
   it('refuses --pages that is not a PDF', async () => {

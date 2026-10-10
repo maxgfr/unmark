@@ -98,8 +98,9 @@ export function fileMarksFrom(findings: readonly Finding[]): FileMark[] {
   return findings
     .filter(
       (f) =>
-        f.verdict === 'confirmed' ||
-        ((f.kind === 'c2pa' || f.kind === 'generator_tag') && f.verdict === 'probable'),
+        f.refusal !== true &&
+        (f.verdict === 'confirmed' ||
+          ((f.kind === 'c2pa' || f.kind === 'generator_tag') && f.verdict === 'probable')),
     )
     .map((f) => ({
       origin: 'file' as const,
@@ -506,6 +507,18 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
         }),
       )
 
+  // Too little text because the file would not give it up — encrypted, or no
+  // page decoded — is not a short text, and the reader is told which.
+  const document = options.document
+  const unreadable =
+    result.abstainReason === 'too_short' &&
+    document !== undefined &&
+    (document.encrypted === true ||
+      (document.pages !== undefined &&
+        document.pages > 0 &&
+        (document.unreadablePages?.length ?? 0) === document.pages))
+  const abstainReason = unreadable ? 'unreadable' : result.abstainReason
+
   return {
     schemaVersion: 1,
     engine: { name: 'unmark', version: VERSION },
@@ -513,7 +526,7 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
     verdict: combined?.verdict ?? result.verdict,
     score: combined?.score ?? result.score,
     confidence: combined?.confidence ?? result.confidence,
-    ...(result.abstainReason && !combined ? { abstainReason: result.abstainReason } : {}),
+    ...(abstainReason && !combined ? { abstainReason } : {}),
     language: {
       document: routing.document,
       unsupportedShare: Math.round(routing.unsupportedShare * 1000) / 1000,
@@ -573,11 +586,13 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
 export {
   ABSENCE_NOTE,
   authorshipFindings,
+  blockSentence,
   coverageSentence,
   DISCLAIMER,
   documentSentence,
   foundNothing,
   NOT_EVIDENCE,
+  placementWarning,
   renderMarkdown,
   toJSON,
   topSpans,

@@ -51,7 +51,7 @@ export default function DocumentAssessment({
   const from = useMemo((): AssessedDocument | undefined => {
     if (!prose) return undefined
     const layout = pages
-      ? { paragraphs: prose.layout?.paragraphs ?? [], pages: pages.pages }
+      ? { ...prose.layout, paragraphs: prose.layout?.paragraphs ?? [], pages: pages.pages }
       : prose.layout
     return {
       name,

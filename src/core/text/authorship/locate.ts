@@ -32,6 +32,8 @@ export interface Layout {
   paragraphs: readonly LayoutParagraph[]
   /** The printed pages, to place each paragraph on one. */
   pages?: readonly PageText[]
+  /** The paragraphs' own pages are Word's layout, not a printed PDF's. */
+  wordPages?: boolean
 }
 
 /** Letters and digits only, lowercase, ligatures and accents kept apart. */
@@ -124,11 +126,20 @@ export function sectionLabel(section: string): string {
   return `“${section.length > 40 ? `${section.slice(0, 39)}…` : section}”`
 }
 
-/** "p. 29, §2.6.3", "¶14", or undefined when nothing is known. */
-export function describeLocation(location: Location | undefined): string | undefined {
+/**
+ * "p. 29, §2.6.3", "Word p. 12" when the page is Word's own, "¶14", or
+ * undefined when nothing is known. `paragraph: true` always leads with the
+ * paragraph number, so the two ends of a block are told in the same terms.
+ */
+export function describeLocation(
+  location: Location | undefined,
+  options: { paragraph?: boolean } = {},
+): string | undefined {
   if (!location) return undefined
   const parts: string[] = []
-  if (location.page !== undefined) parts.push(`p. ${location.page}`)
+  if (options.paragraph && location.paragraph !== undefined) parts.push(`¶${location.paragraph}`)
+  if (location.page !== undefined)
+    parts.push(`${location.wordPage ? 'Word p.' : 'p.'} ${location.page}`)
   if (location.section) parts.push(sectionLabel(location.section))
   if (parts.length === 0 && location.paragraph !== undefined) parts.push(`¶${location.paragraph}`)
   return parts.length > 0 ? parts.join(', ') : undefined
@@ -168,6 +179,7 @@ export function locator(
     const paragraph = paragraphs[at]
     if (!paragraph || start > paragraph.end + 2) return undefined
     let page = paragraph.page
+    let printed = false
     if (pages) {
       const base = positions[at] ?? -1
       if (base !== -1) {
@@ -181,12 +193,19 @@ export function locator(
           found = pages.haystack.indexOf(passage, base)
           if (found > base + window) found = -1
         }
-        page = pageAt(pages, found === -1 ? base + into : found) ?? page
+        const at = pageAt(pages, found === -1 ? base + into : found)
+        if (at !== undefined) {
+          page = at
+          printed = true
+        }
       }
     }
+    // A .docx's own page, when no printed page was found: say whose it is.
+    const wordPage = page !== undefined && !printed && layout.wordPages === true
     return {
       paragraph: paragraph.index,
       ...(page === undefined ? {} : { page }),
+      ...(wordPage ? { wordPage: true } : {}),
       ...(paragraph.section ? { section: paragraph.section } : {}),
     }
   }
@@ -199,6 +218,14 @@ const BARE_HEADING = /^\p{Lu}[^.!?:;,]{0,60}$/u
 /** The heading of a reference list. */
 const REFERENCES =
   /^(?:\d+\.?\s+)?(?:r[ée]f[ée]rences?(?: bibliographiques)?|references|bibliograph(?:y|ie)|works cited|literature cited)$/iu
+/** A line of a table of contents: a title, dot leaders or a gap, a page number. */
+const TOC_LINE = /(?:\.{3,}|…{2,}|\s{3,}|\t)\s*\d{1,4}\s*$/u
+const TOC_TITLE = /^(?:table des mati[èe]res|sommaire|contents|table of contents)$/iu
+/** Ends a paragraph: a full stop, a closing bracket or quote after one, a colon. */
+const PARAGRAPH_END = /[.!?:;…»”"')\]]\s*$/u
+/** A decimal cut at the page break: "9." then "8 %" on the next page. */
+const CUT_DECIMAL = /\d[.,]$/u
+
 /** The oath a medical thesis ends with: a fixed text, not the author's. */
 const OATH = /^(?:serment(?: d['’]hippocrate)?|hippocratic oath|oath)$/iu
 /** An entry of a numbered reference list: "12. Author AB…", "[12] Author…". */
@@ -225,11 +252,47 @@ export function layoutFromPages(pages: readonly PageText[]): { text: string; lay
   let section: string | undefined
   let references = false
   let oath = false
+  // The last paragraph kept, while nothing but a folio has come after it: the
+  // one the first paragraph of the next page may continue.
+  let open = false
+  let firstOfPage = true
   for (const { page, text } of pages) {
+    firstOfPage = true
     for (const block of text.split(/\n{2,}/u)) {
       const flat = block.replaceAll(/\s*\n\s*/gu, ' ').trim()
       if (!flat || /^[\d\s\-–—./ivxlc]+$/iu.test(flat)) continue
+      // A paragraph cut by the page break: the previous page's last paragraph
+      // has no end, or ends on a hyphen or a cut decimal, and this one goes on
+      // in lower case or with the rest of the number.
+      const previous = parts.at(-1)
+      if (open && firstOfPage && previous !== undefined) {
+        const hyphen = /\p{L}-$/u.test(previous) && /^\p{Ll}/u.test(flat)
+        const decimal = CUT_DECIMAL.test(previous) && /^\d/u.test(flat)
+        if (hyphen || decimal || (!PARAGRAPH_END.test(previous) && /^[\p{Ll}\d(]/u.test(flat))) {
+          const joined = hyphen
+            ? `${previous.slice(0, -1)}${flat}`
+            : decimal
+              ? `${previous}${flat}`
+              : `${previous} ${flat}`
+          parts[parts.length - 1] = joined
+          length += joined.length - previous.length
+          const last = paragraphs.at(-1)
+          if (last) last.end = length
+          firstOfPage = false
+          continue
+        }
+      }
+      firstOfPage = false
+      open = false
       index += 1
+      const lines = block.split(/\n/u).filter((line) => line.trim())
+      if (
+        TOC_TITLE.test(flat) ||
+        (lines.length > 0 &&
+          lines.filter((l) => TOC_LINE.test(l)).length * 2 >= lines.length &&
+          lines.some((l) => TOC_LINE.test(l)))
+      )
+        continue
       if (REFERENCES.test(flat)) {
         references = true
         continue
@@ -258,6 +321,7 @@ export function layoutFromPages(pages: readonly PageText[]): { text: string; lay
         ...(section ? { section } : {}),
       })
       length += flat.length
+      open = true
     }
   }
   return { text: parts.join('\n\n'), layout: { paragraphs } }

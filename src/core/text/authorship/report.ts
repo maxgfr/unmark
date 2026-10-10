@@ -45,6 +45,11 @@ export interface Location {
    */
   paragraph?: number
   page?: number
+  /**
+   * The page is Word's own layout, from the .docx's rendered page breaks, not
+   * the printed PDF's: the two drift apart by a page or two on a long thesis.
+   */
+  wordPage?: boolean
   /** The heading it sits under, as written. */
   section?: string
 }
@@ -189,6 +194,8 @@ export interface DocumentSource {
   /** Paragraphs that could be placed on a page, out of `paragraphs`. */
   placed?: number
   paged?: boolean
+  /** PDF: the file is encrypted, so none of its text could be read. */
+  encrypted?: boolean
 }
 
 export interface AuthorshipReport {
@@ -325,7 +332,9 @@ export function verdictSentence(
     default: {
       return report.abstainReason === 'unsupported_language'
         ? 'Not assessed: the prose is mostly in a language other than French or English'
-        : 'Not enough text to assess (under 150 words of prose)'
+        : report.abstainReason === 'unreadable'
+          ? 'Not assessed: the text of this file could not be read (an encrypted PDF, or pages that did not decode)'
+          : 'Not enough text to assess (under 150 words of prose)'
     }
   }
 }
@@ -392,7 +401,7 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
     )
     for (const block of report.blocks) {
       out.push(
-        `| ${BLOCK_LANGUAGE[block.lang]} | ${cell(describeLocation(block.location) ?? `line ${block.line}`)} | ${cell(describeLocation(block.endLocation) ?? `line ${block.endLine}`)} | ${block.words} | ${cell(verdictSentence(block))} | ${block.score === null ? '—' : fixed(block.score)} |`,
+        `| ${BLOCK_LANGUAGE[block.lang]} | ${cell(describeLocation(block.location, { paragraph: true }) ?? `line ${block.line}`)} | ${cell(describeLocation(block.endLocation, { paragraph: true }) ?? `line ${block.endLine}`)} | ${block.words} | ${cell(blockSentence(report, block))} | ${block.score === null ? '—' : fixed(block.score)} |`,
       )
     }
     out.push('')
@@ -572,6 +581,35 @@ const BLOCK_LANGUAGE: Record<LanguageBlock['lang'], string> = {
   other: 'other',
 }
 
+/**
+ * A block's verdict as a sentence, read with the document's thresholds and
+ * marks and with the findings inside it: on its own, a block at 0.04 in a
+ * file carrying a C2PA manifest read "not enough to call it either way".
+ */
+export function blockSentence(report: AuthorshipReport, block: LanguageBlock): string {
+  const inside = (start: number) => start >= block.start && start < block.end
+  return verdictSentence({
+    ...block,
+    thresholds: report.thresholds,
+    fileMarks: report.fileMarks,
+    technicalMarks: report.technicalMarks.filter((mark) => inside(mark.offset)),
+    findings: report.findings.filter((finding) => inside(finding.start)),
+    spans: report.spans.filter((span) => inside(span.start)),
+  })
+}
+
+/** Below this share of paragraphs found in the --pages PDF, it is probably another document. */
+const PLACED_WARNING = 0.5
+
+/** The warning to give when few paragraphs were found in the --pages PDF, if any. */
+export function placementWarning(source: DocumentSource): string | undefined {
+  if (!source.pagesFrom || source.paragraphs === 0) return undefined
+  const placed = source.placed ?? 0
+  return placed / source.paragraphs < PLACED_WARNING
+    ? `only ${placed} of ${source.paragraphs} paragraphs were found in ${source.pagesFrom}: is it the printed PDF of the same document, at the same version?`
+    : undefined
+}
+
 /** What the prose was read from and what was left out, in one sentence. */
 export function documentSentence(source: DocumentSource): string {
   const skipped = Object.entries(source.skipped ?? {})
@@ -583,9 +621,14 @@ export function documentSentence(source: DocumentSource): string {
     ...(skipped.length > 0 ? [`left out: ${skipped.join(', ')}`] : []),
     ...(source.pagesFrom
       ? [
-          `${source.placed ?? 0} of ${source.paragraphs} paragraphs placed on a page of ${source.pagesFrom}`,
+          placementWarning(source) ??
+            `${source.placed ?? 0} of ${source.paragraphs} paragraphs placed on a page of ${source.pagesFrom}`,
         ]
-      : []),
+      : source.container === 'DOCX' && source.paged
+        ? [
+            'pages are from Word’s own page breaks (“Word p.”), which drift from the printed ones: pass the printed PDF with --pages for those',
+          ]
+        : []),
     ...(source.unreadablePages?.length
       ? [`unreadable pages: ${source.unreadablePages.join(', ')}`]
       : []),

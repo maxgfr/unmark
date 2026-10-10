@@ -119,7 +119,7 @@ dropping one.
 | Field                    | Use                                                                                                                     |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | `verdict`, `score`       | the engine's answer; `score` is `null` when it abstains                                                                 |
-| `abstainReason`          | `too_short` or `unsupported_language`                                                                                   |
+| `abstainReason`          | `too_short`, `unsupported_language`, or `unreadable` (an encrypted PDF, or no page decoded)                             |
 | `signals[]`              | one per habit family; `value: null` means not measurable                                                                |
 | `spans[]`                | sentences in a band (all of them with `--top`), with `line`, `band`, `reasons`, `excerpt`, `location`                   |
 | `blocks[]`               | runs of one language, each with its own verdict and score                                                               |
