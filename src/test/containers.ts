@@ -1103,3 +1103,84 @@ export function mp4(options: Mp4Options = {}): Uint8Array {
 /** The sixteen bytes C2PA stamps its `uuid` box with, and Adobe's for XMP. */
 export const C2PA_BOX_UUID = 'd8fec3d61b0e483c92975828877ec481'
 export const XMP_BOX_UUID = 'be7acfcb97a942e89c71999491e3afac'
+
+/**
+ * A PDF from object bodies, numbered from 1, with a correct xref table.
+ * Object 1 must be the catalog.
+ */
+export function pdfObjects(objects: (string | Uint8Array)[]): Uint8Array {
+  const parts: Uint8Array[] = [encode('%PDF-1.7\n')]
+  const offsets: number[] = []
+  let length = parts[0]?.length ?? 0
+  objects.forEach((body, at) => {
+    offsets.push(length)
+    const chunks = [
+      encode(`${at + 1} 0 obj\n`),
+      typeof body === 'string' ? encode(body) : body,
+      encode('\nendobj\n'),
+    ]
+    for (const chunk of chunks) {
+      parts.push(chunk)
+      length += chunk.length
+    }
+  })
+  const xref = [
+    'xref',
+    `0 ${objects.length + 1}`,
+    '0000000000 65535 f ',
+    ...offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n `),
+    'trailer',
+    `<< /Size ${objects.length + 1} /Root 1 0 R >>`,
+    'startxref',
+    String(length),
+    '%%EOF',
+  ].join('\n')
+  parts.push(encode(xref))
+  const out = new Uint8Array(parts.reduce((sum, p) => sum + p.length, 0))
+  let at = 0
+  for (const p of parts) {
+    out.set(p, at)
+    at += p.length
+  }
+  return out
+}
+
+export const pdfStream = (dict: string, data: string, compressed = false): Uint8Array => {
+  const bytes = compressed ? zlibStored(encode(data)) : encode(data)
+  const head = encode(
+    `<< ${dict} /Length ${bytes.length}${compressed ? ' /Filter /FlateDecode' : ''} >>\nstream\n`,
+  )
+  const tail = encode('\nendstream')
+  const out = new Uint8Array(head.length + bytes.length + tail.length)
+  out.set(head)
+  out.set(bytes, head.length)
+  out.set(tail, head.length + bytes.length)
+  return out
+}
+
+/**
+ * A PDF of text pages: each string is a page, each paragraph in it (split on
+ * a blank line) drawn as one line, with a wide gap between paragraphs.
+ */
+export function textPdf(pages: readonly string[]): Uint8Array {
+  const escape = (text: string) => text.replaceAll(/([\\()])/gu, '\\$1')
+  const contents = pages.map((page) => {
+    const lines = page
+      .split(/\n{2,}/u)
+      .map(
+        (paragraph, at) =>
+          `BT /F1 10 Tf 1 0 0 1 72 ${750 - at * 30} Tm (${escape(paragraph.replaceAll(/\s+/gu, ' '))}) Tj ET`,
+      )
+    return pdfStream('', lines.join('\n'))
+  })
+  const kids = pages.map((_, at) => `${4 + at} 0 R`).join(' ')
+  return pdfObjects([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${kids}] /Count ${pages.length} /Resources << /Font << /F1 3 0 R >> >> >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    ...pages.map(
+      (_, at) => `<< /Type /Page /Parent 2 0 R /Contents ${4 + pages.length + at} 0 R >>`,
+    ),
+    ...contents,
+  ])
+}

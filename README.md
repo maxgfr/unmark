@@ -299,6 +299,7 @@ unmark decode  suspicious.txt     # recover what the invisible characters spell
 unmark clean   suspicious.txt --in-place
 unmark audit   ./docs             # walk a tree, list what is marked
 unmark detect  essay.md           # does it read as AI-written, and where — not proof
+unmark detect  thesis.docx --pages thesis.pdf   # body text only, passages by page and section
 
 # The opt-in style passes
 unmark clean draft.md --typography   # em dashes, curly quotes, ellipses → ASCII
@@ -309,8 +310,8 @@ unmark clean draft.md --plain        # both at once
 Zero dependencies — one file, no install step. Exit codes compose: `inspect`
 returns 1 when something `confirmed` is present, `audit` returns 1 when a tree is
 dirty, `detect` returns 1 on `likely_ai`, 3 when it abstains and 2 on a bad
-flag or a binary file (`--format text|md|json`, `--lang fr|en|auto`,
-`--min-score 0..1`). The CLI and the page run the **same core**, built twice from one source, so
+flag or a file with no prose (`--format text|md|json`, `--lang fr|en|auto`,
+`--min-score 0..1`, `--pages <pdf>`, `--source <docx|pdf>`). The CLI and the page run the **same core**, built twice from one source, so
 they cannot disagree about the same character.
 
 ## Crossing the deterministic ceiling

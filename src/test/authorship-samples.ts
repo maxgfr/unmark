@@ -47,3 +47,11 @@ Numéro de pré-demande si vous avez fait cette démarche en ligne (sinon, il fa
 Gratuit
 
 La carte d'identité n'est pas fabriquée sur place et ne peut donc pas être délivrée immédiatement. Le délai de fabrication dépend du lieu et de la période de la demande. Par exemple, à l'approche des vacances d'été, les délais peuvent augmenter de manière significative.`
+
+export const HUMAN_EN = `We reviewed the charts of every patient who had the lens fitted between March 2019 and June 2020. Two surgeons did all of the operations, in the same theatre, with the same instruments. Patients came back at one week, one month and three months, and then once a year.
+
+At the four-year visit, the examining doctor lifted the upper lid, looked at each anchor under the slit lamp and wrote down whether it was buried, visible under the conjunctiva or poking through it. When she could not tell, she took a scan. She did not know which surgeon had operated.
+
+Forty-three patients were eligible. Two had moved away and did not answer our letters, so forty-one eyes were examined. The youngest patient was eighteen and the oldest eighty-eight. Most had lost their natural lens to an accident or to a dislocated implant, and a few had been born without proper support for it.
+
+We counted an anchor as exposed only when the conjunctiva over it was broken. Redness on its own did not count. Each eye was then sorted by its worst anchor, which is the number a surgeon would want to know before deciding whether to operate again.`

@@ -15,10 +15,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { main } from './main.ts'
-import { jpeg, pdf, png, textChunkData, zip, exifSegment } from '../test/containers.ts'
+import { jpeg, pdf, png, textChunkData, textPdf, zip, exifSegment } from '../test/containers.ts'
 import { c2paStore, CLAUDE_STORE } from '../test/c2pa.ts'
 import { encodeStego } from '../core/text/stego.ts'
-import { AI_FR, HUMAN_FR } from '../test/authorship-samples.ts'
+import { AI_FR, HUMAN_EN, HUMAN_FR } from '../test/authorship-samples.ts'
 
 let dir = ''
 let out: string[] = []
@@ -636,5 +636,132 @@ describe('detect', () => {
     expect(parse().findings.map((f: { patternId: string }) => f.patternId)).toContain(
       'any.residue.placeholder',
     )
+  })
+})
+
+describe('detect on a .docx or a PDF', () => {
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+  const para = (text: string, style?: string) =>
+    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`
+  const paragraphs = HUMAN_EN.split('\n\n')
+  const thesis = (media: { name: string; content: Uint8Array }[] = []) =>
+    zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      {
+        name: 'word/document.xml',
+        content: `<w:document ${W}><w:body>${para('2.4 Methods', 'Heading2')}${paragraphs.map((p) => para(p)).join('')}${para('Figure 1. A caption.')}</w:body></w:document>`,
+      },
+      ...media,
+    ])
+  const parse = () => JSON.parse(stdout())
+
+  it('reads the body of a .docx and says what it left out', async () => {
+    const code = await main(['detect', await file('thesis.docx', thesis()), '--json'])
+    const report = parse()
+    expect(code).toBe(0)
+    expect(report.words).toBeGreaterThan(150)
+    expect(report.document).toMatchObject({
+      container: 'DOCX',
+      paragraphs: 4,
+      skipped: { heading: 1, caption: 1 },
+    })
+  })
+
+  it('places passages on the pages of the printed PDF', async () => {
+    const printed = textPdf([
+      `2.4 Methods\n\n${paragraphs.slice(0, 2).join('\n\n')}`,
+      paragraphs.slice(2).join('\n\n'),
+    ])
+    await main([
+      'detect',
+      await file('thesis.docx', thesis()),
+      '--pages',
+      await file('thesis.pdf', printed),
+      '--min-score',
+      '0',
+      '--json',
+    ])
+    const report = parse()
+    expect(report.document.placed).toBe(4)
+    const [block] = report.blocks
+    expect(block.location).toEqual({ paragraph: 2, page: 1, section: '2.4 Methods' })
+    expect(block.endLocation).toMatchObject({ paragraph: 5, page: 2 })
+  })
+
+  it('says in the terminal how many paragraphs were placed on a page', async () => {
+    await main([
+      'detect',
+      await file('thesis.docx', thesis()),
+      '--pages',
+      await file('thesis.pdf', textPdf([HUMAN_EN])),
+    ])
+    expect(stdout()).toContain('read from DOCX, 4 paragraphs')
+    expect(stdout()).toMatch(/4 of 4 paragraphs placed on a page of .*thesis\.pdf/)
+  })
+
+  it('reads a PDF page by page', async () => {
+    await main(['detect', await file('thesis.pdf', textPdf(paragraphs)), '--json'])
+    const report = parse()
+    expect(report.document).toMatchObject({ container: 'PDF', pages: 4 })
+    expect(report.words).toBeGreaterThan(150)
+  })
+
+  it('lists the container marks as file marks, apart from the text', async () => {
+    const manifest = png([{ type: 'caBX', data: new Uint8Array([0, 0, 0, 8]) }])
+    await main([
+      'detect',
+      await file('thesis.docx', thesis([{ name: 'word/media/image1.png', content: manifest }])),
+      '--json',
+    ])
+    const report = parse()
+    expect(report.fileMarks).toEqual([
+      expect.objectContaining({ origin: 'file', kind: 'c2pa', where: 'word/media/image1.png' }),
+    ])
+    expect(report.verdict).not.toBe('likely_human')
+  })
+
+  it('says what a C2PA manifest declares, and which figure it is on', async () => {
+    const W2 = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    const docx = zip([
+      { name: '[Content_Types].xml', content: '<Types/>' },
+      {
+        name: 'word/document.xml',
+        content: `<w:document ${W2} xmlns:r="r"><w:body>${paragraphs.map((p) => para(p)).join('')}<w:p><w:r><w:drawing><a:blip r:embed="rId9"/></w:drawing></w:r></w:p>${para('Figure 4. Classification.')}</w:body></w:document>`,
+      },
+      {
+        name: 'word/_rels/document.xml.rels',
+        content:
+          '<Relationships><Relationship Id="rId9" Type="image" Target="media/image24.png"/></Relationships>',
+      },
+      {
+        name: 'word/media/image24.png',
+        content: png([{ type: 'caBX', data: c2paStore(CLAUDE_STORE) }]),
+      },
+    ])
+    await main(['detect', await file('thesis.docx', docx), '--json'])
+    const [mark] = parse().fileMarks
+    expect(mark.c2pa.origin).toBe('ai_tool')
+    expect(mark.placement).toEqual({ paragraph: 5, caption: 'Figure 4. Classification.' })
+  })
+
+  it('reads the marks of --source for a text extracted from it', async () => {
+    const manifest = png([{ type: 'caBX', data: new Uint8Array([0, 0, 0, 8]) }])
+    const source = await file(
+      'thesis.docx',
+      thesis([{ name: 'word/media/image1.png', content: manifest }]),
+    )
+    await main(['detect', await file('thesis.txt', HUMAN_EN), '--source', source, '--json'])
+    expect(parse().fileMarks).toHaveLength(1)
+  })
+
+  it('refuses --pages that is not a PDF', async () => {
+    const code = await main([
+      'detect',
+      await file('a.txt', HUMAN_EN),
+      '--pages',
+      await file('b.txt', 'x'),
+    ])
+    expect(code).toBe(2)
+    expect(stderr()).toContain('--pages needs a PDF')
   })
 })

@@ -195,8 +195,23 @@ Prose only: **Text, Markdown and HTML** (script and style blocks are skipped,
 tags are not read as words). Code blocks, blockquotes, quotations and URLs are
 left out of the assessment — quoting a chatbot is not writing like one.
 
-A binary file — PDF, DOCX, an image — is refused with exit 2. Export the text
-first (`.txt` or `.md`) and run `detect` on that.
+**DOCX**: the body paragraphs of `word/document.xml`. Left out, and counted in
+`document.skipped`: data tables (a table cell of 30 words or more is read as
+prose — a layout table), captions (by style, or a leading "Figure 4." /
+"Tableau 2"), the table of contents, headings (they label the paragraphs that
+follow as `location.section`) and everything under a "References" /
+"Références" / "Bibliographie" heading until the next heading. Pages come from
+Word's rendered page breaks only when they account for the document's page
+count; otherwise pass the PDF with `--pages`.
+
+**PDF**: page by page, from the text operators and each font's `ToUnicode` map
+or encoding. Folios, numbered headings, captions and a numbered reference list
+are left out; every paragraph keeps its page.
+
+`--pages <file.pdf>` places each paragraph of a .docx (or of a text file) on a
+page of the printed PDF, by a search that ignores spacing, hyphenation and
+ligatures, so a passage reads "p. 29, §2.6.3". An image, or a file with no
+prose, is refused with exit 2.
 
 ## Anything else
 

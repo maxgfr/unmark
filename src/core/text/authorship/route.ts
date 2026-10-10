@@ -22,6 +22,8 @@ export interface Routing {
   unsupportedShare: number
   /** One entry per `Segmentation.blocks`, `undefined` for other languages. */
   paragraphs: (Lang | undefined)[]
+  /** What was detected per block, before routing: an ISO code, or undefined. */
+  detected: (string | undefined)[]
 }
 
 const isSupported = (lang: string | undefined): lang is Lang => lang === 'fr' || lang === 'en'
@@ -89,6 +91,7 @@ export function route(text: string, seg: Segmentation, option: LangOption = 'aut
       document: option,
       unsupportedShare: 0,
       paragraphs: seg.blocks.map(() => option),
+      detected: seg.blocks.map(() => option),
     }
   }
 
@@ -139,5 +142,6 @@ export function route(text: string, seg: Segmentation, option: LangOption = 'aut
     document,
     unsupportedShare: total === 0 ? 0 : unsupported / total,
     paragraphs,
+    detected: found,
   }
 }

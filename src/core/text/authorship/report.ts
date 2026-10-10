@@ -9,9 +9,11 @@
 //   The lowest verdict is "few AI-writing signals found". Nothing here ever
 //   says a person wrote the text: absence of habits is not a signature.
 
-import type { Finding } from '../../report.ts'
+import type { Finding, FindingKind, Placement, Verdict } from '../../report.ts'
+import type { C2paOrigin } from '../../container/c2pa.ts'
 import type { StyleReport } from '../stylometry.ts'
 import type { Category, Tier } from './catalogue/index.ts'
+import { describeLocation } from './locate.ts'
 import type { Lang } from './segment.ts'
 import type { Signal, EvidenceLabel } from './signals.ts'
 import type { Band } from './spans.ts'
@@ -32,6 +34,73 @@ export const NOT_EVIDENCE: readonly string[] = [
 
 export type Severity = 'high' | 'medium' | 'low'
 
+/**
+ * Where a passage sits in the document a reader holds, when that is known:
+ * read from a .docx or a PDF, or from a PDF given with `--pages`.
+ */
+export interface Location {
+  /**
+   * 1-based ordinal of the paragraph in the source document: for a .docx,
+   * among every paragraph of the body, as `inspect` counts a picture's.
+   */
+  paragraph?: number
+  page?: number
+  /** The heading it sits under, as written. */
+  section?: string
+}
+
+/**
+ * A stretch of consecutive paragraphs in one language, and its own verdict.
+ *
+ * A thesis with a French introduction, an English article and a French
+ * conclusion is three blocks. Each is assessed with its own catalogue and its
+ * own statistics; the document's verdict is their word-weighted combination.
+ */
+export interface LanguageBlock {
+  /** `other` for a language with no catalogue. */
+  lang: Lang | 'other'
+  start: number
+  end: number
+  line: number
+  endLine: number
+  words: number
+  verdict: AuthorshipVerdict
+  score: number | null
+  confidence: Confidence
+  abstainReason?: AbstainReason
+  location?: Location
+  endLocation?: Location
+}
+
+/** A paragraph read as a language with no catalogue: what `unsupportedShare` counts. */
+export interface UnsupportedSegment {
+  /** ISO 639-1, as detected. */
+  lang: string
+  words: number
+  line: number
+  excerpt: string
+  location?: Location
+}
+
+/**
+ * A mark found in the file the text came from, not in the text: a C2PA
+ * manifest on an embedded image, a generator tag. Reported apart because it
+ * says something about the file's history, never about who wrote the prose.
+ */
+export interface FileMark {
+  origin: 'file'
+  kind: FindingKind
+  verdict: Verdict
+  label: string
+  /** The part of the container it was found in: `word/media/image24.png`. */
+  where?: string
+  evidence?: string
+  /** A picture's paragraph and caption: "Figure 4. …". */
+  placement?: Placement
+  /** For a C2PA manifest, what it declares: made by a model, or handled by a tool. */
+  c2pa?: { origin: C2paOrigin; statement: string }
+}
+
 export interface AuthorshipFinding {
   /** `patternId@start`, stable for a given text. */
   id: string
@@ -48,6 +117,7 @@ export interface AuthorshipFinding {
   fixHint: string
   evidenceLabel: EvidenceLabel
   severity: Severity
+  location?: Location
 }
 
 export interface AuthorshipSpan {
@@ -63,11 +133,28 @@ export interface AuthorshipSpan {
   reasons: string[]
   excerpt: string
   lang?: Lang
+  location?: Location
 }
 
 export interface LocatedFinding extends Finding {
   line: number
   col: number
+  location?: Location
+}
+
+/** What the prose was read from, when it was not plain text. */
+export interface DocumentSource {
+  container: string
+  paragraphs: number
+  /** Paragraphs left out (tables, captions, references, contents), by reason. */
+  skipped?: Partial<Record<string, number>>
+  pages?: number
+  unreadablePages?: number[]
+  /** Pages were placed from this PDF (`--pages`). */
+  pagesFrom?: string
+  /** Paragraphs that could be placed on a page, out of `paragraphs`. */
+  placed?: number
+  paged?: boolean
 }
 
 export interface AuthorshipReport {
@@ -78,7 +165,14 @@ export interface AuthorshipReport {
   score: number | null
   confidence: Confidence
   abstainReason?: AbstainReason
-  language: { document: Lang | 'und'; unsupportedShare: number }
+  language: {
+    document: Lang | 'und'
+    unsupportedShare: number
+    /** The paragraphs behind `unsupportedShare`, each with its detected language. */
+    unsupported: UnsupportedSegment[]
+  }
+  /** Consecutive paragraphs in one language; more than one in a mixed document. */
+  blocks: LanguageBlock[]
   /** Words of unsealed prose: what the 150-word threshold counts. */
   words: number
   sentences: number
@@ -92,6 +186,10 @@ export interface AuthorshipReport {
   spans: AuthorshipSpan[]
   findings: AuthorshipFinding[]
   technicalMarks: LocatedFinding[]
+  /** Marks of the container the text was read from. Empty for plain text. */
+  fileMarks: FileMark[]
+  /** What the prose was read from, when that was a .docx or a PDF. */
+  document?: DocumentSource
   style: StyleReport
   notEvidence: readonly string[]
   disclaimer: string
@@ -153,7 +251,12 @@ export const UNREACHABLE_NOTE =
 /** The verdict as the sentence a reader sees. */
 export function verdictSentence(
   report: Pick<AuthorshipReport, 'verdict' | 'abstainReason'> &
-    Partial<Pick<AuthorshipReport, 'score' | 'findings' | 'spans'>>,
+    Partial<
+      Pick<
+        AuthorshipReport,
+        'score' | 'findings' | 'spans' | 'thresholds' | 'technicalMarks' | 'fileMarks'
+      >
+    >,
 ): string {
   switch (report.verdict) {
     case 'likely_ai': {
@@ -164,9 +267,20 @@ export function verdictSentence(
       // nothing at all had been found. Uncertain then only means a guard held
       // the verdict back — a technical mark, or a calibration that cannot say
       // `likely_human` — and the sentence says what was actually found.
-      return foundNothing(report)
-        ? 'No AI-writing signal found'
-        : 'Uncertain: not enough to call it either way'
+      if (foundNothing(report)) return 'No AI-writing signal found'
+      // Guard B held back "few signals" because of a mark: say both halves.
+      const marked =
+        (report.technicalMarks?.length ?? 0) > 0 ||
+        (report.fileMarks ?? []).some((mark) => mark.verdict === 'confirmed')
+      if (
+        marked &&
+        report.score !== null &&
+        report.score !== undefined &&
+        report.thresholds?.humanReachable === true &&
+        report.score < report.thresholds.human
+      )
+        return 'Few AI-writing signals in the prose, but the file carries a technical mark'
+      return 'Uncertain: not enough to call it either way'
     }
     case 'likely_human': {
       return 'Few AI-writing signals found'
@@ -218,6 +332,24 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
       ` · thresholds ${fixed(report.thresholds.human)} / ${fixed(report.thresholds.ai)}`,
     '',
   )
+  if (report.document) out.push(`Read from: ${documentSentence(report.document)}`, '')
+
+  if (report.blocks.length > 1) {
+    out.push(
+      '## Blocks',
+      '',
+      'Consecutive paragraphs in one language, each assessed with its own catalogue; the verdict above is their word-weighted combination.',
+      '',
+      '| Language | From | To | Words | Verdict | Score |',
+      '| --- | --- | --- | ---: | --- | ---: |',
+    )
+    for (const block of report.blocks) {
+      out.push(
+        `| ${BLOCK_LANGUAGE[block.lang]} | ${cell(describeLocation(block.location) ?? `line ${block.line}`)} | ${cell(describeLocation(block.endLocation) ?? `line ${block.endLine}`)} | ${block.words} | ${cell(verdictSentence(block))} | ${block.score === null ? '—' : fixed(block.score)} |`,
+      )
+    }
+    out.push('')
+  }
 
   out.push('## Why', '')
   for (const signal of report.signals) {
@@ -235,13 +367,19 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
       !listed.some((span) => inside(finding, span)),
   )
 
+  const located = [...listed, ...loose].some((item) => item.location !== undefined)
+  const place = (item: { line: number; location?: Location }) =>
+    cell(describeLocation(item.location) ?? `line ${item.line}`)
+  const at = (item: { line: number; location?: Location }) =>
+    located ? place(item) : String(item.line)
+
   out.push('## Passages', '')
   if (listed.length === 0 && loose.length === 0) {
     out.push(`No passage scored ${fixed(minScore)} or more.`, '')
   } else {
     out.push(
-      '| Line | Excerpt | Score | Pattern | Reason | Fix |',
-      '| ---: | --- | ---: | --- | --- | --- |',
+      `| ${located ? 'Where' : 'Line'} | Excerpt | Score | Pattern | Reason | Fix |`,
+      `| ${located ? '---' : '---:'} | --- | ---: | --- | --- | --- |`,
     )
     const rows: { line: number; row: string }[] = []
     for (const span of listed) {
@@ -250,13 +388,13 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
       const patterns = own.length > 0 ? [...new Set(own.map((f) => f.patternId))] : span.reasons
       rows.push({
         line: span.line,
-        row: `| ${span.line} | ${cell(span.excerpt)} | ${fixed(span.score)}${span.lowConfidence ? ' (short)' : ''} | ${cell(patterns.join(', '))} | ${cell(lead?.reason ?? featureReason(span.reasons))} | ${cell(lead?.fixHint ?? featureFix(span.reasons))} |`,
+        row: `| ${at(span)} | ${cell(span.excerpt)} | ${fixed(span.score)}${span.lowConfidence ? ' (short)' : ''} | ${cell(patterns.join(', '))} | ${cell(lead?.reason ?? featureReason(span.reasons))} | ${cell(lead?.fixHint ?? featureFix(span.reasons))} |`,
       })
     }
     for (const finding of loose) {
       rows.push({
         line: finding.line,
-        row: `| ${finding.line} | ${cell(finding.excerpt)} | — | ${cell(finding.patternId)} | ${cell(finding.reason)} | ${cell(finding.fixHint)} |`,
+        row: `| ${at(finding)} | ${cell(finding.excerpt)} | — | ${cell(finding.patternId)} | ${cell(finding.reason)} | ${cell(finding.fixHint)} |`,
       })
     }
     out.push(...rows.sort((a, b) => a.line - b.line).map((r) => r.row), '')
@@ -270,9 +408,47 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
       '| ---: | --- | --- | --- |',
     )
     for (const mark of report.technicalMarks) {
-      out.push(`| ${mark.line} | ${cell(mark.kind)} | ${mark.verdict} | ${cell(mark.label)} |`)
+      out.push(`| ${place(mark)} | ${cell(mark.kind)} | ${mark.verdict} | ${cell(mark.label)} |`)
     }
     out.push('')
+  }
+
+  if (report.fileMarks.length > 0) {
+    out.push(
+      '## File marks',
+      '',
+      'Found in the file the text was read from, not in the prose: they say which tools handled the file, never who wrote the text.',
+      '',
+      '| Part | Placement | Mark | Verdict | Detail |',
+      '| --- | --- | --- | --- | --- |',
+    )
+    for (const mark of report.fileMarks) {
+      const placement = mark.placement
+        ? [`paragraph ${mark.placement.paragraph}`, mark.placement.caption]
+            .filter(Boolean)
+            .join(', ')
+        : '—'
+      out.push(
+        `| ${cell(mark.where ?? '—')} | ${cell(placement)} | ${cell(mark.kind)} | ${mark.verdict} | ${cell(mark.label)} |`,
+      )
+    }
+    out.push('')
+  }
+
+  if (report.language.unsupported.length > 0) {
+    out.push(
+      '## Not assessed',
+      '',
+      `${Math.round(report.language.unsupportedShare * 100)} % of the words are in paragraphs read as a language with no catalogue:`,
+      '',
+      '| Where | Language | Words | Excerpt |',
+      '| --- | --- | ---: | --- |',
+      ...report.language.unsupported.map(
+        (segment) =>
+          `| ${place(segment)} | ${segment.lang} | ${segment.words} | ${cell(segment.excerpt)} |`,
+      ),
+      '',
+    )
   }
 
   out.push('## What is not evidence', '', ...report.notEvidence.map((line) => `- ${line}`), '')
@@ -301,6 +477,32 @@ export function renderMarkdown(report: AuthorshipReport, options: RenderOptions 
 }
 
 const SEVERITY: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
+
+const BLOCK_LANGUAGE: Record<LanguageBlock['lang'], string> = {
+  fr: 'French',
+  en: 'English',
+  other: 'other',
+}
+
+/** What the prose was read from and what was left out, in one sentence. */
+export function documentSentence(source: DocumentSource): string {
+  const skipped = Object.entries(source.skipped ?? {})
+    .filter(([, count]) => (count ?? 0) > 0)
+    .map(([reason, count]) => `${count} ${reason}`)
+  return [
+    `${source.container}, ${source.paragraphs} paragraphs`,
+    ...(source.pages === undefined ? [] : [`${source.pages} pages`]),
+    ...(skipped.length > 0 ? [`left out: ${skipped.join(', ')}`] : []),
+    ...(source.pagesFrom
+      ? [
+          `${source.placed ?? 0} of ${source.paragraphs} paragraphs placed on a page of ${source.pagesFrom}`,
+        ]
+      : []),
+    ...(source.unreadablePages?.length
+      ? [`unreadable pages: ${source.unreadablePages.join(', ')}`]
+      : []),
+  ].join(' · ')
+}
 
 const FEATURE_TEXT: Record<string, [string, string]> = {
   'feature.repetition': [

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { detectAuthorship } from './index.ts'
+import { detectAuthorship, fileMarksFrom } from './index.ts'
 import { DISCLAIMER } from './report.ts'
 import { CALIBRATION } from './calibration.ts'
-import { AI_FR, HUMAN_FR } from '../../../test/authorship-samples.ts'
+import { AI_FR, HUMAN_EN, HUMAN_FR } from '../../../test/authorship-samples.ts'
 
 describe('detectAuthorship', () => {
   it('reads generated-sounding French as more likely AI than French reporting', () => {
@@ -125,5 +125,111 @@ describe('detectAuthorship', () => {
 
   it('is deterministic', () => {
     expect(detectAuthorship(AI_FR)).toEqual(detectAuthorship(AI_FR))
+  })
+})
+
+describe('a document in two languages', () => {
+  const text = `${HUMAN_FR}\n\n${HUMAN_EN}\n\n${AI_FR}`
+
+  it('is cut into blocks, each assessed with its own catalogue', () => {
+    const report = detectAuthorship(text)
+    expect(report.blocks.map((b) => b.lang)).toEqual(['fr', 'en', 'fr'])
+    for (const block of report.blocks) {
+      expect(block.words).toBeGreaterThanOrEqual(150)
+      expect(block.score).not.toBeNull()
+    }
+    const [, english, generated] = report.blocks
+    expect(text.slice(english?.start, english?.end)).toBe(HUMAN_EN)
+    expect(generated?.score).toBeGreaterThan(english?.score as number)
+  })
+
+  it('combines the blocks by their words', () => {
+    const report = detectAuthorship(text)
+    const assessed = report.blocks.filter((b) => b.score !== null)
+    const words = assessed.reduce((sum, b) => sum + b.words, 0)
+    const mean = assessed.reduce((sum, b) => sum + (b.score as number) * b.words, 0) / words
+    expect(report.score).toBeCloseTo(mean, 2)
+  })
+
+  it('keeps one block, and the plain verdict, for a text in one language', () => {
+    const report = detectAuthorship(HUMAN_FR)
+    expect(report.blocks).toHaveLength(1)
+    expect(report.blocks[0]).toMatchObject({ lang: 'fr', verdict: report.verdict })
+  })
+
+  it('absorbs a short line in the other language', () => {
+    const report = detectAuthorship(
+      `${HUMAN_EN}\n\nMots-clés : implant, sclère, haptique.\n\n${HUMAN_EN}`,
+    )
+    expect(report.blocks).toHaveLength(1)
+  })
+})
+
+describe('paragraphs in a language with no catalogue', () => {
+  it('are listed with the language they were read as', () => {
+    const german =
+      'Die Untersuchung wurde an der Universitätsklinik durchgeführt, und alle Patienten haben vorher schriftlich eingewilligt, dass ihre Daten ausgewertet werden dürfen.'
+    const report = detectAuthorship(`${HUMAN_EN}\n\n${german}`)
+    expect(report.language.unsupported).toEqual([
+      expect.objectContaining({ lang: 'de', words: expect.any(Number) }),
+    ])
+    expect(report.language.unsupported[0]?.excerpt).toMatch(/^Die Untersuchung/)
+  })
+})
+
+describe('marks of the file the text came from', () => {
+  const manifest = {
+    kind: 'c2pa' as const,
+    verdict: 'confirmed' as const,
+    offset: 0,
+    length: 0,
+    label: 'caBX — C2PA provenance manifest',
+    where: 'word/media/image24.png',
+  }
+
+  it('keeps provenance and confirmed marks, and leaves author names out', () => {
+    const marks = fileMarksFrom([
+      manifest,
+      { kind: 'doc_property', verdict: 'probable', offset: 0, length: 0, label: 'Author names' },
+      { kind: 'exif', verdict: 'informational', offset: 0, length: 0, label: 'EXIF' },
+    ])
+    expect(marks).toEqual([
+      {
+        origin: 'file',
+        kind: 'c2pa',
+        verdict: 'confirmed',
+        label: manifest.label,
+        where: manifest.where,
+      },
+    ])
+  })
+
+  it('are reported apart and hold the verdict above few signals (guard B)', () => {
+    const plain = detectAuthorship(HUMAN_EN)
+    const marked = detectAuthorship(HUMAN_EN, { fileMarks: fileMarksFrom([manifest]) })
+    expect(marked.fileMarks).toHaveLength(1)
+    expect(marked.technicalMarks).toEqual([])
+    expect(marked.verdict).not.toBe('likely_human')
+    if (plain.verdict === 'likely_human') expect(marked.verdict).toBe('uncertain')
+  })
+})
+
+describe('a layout', () => {
+  it('locates spans and findings by paragraph, section and page', () => {
+    const text = `${HUMAN_FR}\n\n${AI_FR}`
+    const second = text.indexOf(AI_FR)
+    const report = detectAuthorship(text, {
+      layout: {
+        paragraphs: [
+          { start: 0, end: second - 2, index: 1, section: '1. Introduction', page: 12 },
+          { start: second, end: text.length, index: 7, section: '3. Conclusion', page: 46 },
+        ],
+      },
+    })
+    const late = report.findings.filter((f) => f.start >= second)
+    expect(late.length).toBeGreaterThan(0)
+    for (const finding of late)
+      expect(finding.location).toEqual({ paragraph: 7, page: 46, section: '3. Conclusion' })
+    for (const span of report.spans) expect(span.location?.page).toBeDefined()
   })
 })

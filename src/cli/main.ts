@@ -10,17 +10,15 @@ import { chmod, readdir, readFile, realpath, rename, rm, stat, writeFile } from 
 import { join, relative } from 'node:path'
 import process from 'node:process'
 import { VERSION } from '../core/index.ts'
-import {
-  cleanContainer,
-  inspectContainer,
-  readTextual,
-  type ContainerFormat,
-} from '../core/container/index.ts'
+import { cleanContainer, inspectContainer, type ContainerFormat } from '../core/container/index.ts'
 import { decodeStego } from '../core/text/stego.ts'
 import { analyzeStyle, PLAIN, stylometryFindings } from '../core/text/index.ts'
 import {
   ABSENCE_NOTE,
+  describeLocation,
   detectAuthorship,
+  documentSentence,
+  fileMarksFrom,
   foundNothing,
   renderMarkdown,
   UNREACHABLE_NOTE,
@@ -28,6 +26,7 @@ import {
   verdictSentence,
   type AuthorshipReport,
   type AuthorshipVerdict,
+  type DocumentSource,
 } from '../core/text/authorship/index.ts'
 import { buildBrief, verifyRewrite, type RewriteVerdict } from '../core/rewrite.ts'
 import { runRewrite } from './rewrite.ts'
@@ -41,6 +40,7 @@ import {
   type Verdict,
 } from '../core/report.ts'
 import { decodeUtf8, type MediaEntry } from '../core/container/types.ts'
+import { printedPages, readProse } from '../core/container/prose.ts'
 
 const USAGE = `unmark ${VERSION} — find, decode and strip watermarks and provenance marks
 
@@ -86,9 +86,17 @@ DETECT (French and English; an assessment of writing habits, never proof)
   --lang <l>          fr, en, or auto (default: per paragraph)
   --min-score <n>     list only passages scoring at least n, 0 to 1 (default
                       0.35). Filters the list; never changes the verdict.
+  --pages <file.pdf>  the printed PDF of the same document: every passage is
+                      placed on its page ("p. 29, §2.6.3")
+  --source <file>     the .docx or PDF a text file was extracted from: its marks
+                      (a C2PA manifest on an image…) are listed as file marks
+
+  detect reads .txt, .md, .html, and the body of a .docx (tables, captions,
+  contents and reference list left out) or a PDF, page by page. A document
+  that changes language is assessed block by block.
 
   Exit codes: 0 few signals or uncertain · 1 likely AI-written ·
-  2 usage error or binary input · 3 not enough text (under 150 words)
+  2 usage error or unreadable input · 3 not enough text (under 150 words)
 
 FORMATS
   Text, Markdown, HTML, SVG, PNG, JPEG, WebP, GIF, HEIC, AVIF, MP4/MOV, PDF,
@@ -300,6 +308,8 @@ interface Options {
   format?: 'text' | 'md' | 'json'
   lang?: 'fr' | 'en' | 'auto'
   minScore?: number
+  pages?: string
+  source?: string
 }
 
 const textOptions = (options: Options) => ({
@@ -585,6 +595,14 @@ const EXIT_FOR: Record<AuthorshipVerdict, number> = {
 
 const LANGUAGE_NAME = { fr: 'French', en: 'English', und: 'language undetermined' } as const
 
+/** "p. 29, §2.6.3" when the document's layout is known, "line 412" otherwise. */
+const placeOf = (item: {
+  line: number
+  location?: AuthorshipReport['spans'][number]['location']
+}) => describeLocation(item.location) ?? `line ${item.line}`
+
+const BLOCK_LANGUAGE = { fr: 'French', en: 'English', other: 'other language' } as const
+
 function renderAuthorship(name: string, report: AuthorshipReport, minScore: number): string {
   const out = [
     `${bold(name)} ${dim(`· ${LANGUAGE_NAME[report.language.document]} · ${report.words} words`)}`,
@@ -602,20 +620,38 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
     `  ${dim(
       `calibration ${report.calibration.id}${report.calibration.calibrated ? '' : ' (not yet calibrated: provisional thresholds)'}`,
     )}`,
+    ...(report.document ? [`  ${dim(`read from ${documentSentence(report.document)}`)}`] : []),
     '',
   ]
 
+  if (report.blocks.length > 1) {
+    out.push(`  ${bold('Blocks')} ${dim('consecutive paragraphs in one language, each assessed')}`)
+    for (const block of report.blocks) {
+      const from = describeLocation(block.location) ?? `line ${block.line}`
+      const to = describeLocation(block.endLocation) ?? `line ${block.endLine}`
+      out.push(
+        `  ${pad(BLOCK_LANGUAGE[block.lang], 15)} ${pad(`${block.words} words`, 12)} ${pad(verdictSentence(block), 44)} ${dim(
+          `${block.score === null ? '' : `score ${block.score.toFixed(2)} · `}${from} → ${to}`,
+        )}`,
+      )
+    }
+    out.push('')
+  }
+
   const listed = report.spans.filter((span) => span.score >= minScore)
+  const width = Math.max(10, ...listed.map((span) => placeOf(span).length))
   if (listed.length > 0) {
     out.push(`  ${bold('Passages')} ${dim(`scoring ${minScore.toFixed(2)} or more`)}`)
     for (const span of listed) {
       const own = report.findings.filter((f) => f.start >= span.start && f.start < span.end)
       out.push(
-        `  ${pad(`line ${span.line}`, 10)} ${span.score.toFixed(2)}  ${span.excerpt}`,
-        ...own.slice(0, 3).map((f) => `  ${' '.repeat(16)}${dim(`${f.patternId} — ${f.reason}`)}`),
+        `  ${pad(placeOf(span), width)} ${span.score.toFixed(2)}  ${span.excerpt}`,
+        ...own
+          .slice(0, 3)
+          .map((f) => `  ${' '.repeat(width + 6)}${dim(`${f.patternId} — ${f.reason}`)}`),
       )
       const fix = own[0]?.fixHint
-      if (fix) out.push(`  ${' '.repeat(16)}${dim(`fix: ${fix}`)}`)
+      if (fix) out.push(`  ${' '.repeat(width + 6)}${dim(`fix: ${fix}`)}`)
     }
     out.push('')
   } else if (report.verdict !== 'insufficient_evidence') {
@@ -628,18 +664,45 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
       !listed.some((span) => f.start >= span.start && f.start < span.end),
   )
   for (const finding of loose) {
-    out.push(`  ${pad(`line ${finding.line}`, 10)} ${finding.patternId}  ${finding.excerpt}`)
-    out.push(`  ${' '.repeat(16)}${dim(finding.reason)}`)
+    out.push(`  ${pad(placeOf(finding), width)} ${finding.patternId}  ${finding.excerpt}`)
+    out.push(`  ${' '.repeat(width + 6)}${dim(finding.reason)}`)
   }
   if (loose.length > 0) out.push('')
 
   if (report.technicalMarks.length > 0) {
-    out.push(`  ${bold('Technical marks')}`)
+    out.push(`  ${bold('Technical marks')} ${dim('in the text')}`)
     for (const mark of report.technicalMarks) {
       out.push(
-        `  ${pad(`line ${mark.line}`, 10)} ${colourVerdict(mark.verdict)} ${KIND_LABEL[mark.kind]} ${dim(mark.label)}`,
+        `  ${pad(placeOf(mark), width)} ${colourVerdict(mark.verdict)} ${KIND_LABEL[mark.kind]} ${dim(mark.label)}`,
       )
     }
+    out.push('')
+  }
+
+  if (report.fileMarks.length > 0) {
+    out.push(
+      `  ${bold('File marks')} ${dim('in the file the text came from — about the file, not the prose')}`,
+    )
+    for (const mark of report.fileMarks) {
+      out.push(
+        `  ${colourVerdict(mark.verdict)} ${KIND_LABEL[mark.kind]} ${dim(`${mark.where ? `${mark.where} · ` : ''}${mark.label}`)}`,
+      )
+      if (mark.placement) out.push(`    ${dim(placementOf(mark.placement))}`)
+    }
+    out.push('')
+  }
+
+  if (report.language.unsupported.length > 0) {
+    out.push(
+      `  ${bold('Not assessed')} ${dim(`${Math.round(report.language.unsupportedShare * 100)} % of the words read as a language with no catalogue`)}`,
+    )
+    for (const segment of report.language.unsupported.slice(0, 12)) {
+      out.push(
+        `  ${pad(placeOf(segment), width)} ${pad(segment.lang, 3)} ${dim(`${segment.words} words`)}  ${segment.excerpt}`,
+      )
+    }
+    if (report.language.unsupported.length > 12)
+      out.push(dim(`  … ${report.language.unsupported.length - 12} more in --json`))
     out.push('')
   }
 
@@ -654,17 +717,49 @@ function renderAuthorship(name: string, report: AuthorshipReport, minScore: numb
 
 async function commandDetect(target: string, options: Options): Promise<number> {
   const source = await readSource(target)
-  const textual = await readTextual(source.bytes, source.name)
-  if (!textual) {
+  const prose = await readProse(source.bytes, source.name)
+  if (!prose) {
     process.stderr.write(
-      `unmark: ${source.name} is not text. detect reads prose: export it as .txt, .md or .html first.\n`,
+      `unmark: ${source.name} has no prose detect can read. It reads text (.txt, .md, .html), .docx and PDF.\n`,
     )
     return 2
   }
 
-  const report = detectAuthorship(textual.text, {
-    format: textual.format,
+  let layout = prose.layout
+  let document: DocumentSource | undefined = prose.source
+  if (options.pages) {
+    const pages = await printedPages(new Uint8Array(await readFile(options.pages)))
+    if (!pages) {
+      process.stderr.write(`unmark: --pages needs a PDF, and ${options.pages} is not one\n`)
+      return 2
+    }
+    // A plain text file has no paragraphs of its own: its blank lines are.
+    layout = { paragraphs: layout?.paragraphs ?? paragraphsOf(prose.text), pages }
+    document = {
+      ...(document ?? { container: prose.format, paragraphs: layout.paragraphs.length }),
+      pagesFrom: options.pages,
+    }
+  }
+
+  // The container's own marks: the input's when it is a .docx or a PDF, or
+  // those of the file named by --source when the input was extracted from one.
+  const containerBytes = options.source
+    ? new Uint8Array(await readFile(options.source))
+    : prose.source
+      ? source.bytes
+      : undefined
+  const fileMarks = containerBytes
+    ? fileMarksFrom(
+        (await inspectContainer(containerBytes, options.source ?? source.name)).findings,
+      )
+    : []
+
+  const report = detectAuthorship(prose.text, {
+    format: prose.format,
     lang: options.lang ?? 'auto',
+    ...(layout ? { layout } : {}),
+    ...(document ? { document } : {}),
+    fileMarks,
   })
   const minScore = options.minScore ?? 0.35
 
@@ -678,6 +773,16 @@ async function commandDetect(target: string, options: Options): Promise<number> 
     process.stdout.write(renderAuthorship(source.name, report, minScore))
   }
   return EXIT_FOR[report.verdict]
+}
+
+/** Paragraphs of a plain text, separated by blank lines, numbered from 1. */
+function paragraphsOf(text: string): { start: number; end: number; index: number }[] {
+  const out: { start: number; end: number; index: number }[] = []
+  for (const match of text.matchAll(/[^\n]+(?:\n(?!\s*\n)[^\n]*)*/gu)) {
+    if (!match[0].trim()) continue
+    out.push({ start: match.index, end: match.index + match[0].length, index: out.length + 1 })
+  }
+  return out
 }
 
 // ----------------------------------------------------------------- rewrite
@@ -805,6 +910,8 @@ const KNOWN_FLAGS = new Set([
   '--format',
   '--lang',
   '--min-score',
+  '--pages',
+  '--source',
   '--version',
   '-V',
   '--help',
@@ -843,7 +950,16 @@ export async function main(argv: readonly string[]): Promise<number> {
   // target, fell back to reading stdin, and hung forever with no output.
   // Verifying a file against itself is the first thing anyone tries.
   const consumed = new Set<number>()
-  for (const name of ['--model', '--attempts', '--against', '--format', '--lang', '--min-score']) {
+  for (const name of [
+    '--model',
+    '--attempts',
+    '--against',
+    '--format',
+    '--lang',
+    '--min-score',
+    '--pages',
+    '--source',
+  ]) {
     const at = argv.indexOf(name)
     const next = at === -1 ? undefined : argv[at + 1]
     if (at !== -1 && next && !next.startsWith('-')) consumed.add(at + 1)
@@ -876,7 +992,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   // nothing is read, rather than quietly falling back to a default. A flag
   // with no value at all is the same mistake: `--format` alone used to print
   // text, which is the one format the caller had not asked for.
-  for (const name of ['--format', '--lang', '--min-score']) {
+  for (const name of ['--format', '--lang', '--min-score', '--pages', '--source']) {
     if (flags.has(name) && value(name) === undefined) {
       process.stderr.write(`unmark: ${name} needs a value\n`)
       return 2
@@ -914,6 +1030,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     ...(format ? { format: format as 'text' | 'md' | 'json' } : {}),
     ...(lang ? { lang: lang as 'fr' | 'en' | 'auto' } : {}),
     ...(minScore === undefined ? {} : { minScore: Number(minScore) }),
+    ...(value('--pages') ? { pages: value('--pages') as string } : {}),
+    ...(value('--source') ? { source: value('--source') as string } : {}),
     // --plain is one name for the pair, defined once in the core so the page's
     // button and this flag cannot drift into two different presets.
     typography: flags.has('--typography') || (flags.has('--plain') && PLAIN.typography === true),
