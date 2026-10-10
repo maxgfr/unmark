@@ -6,8 +6,8 @@ is run by `pnpm verify:skill`, so if one of them stops working, CI says so.
 ## "Someone sent me this paragraph — is it marked?"
 
 ```bash
-node scripts/unmark.mjs inspect paste.txt
-node scripts/unmark.mjs decode  paste.txt     # only if a stego_payload was reported
+node <skill-dir>/scripts/unmark.mjs inspect paste.txt
+node <skill-dir>/scripts/unmark.mjs decode  paste.txt     # only if a stego_payload was reported
 ```
 
 Read the payload aloud to the user before offering to remove anything. The
@@ -21,9 +21,9 @@ character trace at all.
 ## "Clean this document before I forward it"
 
 ```bash
-node scripts/unmark.mjs inspect report.docx        # show them first
-node scripts/unmark.mjs clean   report.docx --in-place
-node scripts/unmark.mjs inspect report.docx        # prove it
+node <skill-dir>/scripts/unmark.mjs inspect report.docx        # show them first
+node <skill-dir>/scripts/unmark.mjs clean   report.docx --in-place
+node <skill-dir>/scripts/unmark.mjs inspect report.docx        # prove it
 ```
 
 Re-inspecting is the step people skip. It turns "I cleaned it" into something
@@ -36,8 +36,8 @@ embedded image. Users are usually surprised by the last two.
 ## "Was this written by AI?"
 
 ```bash
-node scripts/unmark.mjs detect essay.md --json > detect.json
-node scripts/unmark.mjs detect essay.md --format md      # the engine's report as Markdown
+node <skill-dir>/scripts/unmark.mjs detect essay.md --json > detect.json
+node <skill-dir>/scripts/unmark.mjs detect essay.md --format md      # the engine's report as Markdown
 ```
 
 Follow **Was this written by AI?** in SKILL.md: judge each `high` and `medium`
@@ -52,12 +52,12 @@ must not decide a sanction.
 ## "Fix what reads as AI"
 
 ```bash
-node scripts/unmark.mjs detect  draft.md                 # where, and why
-node scripts/unmark.mjs clean   draft.md --plain         # the deterministic half
-node scripts/unmark.mjs brief   draft.md > /tmp/brief.json
+node <skill-dir>/scripts/unmark.mjs detect  draft.md                 # where, and why
+node <skill-dir>/scripts/unmark.mjs clean   draft.md --plain         # the deterministic half
+node <skill-dir>/scripts/unmark.mjs brief   draft.md > /tmp/brief.json
 #   ...rewrite, aiming at the passages detect listed...
-node scripts/unmark.mjs verify  rewritten.md --against draft.md
-node scripts/unmark.mjs detect  rewritten.md             # did it move
+node <skill-dir>/scripts/unmark.mjs verify  rewritten.md --against draft.md
+node <skill-dir>/scripts/unmark.mjs detect  rewritten.md             # did it move
 ```
 
 `--plain` removes the filler and chat residue that has one right answer. Stock
@@ -68,14 +68,14 @@ fewer of these habits, not that a detector — or a watermark — has been beate
 ## "Rewrite it properly" — the loop
 
 ```bash
-node scripts/unmark.mjs brief draft.md > /tmp/brief.json
+node <skill-dir>/scripts/unmark.mjs brief draft.md > /tmp/brief.json
 ```
 
 Read the brief. Rewrite the document yourself following it: fix each tell, keep
 every listed fact, reproduce every protected span byte for byte.
 
 ```bash
-node scripts/unmark.mjs verify rewritten.md --against draft.md
+node <skill-dir>/scripts/unmark.mjs verify rewritten.md --against draft.md
 ```
 
 - **Exit 0** — it cleared every gate. Tell the user what it cannot promise: a
@@ -90,8 +90,8 @@ node scripts/unmark.mjs verify rewritten.md --against draft.md
 ## "Audit this repo for marked files"
 
 ```bash
-node scripts/unmark.mjs audit ./docs
-node scripts/unmark.mjs audit ./docs --json > audit.json
+node <skill-dir>/scripts/unmark.mjs audit ./docs
+node <skill-dir>/scripts/unmark.mjs audit ./docs --json > audit.json
 ```
 
 Exits 1 when anything is marked, so it works in a pre-commit hook. It skips
@@ -119,9 +119,32 @@ honest answer and the tool gives it rather than reporting a clean file.
 ## "Is there GPS in these photos?"
 
 ```bash
-node scripts/unmark.mjs audit ./photos
+node <skill-dir>/scripts/unmark.mjs audit ./photos
 ```
 
 HEIC and AVIF are handled, which matters because every recent iPhone photo is
 HEIC. So is the `©xyz` location atom in a `.mov`. Report what was found before
 stripping it — a photographer may want the location kept.
+
+## "Go through my thesis and tell me every sentence that reads as generated"
+
+```bash
+node <skill-dir>/scripts/unmark.mjs detect thesis.docx --pages thesis.pdf --register academic --top 10 --json > detect.json
+node <skill-dir>/scripts/unmark.mjs sweep  thesis.docx --pages thesis.pdf --print-prompt > prompt.txt
+# write rewrites.json from the prompt: [{"id": "S…", "rewrite": "…"}]
+node <skill-dir>/scripts/unmark.mjs sweep  thesis.docx --pages thesis.pdf --apply rewrites.json --format md > sweep.md
+```
+
+Expect: a verdict per language block and a combined one, the figures' C2PA
+statements under file marks, and a table "current text → replace with" by
+section, every quote checked in the .docx and the PDF. Rewrites that dropped a
+number or a reference call are marked rejected; rewrite those again.
+
+## "I only have the extracted text, but the .docx had a C2PA image"
+
+```bash
+node <skill-dir>/scripts/unmark.mjs detect extracted.txt --source thesis.docx --json
+```
+
+`fileMarks` carries the container's marks; they hold the verdict above
+`likely_human` and say nothing about who wrote the prose.

@@ -62,14 +62,14 @@ Every report carries its disclaimer. Copy it; see `authorship.md`.
 
 ## Exit codes
 
-| Command   | 0                           | 1                                       | 2                       |
-| --------- | --------------------------- | --------------------------------------- | ----------------------- |
-| `detect`  | `likely_human`, `uncertain` | `likely_ai`                             | bad usage, binary input |
-| `inspect` | nothing `confirmed`         | something `confirmed` is present        | bad usage               |
-| `decode`  | a payload was recovered     | nothing hidden found                    | bad usage               |
-| `audit`   | the tree is clean           | at least one file carries a mark        | bad usage               |
-| `verify`  | the rewrite passed          | it was rejected; the reasons are listed | no `--against`          |
-| `rewrite` | accepted, or a prompt       | rejected, or no model answered          | bad usage               |
+| Command   | 0                           | 1                                       | 2                           |
+| --------- | --------------------------- | --------------------------------------- | --------------------------- |
+| `detect`  | `likely_human`, `uncertain` | `likely_ai`                             | bad usage, no prose to read |
+| `inspect` | nothing `confirmed`         | something `confirmed` is present        | bad usage                   |
+| `decode`  | a payload was recovered     | nothing hidden found                    | bad usage                   |
+| `audit`   | the tree is clean           | at least one file carries a mark        | bad usage                   |
+| `verify`  | the rewrite passed          | it was rejected; the reasons are listed | no `--against`              |
+| `rewrite` | accepted, or a prompt       | rejected, or no model answered          | bad usage                   |
 
 `detect` also exits **3** on `insufficient_evidence`: an abstention that exited
 0 would read as "passed" in a script.

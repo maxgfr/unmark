@@ -300,6 +300,7 @@ unmark clean   suspicious.txt --in-place
 unmark audit   ./docs             # walk a tree, list what is marked
 unmark detect  essay.md           # does it read as AI-written, and where — not proof
 unmark detect  thesis.docx --pages thesis.pdf   # body text only, passages by page and section
+unmark sweep   thesis.docx --pages thesis.pdf --format md   # every sentence with a habit: current text → replace with
 
 # The opt-in style passes
 unmark clean draft.md --typography   # em dashes, curly quotes, ellipses → ASCII
@@ -311,7 +312,12 @@ Zero dependencies — one file, no install step. Exit codes compose: `inspect`
 returns 1 when something `confirmed` is present, `audit` returns 1 when a tree is
 dirty, `detect` returns 1 on `likely_ai`, 3 when it abstains and 2 on a bad
 flag or a file with no prose (`--format text|md|json`, `--lang fr|en|auto`,
-`--min-score 0..1`, `--pages <pdf>`, `--source <docx|pdf>`). The CLI and the page run the **same core**, built twice from one source, so
+`--min-score 0..1`, `--pages <pdf>`, `--source <docx|pdf>`, `--top <n>`,
+`--register academic`). `sweep` lists every sentence carrying a habit, however
+isolated, quoted and checked against the source, with a rewrite that must keep
+its numbers and reference calls (`--print-prompt` / `--apply` for an agent's
+rewrites, `--rewrite` for the local model). The skill bundle is attached to
+every release as `unmark.mjs`. The CLI and the page run the **same core**, built twice from one source, so
 they cannot disagree about the same character.
 
 ## Crossing the deterministic ceiling

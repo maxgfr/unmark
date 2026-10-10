@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
+import { crc32 } from 'node:zlib'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUNDLE = join(ROOT, 'skills', 'unmark', 'scripts', 'unmark.mjs')
@@ -136,6 +137,55 @@ function unmark(args) {
       err: error.stderr?.toString() ?? '',
     }
   }
+}
+
+/** A stored .docx: a heading, then one body paragraph per entry. */
+function docx(paragraphs) {
+  const para = (text, style) =>
+    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t xml:space="preserve">${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</w:t></w:r></w:p>`
+  const body = [para('1. Introduction', 'Heading1'), ...paragraphs.map((p) => para(p))].join('')
+  const parts = [
+    ['[Content_Types].xml', '<Types/>'],
+    [
+      'word/document.xml',
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`,
+    ],
+  ]
+  const chunks = []
+  const central = []
+  let offset = 0
+  for (const [name, content] of parts) {
+    const data = Buffer.from(content)
+    const file = Buffer.from(name)
+    const sum = crc32(data)
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt32LE(sum, 14)
+    local.writeUInt32LE(data.length, 18)
+    local.writeUInt32LE(data.length, 22)
+    local.writeUInt16LE(file.length, 26)
+    const entry = Buffer.alloc(46)
+    entry.writeUInt32LE(0x02014b50, 0)
+    entry.writeUInt16LE(20, 4)
+    entry.writeUInt16LE(20, 6)
+    entry.writeUInt32LE(sum, 16)
+    entry.writeUInt32LE(data.length, 20)
+    entry.writeUInt32LE(data.length, 24)
+    entry.writeUInt16LE(file.length, 28)
+    entry.writeUInt32LE(offset, 42)
+    chunks.push(local, file, data)
+    central.push(entry, file)
+    offset += 30 + file.length + data.length
+  }
+  const directory = Buffer.concat(central)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(parts.length, 8)
+  end.writeUInt16LE(parts.length, 10)
+  end.writeUInt32LE(directory.length, 12)
+  end.writeUInt32LE(offset, 16)
+  return Buffer.concat([...chunks, directory, end])
 }
 
 const check = (name, condition, detail) => {
@@ -300,6 +350,93 @@ try {
 
   const german = unmark(['detect', at('brouillon.md'), '--lang', 'de'])
   check('detect --lang de', german.code === 2, 'should refuse an unsupported language with 2')
+
+  // detect on a .docx, the way SKILL.md says it reads one: the body only, by
+  // section, and the options the judge relies on.
+  await writeFile(at('thesis.docx'), docx(french.split('\n\n')))
+  const docxJson = unmark([
+    'detect',
+    at('thesis.docx'),
+    '--json',
+    '--register',
+    'academic',
+    '--top',
+    '3',
+  ])
+  let fromDocx
+  try {
+    fromDocx = JSON.parse(docxJson.out)
+  } catch {
+    failures.push(`detect thesis.docx: output is not valid JSON (${docxJson.err.trim()})`)
+  }
+  if (fromDocx) {
+    check('detect .docx', fromDocx.document?.container === 'DOCX', 'should read the .docx body')
+    check('detect .docx', fromDocx.document?.skipped?.heading === 1, 'should leave the heading out')
+    check(
+      'detect .docx',
+      fromDocx.spans.length === 3 &&
+        fromDocx.spans.every((s) => s.location?.section === '1. Introduction'),
+      'should list the top 3 sentences, each under its section',
+    )
+    check(
+      'detect --register',
+      fromDocx.coverage?.register === 'academic',
+      'should read the register',
+    )
+  }
+
+  // sweep: the worksheet, its table, its prompt and the gate on --apply.
+  const sweepJson = unmark(['sweep', at('thesis.docx'), '--json'])
+  let swept
+  try {
+    swept = JSON.parse(sweepJson.out)
+  } catch {
+    failures.push('sweep --json: output is not valid JSON')
+  }
+  if (swept) {
+    check('sweep', swept.rows.length > 0, 'should list sentences carrying a habit')
+    check(
+      'sweep',
+      swept.rows.every((row) => row.quote.found.length === row.quote.checked.length),
+      'should find every quote word for word in the .docx',
+    )
+  }
+  const sweepMd = unmark(['sweep', at('thesis.docx'), '--format', 'md'])
+  check(
+    'sweep --format md',
+    sweepMd.out.includes('| Where | Current text | Replace with |'),
+    'should render the table',
+  )
+  const sweepPrompt = unmark(['sweep', at('thesis.docx'), '--print-prompt'])
+  check(
+    'sweep --print-prompt',
+    sweepPrompt.code === 0 && sweepPrompt.out.includes('"id"'),
+    'should print the prompt',
+  )
+  if (swept?.rows[0]) {
+    await writeFile(
+      at('rewrites.json'),
+      JSON.stringify([{ id: swept.rows[0].id, rewrite: 'Nothing.' }]),
+    )
+    const applied = unmark(['sweep', at('thesis.docx'), '--apply', at('rewrites.json'), '--json'])
+    const row = JSON.parse(applied.out).rows.find((r) => r.id === swept.rows[0].id)
+    check('sweep --apply', row?.rewrite?.source === 'agent', 'should attach the checked rewrite')
+  }
+
+  // Every option --help names is documented for the agent.
+  const docs = [
+    skillMd,
+    ...(await Promise.all(
+      ['authorship.md', 'formats.md', 'recipes.md', 'verdicts.md'].map((name) =>
+        readFile(join(ROOT, 'skills', 'unmark', 'references', name), 'utf8').catch(() => ''),
+      ),
+    )),
+  ].join('\n')
+  const help = unmark(['--help']).out
+  for (const flag of new Set(help.match(/--[a-z][a-z-]*/g) ?? [])) {
+    check('docs', docs.includes(flag), `${flag} is in --help and in no skill document`)
+  }
+  check('docs', docs.includes('sweep'), 'the sweep command is not documented')
 } finally {
   await rm(work, { recursive: true, force: true })
 }

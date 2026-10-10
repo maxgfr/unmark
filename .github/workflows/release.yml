@@ -1,0 +1,41 @@
+# The skill bundle as a release asset.
+#
+# `gh api …/contents` cannot fetch a file over one megabyte — its base64
+# `content` comes back empty — and unmark.mjs is past that. A tagged release
+# carries the bundle as an asset, so it downloads in one request:
+#
+#   gh release download v0.2.0 --repo maxgfr/unmark --pattern unmark.mjs
+#
+# The bundle attached is the one committed at the tag, after the same checks CI
+# runs on it: a stale or broken bundle is not published.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  asset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:skill
+      - run: pnpm verify:skill
+      - name: Publish unmark.mjs on the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp skills/unmark/scripts/unmark.mjs unmark.mjs
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" unmark.mjs --clobber

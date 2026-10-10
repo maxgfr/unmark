@@ -116,15 +116,25 @@ dropping one.
 
 ## Reading the JSON
 
-| Field              | Use                                                            |
-| ------------------ | -------------------------------------------------------------- |
-| `verdict`, `score` | the engine's answer; `score` is `null` when it abstains        |
-| `abstainReason`    | `too_short` or `unsupported_language`                          |
-| `signals[]`        | one per habit family; `value: null` means not measurable       |
-| `spans[]`          | sentences in a band, with `line`, `band`, `reasons`, `excerpt` |
-| `findings[]`       | each counted habit: `patternId`, `line`, `reason`, `fixHint`   |
-| `technicalMarks[]` | marks from the existing passes, with their own verdicts        |
-| `disclaimer`       | copy it                                                        |
+| Field                    | Use                                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `verdict`, `score`       | the engine's answer; `score` is `null` when it abstains                                                                 |
+| `abstainReason`          | `too_short` or `unsupported_language`                                                                                   |
+| `signals[]`              | one per habit family; `value: null` means not measurable                                                                |
+| `spans[]`                | sentences in a band (all of them with `--top`), with `line`, `band`, `reasons`, `excerpt`, `location`                   |
+| `blocks[]`               | runs of one language, each with its own verdict and score                                                               |
+| `language.unsupported[]` | paragraphs read as a language with no catalogue, with the language                                                      |
+| `recaps[]`               | phrases copied into several sections, every copy located                                                                |
+| `fileMarks[]`            | marks of the .docx/PDF the text came from, `origin: "file"`; C2PA ones carry `c2pa.origin` and the figure's `placement` |
+| `coverage`               | register read, patterns read, matched, counted                                                                          |
+| `thresholds`             | the applied human threshold (floored at 0.10), the AI one, `humanReachable`                                             |
+| `findings[]`             | each counted habit: `patternId`, `line`, `reason`, `fixHint`                                                            |
+| `technicalMarks[]`       | marks from the existing passes, with their own verdicts                                                                 |
+| `disclaimer`             | copy it                                                                                                                 |
+
+With `--format md`, passages are listed by `p. N, §x.y` when the layout is
+known, and the report adds the blocks, the file marks, the repeated formulas,
+the hedging and the catalogue coverage.
 
 Pattern ids read `lang.category.name`: `fr.lex.plongeons`,
 `en.struct.negative_parallelism`, `any.residue.placeholder`. Tier 1 habits

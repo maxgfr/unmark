@@ -12,9 +12,15 @@ Unicode carriers, steganographic payloads encoded in them, provenance metadata
 in image and document containers, and the habits that make prose read as
 generated.
 
+`<skill-dir>` below is the directory this SKILL.md sits in; run the bundled
+script by its absolute path, from any working directory:
+
 ```bash
-node skills/unmark/scripts/unmark.mjs --help
+node <skill-dir>/scripts/unmark.mjs --help
 ```
+
+One file, no dependency, no install step. Outside an agent, the same file is
+attached to every GitHub release of maxgfr/unmark as `unmark.mjs`.
 
 ## Route the request first
 
@@ -70,10 +76,10 @@ If the report says the tells are `rule_of_three`, `marker_vocabulary`,
    justify removing, listing both.
 
 ```bash
-node scripts/unmark.mjs inspect suspicious.txt
-node scripts/unmark.mjs decode  suspicious.txt
-node scripts/unmark.mjs clean   suspicious.txt --in-place
-node scripts/unmark.mjs audit   ./docs
+node <skill-dir>/scripts/unmark.mjs inspect suspicious.txt
+node <skill-dir>/scripts/unmark.mjs decode  suspicious.txt
+node <skill-dir>/scripts/unmark.mjs clean   suspicious.txt --in-place
+node <skill-dir>/scripts/unmark.mjs audit   ./docs
 ```
 
 ## The two style passes
@@ -86,6 +92,9 @@ Off unless asked for. Neither removes a watermark.
   pleasantries, signposting, Title Case headings, mechanical boldface,
   decorative emoji. Only patterns with one unambiguous answer.
 - `--plain` — both at once.
+
+Two more options for text: `--confusables` maps Cyrillic and Greek lookalikes
+back to Latin, and `--paranoid` (see below) strips even load-bearing joiners.
 
 Nothing acts inside a fenced code block, a blockquote, a quotation, a URL or
 frontmatter. `in order to` inside a shell snippet is part of a command.
@@ -102,9 +111,9 @@ Do not describe a rewrite as removing a watermark or reducing its score.
 **In an agent session, you are the model.** No API key, no network call:
 
 ```bash
-node scripts/unmark.mjs brief draft.md > brief.json    # what to fix, what must survive
+node <skill-dir>/scripts/unmark.mjs brief draft.md > brief.json    # what to fix, what must survive
 #   ...you rewrite the document, following the brief...
-node scripts/unmark.mjs verify new.md --against draft.md
+node <skill-dir>/scripts/unmark.mjs verify new.md --against draft.md
 ```
 
 `brief` gives you, as JSON: every tell with the layer it belongs to and what a
@@ -131,6 +140,8 @@ attempt produces mangled prose, not a fix.
 From a terminal without an agent, `unmark rewrite` runs the same loop against a
 local model on `127.0.0.1` (nothing leaves the machine), or `--model <id>` for a
 remote provider, or `--print-prompt` to get the prompt and spend nothing.
+`--attempts <n>` sets how many tries it gets before it gives up and says why
+(default 3). `--version` prints the version of the bundle.
 
 ## Was this written by AI?
 
@@ -142,7 +153,7 @@ the report — it holds the verdict scale, the judge's rules and the template.
 1. Run the engine and keep its JSON:
 
    ```bash
-   node scripts/unmark.mjs detect draft.md --json > detect.json
+   node <skill-dir>/scripts/unmark.mjs detect draft.md --json > detect.json
    ```
 
    Exit 3, `insufficient_evidence`: say so and stop. Under 150 words there is
@@ -160,6 +171,55 @@ the report — it holds the verdict scale, the judge's rules and the template.
 You may move the engine's verdict **one level**, and only by citing a line.
 The top of the scale is `likely_ai`; `confirmed` belongs to technical marks.
 A text with chat residue or a technical mark stays `uncertain` at best.
+
+**Any file with prose.** `detect` reads `.txt`, `.md`, `.html`, the body of a
+`.docx` (tables, captions, contents and the reference list left out) and a PDF
+page by page. Options, all documented in `--help`:
+
+- `--pages <file.pdf>`: the printed PDF of the same document; every passage is
+  placed as `p. 29, §2.6.3` (`location: {paragraph, page, section}` in JSON).
+- `--source <file>`: the .docx or PDF a text file was extracted from. Its
+  container marks (a C2PA manifest on a figure…) come back as `fileMarks`,
+  labelled as marks of the file, never of the prose; a confirmed one keeps the
+  verdict at `uncertain` at best, like a mark in the text.
+- `--register academic`: also reads the formulas of academic writing ("to our
+  knowledge", "c'est dans ce contexte que"), tier 3; alone they are listed under
+  not evidence. `coverage` says how much of the catalogue applied, so a 0.00
+  can be told from "out of the catalogue's reach".
+- `--top <n>`: the n sentences scoring highest, whatever their band — material
+  for the judge when nothing reaches a band.
+- `--lang fr|en|auto`, `--min-score <0..1>` (filters the list, never the
+  verdict), `--format text|md|json` (`md` is a report to share), `--json`.
+
+A document that changes language (a French thesis around an English article)
+is cut into `blocks`, each assessed with its own catalogue; the verdict is
+their word-weighted combination. `language.unsupported` lists the paragraphs
+read as a language with no catalogue. `recaps` lists key phrases copied word
+for word into several sections. Hedging and wordy phrasing are reported in
+`findings` (categories `hedging`, `phrasing`) and weigh nothing in the score
+until a refit measures them.
+
+**The judge's worksheet is `sweep`.** Run it whenever the user wants the
+passages, not only the verdict, and always before writing the judge section:
+
+```bash
+node <skill-dir>/scripts/unmark.mjs sweep thesis.docx --pages thesis.pdf --json > sweep.json
+node <skill-dir>/scripts/unmark.mjs sweep thesis.docx --print-prompt > prompt.txt
+#   ...you write the rewrites as [{"id": "S123", "rewrite": "…"}] in rewrites.json...
+node <skill-dir>/scripts/unmark.mjs sweep thesis.docx --pages thesis.pdf --apply rewrites.json --format md
+```
+
+Every row is a sentence carrying a habit, however isolated: its location, the
+habit (stacked hedges, a formula repeated across sections, a stock formula, a
+closing line, a recap connector, connectors in series, a triad, a figure with
+no reference call, dashes, catalogue vocabulary), a confidence, whether the
+register explains it, the current text quoted and checked word for word in the
+source file (and the `--pages` PDF), and a rewrite. A rewrite is shown only if
+it kept every number and reference call of the sentence; otherwise the row
+says it was rejected and why. `--rewrite` asks the local model on 127.0.0.1
+instead of you; with `--model`, a remote provider, and the sentences leave the
+machine. Confirm or reject each `medium` row in the report; the `low` ones are
+suggestions for the author, never evidence.
 
 **To fix what reads as AI**, send the user through the rewrite loop above
 (`brief` → rewrite → `verify`), then run `detect` again on the result.
