@@ -482,7 +482,7 @@ function analyse(text: string, options: SweepOptions): SweepResult {
         type === 'stock_formula' && recurring(finding.patternId)
           ? `a formula of the register, written ${formulas.get(finding.patternId)} times in the document`
           : finding.counted === false && finding.tier === 3
-            ? `${type === 'stock_formula' ? 'a formula of the register' : 'a word that counts only beside another habit'}, alone here, so detect does not count it`
+            ? `${type === 'stock_formula' ? 'a formula of the register' : 'a word that counts only beside another habit'} (« ${text.slice(finding.start, finding.end).replaceAll(/\s+/gu, ' ')} »), alone here, so detect does not count it`
             : finding.reason,
       patternId: finding.patternId,
       confidence,

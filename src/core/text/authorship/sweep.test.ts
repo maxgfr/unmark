@@ -37,6 +37,11 @@ describe('sweep', () => {
     expect(row('No case of endophthalmitis')?.habits.map((h) => h.type)).toContain('closing_line')
   })
 
+  it('names the words of a formula listed alone', () => {
+    const alone = row('To our knowledge')?.habits.find((h) => h.type === 'stock_formula')
+    expect(alone?.detail).toMatch(/« to our knowledge[^»]* »/iu)
+  })
+
   it('quotes each sentence exactly as it is in the text', () => {
     for (const r of result.rows) expect(DISCUSSION.slice(r.start, r.end)).toBe(r.text)
   })
