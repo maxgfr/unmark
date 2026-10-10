@@ -100,7 +100,6 @@ export function tokens(text: string, start = 0, end = text.length): Token[] {
 const ABBREVIATIONS = new Set([
   // French
   'm.',
-  'mm.',
   'mme.',
   'mmes.',
   'mlle.',
@@ -176,6 +175,13 @@ const ABBREVIATIONS = new Set([
 const TERMINATOR = /[.!?…]+/gu
 /** Closing quotes and brackets that belong to the sentence they end. */
 const CLOSER = /^(?:[\s  ]?[»”"’')\]]){1,3}/u
+/**
+ * A reference call set after the full stop — "necessary.[1,2] Posterior…",
+ * "varie.¹² La…" — belongs to the sentence it closes. Read as the start of the
+ * next one, it hid every boundary of a paragraph written in that style.
+ */
+const CALL =
+  /^(?:\[\d{1,4}(?:\s*[,;–—-]\s*\d{1,4})*\]|[\u00b9\u00b2\u00b3\u2070\u2074-\u2079]+(?:[,–-][\u00b9\u00b2\u00b3\u2070\u2074-\u2079]+)*)/u
 const LIST_MARKER = /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s+/u
 /** A sealed share above this and the sentence is someone else's words, or code. */
 const MAX_SEALED = 0.5
@@ -185,6 +191,9 @@ function isAbbreviation(text: string, dot: number): boolean {
   const token = /(?:^|[^\p{L}.-])([\p{L}.-]+\.)$/u.exec(before)?.[1]
   if (!token) return false
   if (ABBREVIATIONS.has(token.toLowerCase())) return true
+  // « MM. Dupont et Martin » is Messieurs; « 0.30 mm. The anchors » ends on a
+  // unit. Only the capitals are the abbreviation.
+  if (token === 'MM.') return true
   // An initial: "J. K. Rowling". A capital alone before a dot is almost never
   // the end of a sentence.
   return /^\p{Lu}\.$/u.test(token)
@@ -200,6 +209,8 @@ function boundaries(text: string, start: number, end: number): number[] {
     if (stop > end) break
     const closer = CLOSER.exec(text.slice(stop, Math.min(end, stop + 8)))
     if (closer) stop += closer[0].length
+    const call = CALL.exec(text.slice(stop, Math.min(end, stop + 40)))
+    if (call) stop += call[0].length
 
     if (stop >= end) {
       cuts.push(end)

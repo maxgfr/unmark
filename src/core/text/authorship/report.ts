@@ -180,7 +180,7 @@ export interface Coverage {
 export interface DocumentSource {
   container: string
   paragraphs: number
-  /** Paragraphs left out (tables, captions, references, contents), by reason. */
+  /** Paragraphs left out (tables, captions, references, contents, an oath), by reason. */
   skipped?: Partial<Record<string, number>>
   pages?: number
   unreadablePages?: number[]
@@ -602,7 +602,7 @@ const FEATURE_TEXT: Record<string, [string, string]> = {
     'use the specific word each time instead of the general one',
   ],
   'feature.typography': [
-    'em dashes doing the work of commas, colons and full stops',
+    'dashes doing the work of commas, colons and full stops',
     'recast the sentence; a period, a comma or a colon each fit different cases',
   ],
 }

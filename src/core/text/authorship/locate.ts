@@ -199,6 +199,8 @@ const BARE_HEADING = /^\p{Lu}[^.!?:;,]{0,60}$/u
 /** The heading of a reference list. */
 const REFERENCES =
   /^(?:\d+\.?\s+)?(?:r[ée]f[ée]rences?(?: bibliographiques)?|references|bibliograph(?:y|ie)|works cited|literature cited)$/iu
+/** The oath a medical thesis ends with: a fixed text, not the author's. */
+const OATH = /^(?:serment(?: d['’]hippocrate)?|hippocratic oath|oath)$/iu
 /** An entry of a numbered reference list: "12. Author AB…", "[12] Author…". */
 const REFERENCE_ENTRY = /^(?:\[\d{1,3}\]|\d{1,3}[.)])\s+\S/u
 /** A caption: "Figure 4.", "Tableau 2 –". */
@@ -211,8 +213,8 @@ const CAPTION =
  * A paragraph that is only a number is the page's folio and is dropped; a
  * short numbered line is taken as a heading, labels the paragraphs after it,
  * and is dropped too, like a short unpunctuated line in capitals. Captions
- * are dropped, and so is a numbered reference list after its heading. A
- * paragraph cut by a page break stays two paragraphs: the PDF does not say
+ * are dropped, and so is a numbered reference list after its heading, and a
+ * thesis's oath. A paragraph cut by a page break stays two paragraphs: the PDF does not say
  * they are one.
  */
 export function layoutFromPages(pages: readonly PageText[]): { text: string; layout: Layout } {
@@ -222,6 +224,7 @@ export function layoutFromPages(pages: readonly PageText[]): { text: string; lay
   let index = 0
   let section: string | undefined
   let references = false
+  let oath = false
   for (const { page, text } of pages) {
     for (const block of text.split(/\n{2,}/u)) {
       const flat = block.replaceAll(/\s*\n\s*/gu, ' ').trim()
@@ -236,13 +239,15 @@ export function layoutFromPages(pages: readonly PageText[]): { text: string; lay
       const words = flat.split(/\s+/u).length
       if (PRINTED_HEADING.test(flat) && words <= 14) {
         section = flat
+        oath = false
         continue
       }
       if (BARE_HEADING.test(flat) && words <= 6) {
         section = flat
+        oath = OATH.test(flat)
         continue
       }
-      if (CAPTION.test(flat)) continue
+      if (oath || CAPTION.test(flat)) continue
       if (parts.length > 0) length += 2
       parts.push(flat)
       paragraphs.push({

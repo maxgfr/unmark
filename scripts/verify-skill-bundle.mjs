@@ -421,7 +421,20 @@ try {
     const applied = unmark(['sweep', at('thesis.docx'), '--apply', at('rewrites.json'), '--json'])
     const row = JSON.parse(applied.out).rows.find((r) => r.id === swept.rows[0].id)
     check('sweep --apply', row?.rewrite?.source === 'agent', 'should attach the checked rewrite')
+    check(
+      'sweep --apply',
+      applied.code === (row?.rewrite?.verified ? 0 : 1),
+      'should exit 1 when a rewrite was rejected',
+    )
   }
+
+  // The rewrite commands read a document's prose, not its zip.
+  const docBrief = unmark(['brief', at('thesis.docx')])
+  check(
+    'brief on a .docx',
+    docBrief.code === 0 && JSON.parse(docBrief.out).words < 5000,
+    'should brief the prose, not the zip bytes',
+  )
 
   // Every option --help names is documented for the agent.
   const docs = [

@@ -15,7 +15,8 @@ import { readZip, type ZipEntry } from './zip.ts'
 import { decodeUtf8 } from './types.ts'
 
 /** Why a paragraph of the document is not in the prose. */
-export type SkipReason = 'table' | 'caption' | 'references' | 'toc' | 'heading' | 'textbox'
+export type SkipReason =
+  'table' | 'caption' | 'references' | 'toc' | 'heading' | 'textbox' | 'boilerplate'
 
 export interface DocParagraph {
   /**
@@ -119,6 +120,19 @@ const CAPTION_TEXT =
 /** The heading of a reference list. */
 const REFERENCES_HEADING =
   /^\s*(?:[\dIVX]+(?:\.\d+)*\.?\s+)?(?:r[ée]f[ée]rences?(?: bibliographiques)?|references|bibliograph(?:y|ie)|works cited|literature cited|literatur(?:verzeichnis)?)\s*:?\s*$/iu
+
+/**
+ * A section title often typed as a plain paragraph — in capitals, or bold —
+ * rather than in a heading style. Left as prose, a thesis's oath and its
+ * back-cover summary were filed under the conclusion before them.
+ */
+const KNOWN_TITLE =
+  /^\s*(?:serment(?: d['’]hippocrate)?|r[ée]sum[ée]|abstract|summary|mots[- ]cl[ée]s|keywords|remerciements|acknowledge?ments|d[ée]dicaces?|abr[ée]viations(?: et acronymes)?|abbreviations(?: and acronymes)?|glossaire|glossary|annexes?|appendix|appendices|pr[ée]face|avant-propos)\s*:?\s*$/iu
+/**
+ * The oath a medical thesis ends with: a fixed text every candidate signs, not
+ * the author's writing. Left out like a reference list, until the next title.
+ */
+const OATH_TITLE = /^\s*(?:serment(?: d['’]hippocrate)?|hippocratic oath|oath)\s*$/iu
 
 /** The heading of a table of contents typed by hand, with no TOC field behind it. */
 const TOC_HEADING =
@@ -329,6 +343,7 @@ export async function docxText(bytes: Uint8Array): Promise<DocText | undefined> 
     toc: 0,
     heading: 0,
     textbox: 0,
+    boilerplate: 0,
   }
 
   // Page numbers are only worth giving when Word's rendered breaks account for
@@ -343,6 +358,7 @@ export async function docxText(bytes: Uint8Array): Promise<DocText | undefined> 
   let page = 1
   let section: string | undefined
   let referencesLevel: number | undefined
+  let inOath = false
   let inToc = false
 
   for (const p of raw) {
@@ -370,9 +386,16 @@ export async function docxText(bytes: Uint8Array): Promise<DocText | undefined> 
     }
     inToc = false
 
-    if (level !== undefined || (REFERENCES_HEADING.test(text) && shortLine)) {
+    const typedTitle = level === undefined && shortLine && KNOWN_TITLE.test(text)
+    if (level !== undefined || typedTitle || (REFERENCES_HEADING.test(text) && shortLine)) {
       skipped.heading += 1
       const own = level ?? 1
+      inOath = OATH_TITLE.test(text.normalize('NFC').replaceAll('\u2019', "'"))
+      if (inOath) {
+        referencesLevel = undefined
+        section = sectionLabel(text)
+        continue
+      }
       if (REFERENCES_HEADING.test(text)) {
         referencesLevel = own
         continue
@@ -385,6 +408,10 @@ export async function docxText(bytes: Uint8Array): Promise<DocText | undefined> 
     }
     if (referencesLevel !== undefined) {
       skipped.references += 1
+      continue
+    }
+    if (inOath) {
+      skipped.boilerplate += 1
       continue
     }
     if (p.toc || TOC_NAME.test(name)) {

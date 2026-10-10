@@ -319,11 +319,21 @@ export function detectAuthorship(input: string, options: DetectOptions = {}): Au
     return location ? { location } : {}
   }
 
+  // The forensic signal reads the prose. When the file carries marks of its
+  // own, its line says so rather than "no technical mark" beside a verdict
+  // held at uncertain by those very marks.
+  const filed = (signal: ReturnType<typeof builtInSignals>[number]) =>
+    signal.id === 'forensic' && fileMarks.length > 0
+      ? {
+          ...signal,
+          detail: `${signal.value === 0 ? 'nothing in the prose itself, no chat residue and no hidden character' : signal.detail}; the file carries ${fileMarks.length} mark${fileMarks.length === 1 ? '' : 's'} of its own (see File marks)`,
+        }
+      : signal
   const signals = [
     ...builtInSignals(
       { words: seg.words, lang, spans: scored, hits, marks, style, reuse: wordReuse(text, seg) },
       calibration,
-    ),
+    ).map(filed),
     ...(options.external ?? []).map(fromExternal),
   ]
 

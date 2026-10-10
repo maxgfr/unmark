@@ -116,6 +116,11 @@ node <skill-dir>/scripts/unmark.mjs brief draft.md > brief.json    # what to fix
 node <skill-dir>/scripts/unmark.mjs verify new.md --against draft.md
 ```
 
+`brief`, `verify` and `rewrite` read the prose of a `.docx` or a PDF, as
+`detect` does; `rewrite --in-place` refuses one, since it would write plain
+text over the document. For a thesis, change sentences, not the file: use
+`sweep` below.
+
 `brief` gives you, as JSON: every tell with the layer it belongs to and what a
 writer would actually change; every number, date, name, link and quotation that
 must survive; and every protected span to reproduce byte for byte.
@@ -161,7 +166,10 @@ the report — it holds the verdict scale, the judge's rules and the template.
 
 2. Judge every passage in the `high` and `medium` bands: **confirm** or
    **reject** it, one line each, citing its line number. Reject what the
-   subject, a formal register or a second-language writer explains.
+   subject, a formal register or a second-language writer explains. On a
+   careful text no sentence reaches a band, and this step has nothing in it:
+   then the passages to judge are the `medium` rows of `sweep` (below), and
+   you judge those instead.
 3. Add your own `JUDGE_OBSERVATION`s, each tied to a line: the horoscope test
    (a sentence that fits any subject), genericity, fabricated precision
    (figures or sources nobody could check), a register that never varies.
@@ -215,11 +223,19 @@ closing line, a recap connector, connectors in series, a triad, a figure with
 no reference call, dashes, catalogue vocabulary), a confidence, whether the
 register explains it, the current text quoted and checked word for word in the
 source file (and the `--pages` PDF), and a rewrite. A rewrite is shown only if
-it kept every number and reference call of the sentence; otherwise the row
-says it was rejected and why. `--rewrite` asks the local model on 127.0.0.1
-instead of you; with `--model`, a remote provider, and the sentences leave the
-machine. Confirm or reject each `medium` row in the report; the `low` ones are
-suggestions for the author, never evidence.
+it cleared the gate: every number and reference call of the sentence kept, the
+habit it was asked to remove gone, no new pattern of the catalogue, and not a
+copy of the sentence. An empty rewrite deletes the sentence, and is accepted
+only when the sentence carries no figure and no reference call. Otherwise the
+row says the rewrite was rejected and why. A figure without its reference call
+is not offered for rewriting — only the author knows the call — and the row
+says so. `--apply` prints on stderr how many rewrites were verified, rejected,
+or named an id the sweep does not have, and exits 1 when any was rejected or
+unknown. `--rewrite` asks the local model on 127.0.0.1 instead of you; with
+`--model`, a remote provider, and the sentences leave the machine. Confirm or
+reject each `medium` row in the report; the `low` ones are suggestions for the
+author, never evidence. `sweep` gives the same `verdict` and `fileMarks` as
+`detect`.
 
 **To fix what reads as AI**, send the user through the rewrite loop above
 (`brief` → rewrite → `verify`), then run `detect` again on the result.

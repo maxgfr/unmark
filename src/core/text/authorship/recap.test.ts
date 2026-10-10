@@ -21,7 +21,7 @@ describe('recap loops', () => {
     expect(recap?.occurrences.map((o) => o.section)).toEqual(['Abstract', 'Results', 'Conclusion'])
     expect(recap?.summary).toBe(true)
     for (const o of recap?.occurrences ?? [])
-      expect(text.slice(o.start, o.end)).toMatch(/^in nearly nine displaced anchors out of ten/)
+      expect(text.slice(o.start, o.end)).toMatch(/^nearly nine displaced anchors out of ten/)
   })
 
   it('finds a short formula when it carries a number', () => {
@@ -47,5 +47,25 @@ describe('recap loops', () => {
         'In nearly nine displaced anchors out of ten the cover held. Again, in nearly nine displaced anchors out of ten the cover held.',
     })
     expect(detectAuthorship(text).recaps).toEqual([])
+  })
+
+  it('does not take three words around a number written out for a formula', () => {
+    const text = doc({
+      Introduction:
+        'The lens rests on two zones of fixation, and the iris is left free throughout.',
+      Discussion: 'Remodelling at the two zones of contact may explain the slow loss of cover.',
+      Results: 'Two of them were exposed at the last visit, both in the temporal quadrant.',
+      Conclusion: 'Two of them needed a graft, while the others were left alone.',
+    })
+    expect(detectAuthorship(text).recaps).toEqual([])
+  })
+
+  it('keeps a short formula with a figure, trimmed of its function words', () => {
+    const text = doc({
+      Introduction: 'A national audit of 268 eyes found a low rate overall.',
+      Discussion: 'As in a national audit of 268 eyes, the rate stayed low.',
+    })
+    const [recap] = detectAuthorship(text).recaps
+    expect(recap?.phrase).toBe('national audit of 268 eyes')
   })
 })

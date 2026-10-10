@@ -16,8 +16,9 @@
 // deterministic humanise pass, a model the caller runs (`applyRewrites`), or
 // an agent handed the prompt; every one goes through the same gate.
 
-import { buildBrief, verifyRewrite } from '../../rewrite.ts'
+import { buildBrief, extractFacts, verifyRewrite } from '../../rewrite.ts'
 import { humanise } from '../humanise.ts'
+import { punctuationDashes } from './features.ts'
 import { detectAuthorship, type DetectOptions } from './index.ts'
 import type { AuthorshipReport, AuthorshipSpan, Location } from './report.ts'
 import { searchable } from './locate.ts'
@@ -49,6 +50,8 @@ export interface SweepHabit {
   confidence: SweepConfidence
   /** The register explains it: an academic formula, a recap in an abstract. */
   register: boolean
+  /** For a formula repeated across sections: the words this sentence repeats. */
+  phrase?: string
 }
 
 export interface SweepRewrite {
@@ -70,6 +73,8 @@ export interface SweepRow {
   location?: Location
   /** The heading it sits under, from the layout or the Markdown; empty when none. */
   section: string
+  /** The catalogue the sentence was read with. */
+  lang?: 'fr' | 'en'
   /** The sentence, exactly as it is in the analysed text. */
   text: string
   habits: SweepHabit[]
@@ -116,23 +121,46 @@ const CITATION =
 const DIGIT = /\d/u
 const RECAP = {
   en: /\b(?:therefore|thus|hence|consequently)\b/iu,
-  fr: /(?<![\p{L}])(?:donc|ainsi|par conséquent|dès lors)(?![\p{L}])/iu,
+  // Not « ainsi que », « as well as »: it concludes nothing.
+  fr: /(?<![\p{L}])(?:donc|ainsi(?!\s+qu)|par conséquent|dès lors)(?![\p{L}])/iu,
 }
 const CONNECTOR = {
-  en: /\b(?:however|nevertheless|nonetheless|moreover|furthermore|in addition|by contrast|conversely|also)\b/iu,
-  fr: /(?<![\p{L}])(?:toutefois|néanmoins|cependant|pourtant|par ailleurs|en outre|de plus|en revanche|à l’inverse|à l'inverse)(?![\p{L}])/iu,
+  // « also » inside a clause is not a connector; « Also, » opening one is.
+  en: /\b(?:however|nevertheless|nonetheless|moreover|furthermore|in addition|by contrast|conversely)\b|^\s*also\b/iu,
+  // « de plus de 2,8 millions », « de plus en plus » and « de plus que » compare.
+  fr: /(?<![\p{L}])(?:toutefois|néanmoins|cependant|pourtant|par ailleurs|en outre|de plus(?!\s+(?:de|d['’]|en|que|qu['’]))|en revanche|à l’inverse|à l'inverse)(?![\p{L}])/iu,
 }
 const PROMISE = {
-  en: /\b(?:first(?:ly)?|in the first place|on the one hand)\b/iu,
+  // Not the ordinal: « the first series », « its first year ».
+  en: /\b(?:in the first place|on the one hand|(?<!\b(?:the|a|an|its|their|our|this|these|his|her|whose)\s)first(?:ly)?)\b/iu,
   fr: /(?<![\p{L}])(?:d['’]abord|tout d['’]abord|premièrement|en premier lieu|d['’]une part)(?![\p{L}])/iu,
 }
 const FOLLOW_UP = {
   en: /\b(?:second(?:ly)?|then|next|also|finally|on the other hand|in the second place)\b/iu,
   fr: /(?<![\p{L}])(?:ensuite|puis|deuxièmement|en second lieu|enfin|également|aussi|d['’]autre part)(?![\p{L}])/iu,
 }
+/**
+ * Three items, the last one closing the clause. An aside between commas —
+ * « The anchor, once displaced, may stay covered and remain stable » — has
+ * the same punctuation; `triadIn` tells them apart by the items' lengths.
+ */
 const TRIAD = {
-  en: /\b[\p{L}-]+(?: [\p{L}-]+){0,3}, (?:the |a |an |its |their )?[\p{L}-]+(?: [\p{L}-]+){0,3},? (?:and|or) (?:the |a |an |its |their )?[\p{L}-]+/u,
-  fr: /(?<![\p{L}])[\p{L}’'-]+(?: [\p{L}’'-]+){0,3}, [\p{L}’'-]+(?: [\p{L}’'-]+){0,3},? (?:et|ou) [\p{L}’'-]+/u,
+  en: /\b[\p{L}-]+(?: [\p{L}-]+){0,3}, (?:the |a |an |its |their )?[\p{L}-]+(?: [\p{L}-]+){0,3},? (?:and|or) (?:the |a |an |its |their )?[\p{L}-]+(?: [\p{L}-]+){0,3}(?=\s*(?:[.;:!?)]|$))/gu,
+  fr: /(?<![\p{L}])[\p{L}’'-]+(?: [\p{L}’'-]+){0,3}, [\p{L}’'-]+(?: [\p{L}’'-]+){0,3},? (?:et|ou) [\p{L}’'-]+(?: [\p{L}’'-]+){0,3}(?=\s*(?:[.;:!?)]|$))/gu,
+}
+const LIST_JOIN = { en: /,\s+|,?\s+(?:and|or)\s+/u, fr: /,\s+|,?\s+(?:et|ou)\s+/u }
+
+/** A list of three parallel items in `body`, or undefined. */
+function triadIn(body: string, lang: Lang): RegExpExecArray | undefined {
+  for (const match of body.matchAll(TRIAD[lang])) {
+    // The first item opens the list: one that follows a comma is the tail of an aside.
+    if (body.slice(0, match.index).trimEnd().endsWith(',')) continue
+    const items = match[0].split(LIST_JOIN[lang]).map((item) => item.split(/\s+/u).length)
+    if (items.length !== 3) continue
+    if (Math.max(...items) > 2 * Math.min(...items)) continue
+    return match as RegExpExecArray
+  }
+  return undefined
 }
 /** A figure with a decimal or a unit: the kind a reader expects a source for. */
 const FIGURE =
@@ -143,8 +171,13 @@ const DATA_SECTION =
   /result|résultat|method|méthode|matériel|population|statisti|abstract|résumé|endpoint|critère|data|donnée|table|figure|tableau|selection|sélection|design|technique|title page/iu
 /** Sections that argue rather than report. */
 const ARGUING = /discussion|conclusion|limit|perspective|introduction/iu
-/** A dash used as punctuation: spaced, or a pair; not a range between two numbers. */
-const DASH = /(?<!\d)\s[—–]\s|—/u
+/**
+ * Sections that define what was measured — methods, endpoints, data
+ * collected, a figure's legend. A phrase recurring from one of these is the
+ * study's own definition carried through the paper: precision, not a habit.
+ */
+const DEFINING =
+  /method|méthode|matériel|endpoint|critère|outcome measure|data collect|données recueillies|statisti|d[ée]finition|figure|tableau|table|annex|appendix|l[ée]gende|legend|selection|sélection/iu
 
 type Lang = 'fr' | 'en'
 
@@ -288,7 +321,7 @@ function sentenceHabits(
     }
     // A triad in a discussion is a cadence; in methods it is the list of what
     // was measured. After a colon it is an enumeration either way.
-    const triad = TRIAD[lang].exec(body)
+    const triad = triadIn(body, lang)
     if (
       triad &&
       (inCiting || ARGUING.test(section)) &&
@@ -322,7 +355,7 @@ function sentenceHabits(
         register: false,
       })
     }
-    if (DASH.test(body)) {
+    if (punctuationDashes(body).length > 0) {
       add(index, {
         type: 'em_dash',
         detail: 'dashes doing the work of commas, colons or brackets',
@@ -367,6 +400,16 @@ export const normaliseSpaces = (text: string): string =>
 
 /** Sweep a text: every sentence with a habit, located, quoted, with a checked rewrite. */
 export function sweep(text: string, options: SweepOptions = {}): SweepResult {
+  const result = analyse(text, options)
+  for (const row of result.rows) {
+    const rule = ruleRewrite(row.text)
+    if (rule) row.rewrite = checkRewrite(row.text, rule, 'rule', row)
+  }
+  return result
+}
+
+/** The rows of a sweep, without rewrites: what the rewrite gate re-reads too. */
+function analyse(text: string, options: SweepOptions): SweepResult {
   const { sources, ...detect } = options
   const report = detectAuthorship(text, {
     ...detect,
@@ -404,14 +447,27 @@ export function sweep(text: string, options: SweepOptions = {}): SweepResult {
     habits.set(index, list)
   }
 
+  // A formula of the register is register once; written three times in one
+  // document — « To our knowledge » in the discussion, again two paragraphs
+  // on, again in the conclusion — it is a habit the register no longer explains.
+  const formulas = new Map<string, number>()
+  for (const finding of report.findings)
+    if (FINDING_TYPE(finding.category) === 'stock_formula')
+      formulas.set(finding.patternId, (formulas.get(finding.patternId) ?? 0) + 1)
+  const recurring = (patternId: string) => (formulas.get(patternId) ?? 0) >= 3
+
   for (const finding of report.findings) {
     const type = FINDING_TYPE(finding.category)
     const confidence: SweepConfidence =
-      type === 'stock_formula' || type === 'phrasing'
-        ? 'low'
-        : finding.patternId.endsWith('.dense')
+      type === 'stock_formula'
+        ? recurring(finding.patternId)
+          ? 'medium'
+          : 'low'
+        : type === 'phrasing'
           ? 'low'
-          : type === 'stacked_hedge'
+          : // A dense stretch — three hedged sentences among five — is the
+            // « five could in two paragraphs » a relevé lists first.
+            type === 'stacked_hedge'
             ? 'medium'
             : finding.counted === false
               ? 'low'
@@ -420,24 +476,40 @@ export function sweep(text: string, options: SweepOptions = {}): SweepResult {
                 : 'medium'
     add(indexOf(finding.start), {
       type,
-      detail: finding.reason,
+      // A tier-3 entry's reason speaks of the sentence it is counted beside;
+      // listed alone, that would claim another flag the sentence does not have.
+      detail:
+        type === 'stock_formula' && recurring(finding.patternId)
+          ? `a formula of the register, written ${formulas.get(finding.patternId)} times in the document`
+          : finding.counted === false && finding.tier === 3
+            ? `${type === 'stock_formula' ? 'a formula of the register' : 'a word that counts only beside another habit'}, alone here, so detect does not count it`
+            : finding.reason,
       patternId: finding.patternId,
       confidence,
-      register: type === 'stock_formula',
+      register: type === 'stock_formula' && !recurring(finding.patternId),
     })
   }
 
   for (const recap of report.recaps) {
     const copies = recap.occurrences.length
     const sections = [...new Set(recap.occurrences.map((o) => o.section))]
+    // A definition from the methods carried through the paper is precision.
+    // What reads as a habit is a formula recopied three times or more into a
+    // section that argues — the slogan of the results that returns, word for
+    // word, in the conclusion.
+    const defined = recap.occurrences.some((o) => DEFINING.test(o.section))
+    const argued = recap.occurrences.some((o) => ARGUING.test(o.section))
     for (const occurrence of recap.occurrences) {
+      const own = text.slice(occurrence.start, occurrence.end).replaceAll(/\s+/gu, ' ')
       add(indexOf(occurrence.start), {
         type: 'repeated_formula',
-        detail: `"${recap.phrase}" appears ${copies} times, in ${sections.join(', ')}`,
-        confidence: copies >= 3 ? 'medium' : 'low',
+        detail: `"${own}" appears ${copies} times, in ${sections.join(', ')}`,
+        phrase: own,
+        confidence: copies >= 3 && argued && !defined ? 'medium' : 'low',
         // An abstract restates the body, and methods and results restate each
         // other, by design.
         register:
+          defined ||
           (recap.summary && copies === 2) ||
           recap.occurrences.every((o) => DATA_SECTION.test(o.section)),
       })
@@ -471,6 +543,7 @@ export function sweep(text: string, options: SweepOptions = {}): SweepResult {
       line: sentence.span.line,
       ...(sentence.span.location ? { location: sentence.span.location } : {}),
       section: sectionKey(sentence),
+      lang: sentence.lang,
       text: quote,
       habits: ordered,
       type: lead.type,
@@ -478,8 +551,6 @@ export function sweep(text: string, options: SweepOptions = {}): SweepResult {
       registerExplained: ordered.every((h) => h.register),
       quote: { checked, found },
     }
-    const rule = ruleRewrite(quote)
-    if (rule) row.rewrite = checkRewrite(quote, rule, 'rule')
     rows.push(row)
   }
 
@@ -513,23 +584,87 @@ export function ruleRewrite(sentence: string): string | undefined {
 }
 
 /**
+ * Habits a sentence carries on its own, read the way the sweep reads it: in a
+ * section that argues, with the academic register. Context-bound habits — a
+ * closing line, connectors across two sentences — cannot show here.
+ */
+function ownHabits(sentence: string, lang: 'fr' | 'en' | undefined) {
+  const { rows, report } = analyse(`## Discussion\n\n${sentence}`, {
+    ...(lang ? { lang } : {}),
+    register: 'academic',
+  })
+  return {
+    types: new Set(rows.flatMap((row) => row.habits.map((h) => h.type))),
+    patterns: new Set(report.findings.map((f) => f.patternId)),
+  }
+}
+
+/** Habits a rewrite of one sentence cannot be expected to clear on its own. */
+const IN_CONTEXT: ReadonlySet<HabitType> = new Set<HabitType>([
+  'closing_line',
+  'connector_series',
+  'unsourced_figure',
+])
+
+/** A row whose only habit is a figure without its call: the author alone can add it. */
+export const needsAuthor = (row: Pick<SweepRow, 'habits'>): boolean =>
+  row.habits.length > 0 && row.habits.every((h) => h.type === 'unsourced_figure')
+
+/**
  * A rewrite through the gate: the same numbers, the same reference calls, the
- * same names and quotations, and no tell the sentence did not have.
+ * same names and quotations, the habit gone, and no tell the sentence did not
+ * have. An empty rewrite deletes the sentence, which is allowed only when it
+ * carries no figure and no reference call.
  */
 export function checkRewrite(
   original: string,
   rewrite: string,
   source: SweepRewrite['source'],
+  row?: Pick<SweepRow, 'habits' | 'lang'>,
 ): SweepRewrite {
+  const rejected = (failures: string[]): SweepRewrite => ({
+    text: rewrite,
+    source,
+    verified: false,
+    failures,
+  })
+
+  if (rewrite.trim() === '') {
+    const facts = extractFacts(original)
+    const lost = [
+      ...facts.numbers.map((n) => `number ${n}`),
+      ...facts.citations.map((c) => `reference call ${c}`),
+    ]
+    return lost.length > 0
+      ? rejected([`deleting the sentence would lose ${lost.join(', ')}`])
+      : { text: '', source, verified: true }
+  }
+  if (normaliseSpaces(rewrite) === normaliseSpaces(original))
+    return rejected(['unchanged: the rewrite is the sentence as it was'])
+
   const verdict = verifyRewrite(original, rewrite, buildBrief(original))
-  return verdict.ok
-    ? { text: rewrite, source, verified: true }
-    : {
-        text: rewrite,
-        source,
-        verified: false,
-        failures: verdict.failures.map((f) => `${f.what}: ${f.detail}`),
-      }
+  const failures = verdict.failures.map((f) => `${f.what}: ${f.detail}`)
+
+  const before = ownHabits(original, row?.lang)
+  const after = ownHabits(rewrite, row?.lang)
+  const targets = row?.habits ?? [...before.types].map((type) => ({ type }) as SweepHabit)
+  for (const habit of targets) {
+    if (IN_CONTEXT.has(habit.type)) continue
+    const kept =
+      habit.type === 'repeated_formula'
+        ? habit.phrase !== undefined &&
+          normaliseSpaces(rewrite).toLowerCase().includes(habit.phrase.toLowerCase())
+        : after.types.has(habit.type)
+    if (kept) failures.push(`${HABIT_LABEL[habit.type]}: still in the rewrite`)
+  }
+  for (const type of after.types)
+    if (!before.types.has(type) && !targets.some((h) => h.type === type))
+      failures.push(`${HABIT_LABEL[type]}: introduced by the rewrite`)
+  for (const pattern of after.patterns)
+    if (!before.patterns.has(pattern)) failures.push(`${pattern}: introduced by the rewrite`)
+
+  const unique = [...new Set(failures)]
+  return unique.length === 0 ? { text: rewrite, source, verified: true } : rejected(unique)
 }
 
 /**
@@ -546,13 +681,47 @@ export function applyRewrites(
   return rows.map((row) => {
     const candidate = byId.get(row.id)
     if (candidate === undefined || row.rewrite?.verified) return row
-    return { ...row, rewrite: checkRewrite(row.text, candidate.trim(), source) }
+    return { ...row, rewrite: checkRewrite(row.text, candidate.trim(), source, row) }
   })
+}
+
+/** `[{id, rewrite}]` from a parsed JSON value, and how many items were not that shape. */
+export function rewritesFrom(value: unknown): {
+  rewrites: { id: string; rewrite: string }[]
+  ignored: number
+} {
+  if (!Array.isArray(value)) return { rewrites: [], ignored: 0 }
+  const rewrites = value.flatMap((item) =>
+    item &&
+    typeof item === 'object' &&
+    typeof item.id === 'string' &&
+    typeof item.rewrite === 'string'
+      ? [{ id: item.id as string, rewrite: item.rewrite as string }]
+      : [],
+  )
+  return { rewrites, ignored: value.length - rewrites.length }
+}
+
+/** What became of an agent's or a model's answers once applied. */
+export function summariseRewrites(
+  rows: readonly SweepRow[],
+  rewrites: readonly { id: string; rewrite?: string }[],
+): { verified: number; rejected: number; unknown: string[] } {
+  const asked = new Set(rewrites.map((r) => r.id))
+  const known = new Set(rows.map((row) => row.id))
+  let verified = 0
+  let rejected = 0
+  for (const row of rows) {
+    if (!asked.has(row.id) || !row.rewrite || row.rewrite.source === 'rule') continue
+    if (row.rewrite.verified) verified += 1
+    else rejected += 1
+  }
+  return { verified, rejected, unknown: [...asked].filter((id) => !known.has(id)) }
 }
 
 /** The prompt an agent or a model answers with `[{ "id": …, "rewrite": … }]`. */
 export function sweepPrompt(rows: readonly SweepRow[]): string {
-  const pending = rows.filter((row) => !row.rewrite?.verified)
+  const pending = rows.filter((row) => !row.rewrite?.verified && !needsAuthor(row))
   return `Rewrite each sentence below so it no longer carries the habit named, in the same language and register.
 
 RULES
@@ -618,7 +787,9 @@ export function renderSweep(
         ? row.rewrite.text || '*delete the sentence*'
         : row.rewrite
           ? `*rewrite rejected: ${row.rewrite.failures?.[0] ?? 'failed the gate'}*`
-          : '—'
+          : needsAuthor(row)
+            ? '*add the reference call: only the author knows it*'
+            : '—'
       const quoted =
         row.quote.checked.length > 0 && row.quote.found.length < row.quote.checked.length
           ? ' ⚠ not found in the source'

@@ -63,6 +63,23 @@ describe('route', () => {
     expect(route(abstract, seg).document).toBe('en')
   })
 
+  it('routes French that TinyLD misreads as Berber, when franc-min puts French first', () => {
+    // Jargon and product names push TinyLD to Berber 0.56 over French 0.28.
+    const text = `${FR}\n\nMéthode : Série rétrospective monocentrique. Tous les patients majeurs implantés d’un Carlevale FIL-SSF selon la technique des poches sclérales entre 2019 et 2022 ont été revus à trois ans. Le critère principal était le taux d’extériorisation des haptiques.`
+    const seg = segment(text)
+    const routed = route(text, seg)
+    expect(routed.unsupportedShare).toBe(0)
+    expect(seg.sentences.every((s) => s.lang === 'fr')).toBe(true)
+  })
+
+  it('does not read a short line of names as another language', () => {
+    const text = `${FR}\n\nM. DURAND Paul Gynécologie-Obstétrique\n\nMme MARTIN Sophie Chirurgie Maxillo-Faciale\n\n${FR}`
+    const seg = segment(text)
+    const routed = route(text, seg)
+    expect(routed.unsupportedShare).toBe(0)
+    expect(routed.detected.filter((lang) => lang && lang !== 'fr')).toEqual([])
+  })
+
   it('takes the language it is given over the one it would detect', () => {
     const seg = segment(EN)
     const routed = route(EN, seg, 'fr')

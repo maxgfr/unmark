@@ -6,7 +6,7 @@
 // word for word through every section is a recap loop, and no sentence-level
 // score can see it, because each copy reads fine on its own.
 //
-// Found as runs of five or more words (three when one is a number) that recur
+// Found as runs of five or more words (four when one is a number) that recur
 // in two sections or more. Terminology is the trap: "the scleral pockets
 // technique" recurs everywhere in a paper about it, and that is precision,
 // not a habit. So a run is kept only when one of its content words is rare in
@@ -38,9 +38,14 @@ export interface Recap {
 const SUMMARY =
   /abstract|résumé|resume|summary|synthèse|title page|page de titre|keywords|mots-clés/iu
 
-/** Words of a run without a number, and with one. */
+/**
+ * Words of a run without a number, and with one. Three was too few: « deux
+ * zones de », « two of them » recur in any paper and are not formulas.
+ */
 const MIN_RUN = 5
-const MIN_NUMBER_RUN = 3
+const MIN_NUMBER_RUN = 4
+/** Content words, numbers aside, a run needs to be a formula rather than glue. */
+const MIN_CONTENT = 2
 
 /** Numbers, as digits or words; not "un", "une" or "one", which are articles first. */
 const NUMBER_WORD =
@@ -57,7 +62,18 @@ const STOP = new Set(
   ).split(' '),
 )
 
-const isContent = (token: Token) => token.norm.length >= 4 && !STOP.has(token.norm)
+const isContent = (token: Token) =>
+  token.norm.length >= 4 && !STOP.has(token.norm) && !NUMBER_WORD.test(token.norm)
+
+/** The words of a sentence, figures included: « 268 » is part of « an audit of 268 eyes ». */
+function wordsWithFigures(text: string, start: number, end: number): Token[] {
+  const figures: Token[] = []
+  for (const match of text.slice(start, end).matchAll(/\d+(?:[.,]\d+)?/gu)) {
+    const at = start + match.index
+    figures.push({ start: at, end: at + match[0].length, norm: match[0].replace(',', '.') })
+  }
+  return [...tokens(text, start, end), ...figures].sort((a, b) => a.start - b.start)
+}
 
 interface Position {
   sentence: number
@@ -73,7 +89,7 @@ export function recaps(
   ignored?: string,
 ): Recap[] {
   const streams = seg.sentences.map((s) =>
-    tokens(text, s.start, s.end).filter((t) => seg.mask[t.start] !== 1),
+    wordsWithFigures(text, s.start, s.end).filter((t) => seg.mask[t.start] !== 1),
   )
   const frequency = new Map<string, number>()
   for (const stream of streams)
@@ -82,7 +98,7 @@ export function recaps(
   const sectionOf_ = seg.sentences.map((s) => sectionOf(s.start, s.paragraphIndex))
   const sectionAt = (sentence: number) => sectionOf_[sentence] ?? ''
 
-  // Windows that can qualify: five words, or three when one is a number.
+  // Windows that can qualify: five words, or four when one is a number.
   const windows = new Map<string, Position[]>()
   const keyOf = (stream: Token[], at: number, size: number) =>
     stream
@@ -146,7 +162,13 @@ export function recaps(
       let end = at
       while (end < mark.length && mark[end]) end += 1
       const keys = (keysAt[sentence] ?? []).slice(at, end).flat()
-      runs.push({ sentence, from: at, to: end, keys })
+      // A formula does not start or end on « of », « de », « the ».
+      const stream = streams[sentence] as Token[]
+      let from = at
+      let to = end
+      while (from < to && STOP.has(stream[from]?.norm ?? '')) from += 1
+      while (to > from && STOP.has(stream[to - 1]?.norm ?? '')) to -= 1
+      if (to > from) runs.push({ sentence, from, to, keys })
       at = end
     }
   })
@@ -184,7 +206,7 @@ export function recaps(
     const words = (streams[shortest.sentence] as Token[]).slice(shortest.from, shortest.to)
     const numeric = words.some((t) => NUMBER_WORD.test(t.norm))
     if (words.length < (numeric ? MIN_NUMBER_RUN : MIN_RUN)) continue
-    if (words.filter(isContent).length < (numeric ? 1 : 2)) continue
+    if (words.filter(isContent).length < MIN_CONTENT) continue
     // A formula has a word of its own: one that is rare outside its copies.
     const rare = words.some((t) => isContent(t) && (frequency.get(t.norm) ?? 0) <= 2 * group.length)
     if (!rare) continue

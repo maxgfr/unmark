@@ -4,8 +4,10 @@ import {
   checkRewrite,
   renderSweep,
   ruleRewrite,
+  summariseRewrites,
   sweep,
   sweepPrompt,
+  type SweepRow,
 } from './sweep.ts'
 import { describeLocation } from './locate.ts'
 import { HUMAN_EN } from '../../../test/authorship-samples.ts'
@@ -122,5 +124,220 @@ describe('rewrites from a model or an agent', () => {
       '| Where | Current text | Replace with | Habit | Confidence | Register |',
     )
     expect(markdown).toContain('The result could change with a larger series [4].')
+  })
+})
+
+describe('what sweep does not flag', () => {
+  const types = (text: string) => sweep(text).rows.flatMap((r) => r.habits.map((h) => h.type))
+
+  it('does not read "ainsi que" as a recap connector', () => {
+    expect(
+      types(
+        '## 2.6 Discussion\n\nLes patients ainsi que leurs familles ont été informés du risque infectieux [3].',
+      ),
+    ).not.toContain('recap_connector')
+    expect(
+      types('## 2.6 Discussion\n\nLes patients ainsi que leurs familles ont été informés [3].'),
+    ).not.toContain('marker_vocabulary')
+  })
+
+  it('does not say a lone tier-3 word was flagged beside something else', () => {
+    const [row] = sweep(
+      '## 2.3 Introduction\n\nCe dispositif constitue un véritable atout pour les patients opérés [3].',
+    ).rows
+    expect(row?.type).toBe('marker_vocabulary')
+    expect(row?.habits[0]?.detail).not.toContain('already flagged')
+  })
+
+  it('does not count a range or a spaced en dash in a title line as a dash', () => {
+    expect(
+      types(
+        '## Remerciements\n\nProfesseur des Universités – Praticien Hospitalier, Ophtalmologie,\n\n## 2.6 Discussion\n\nAt four years, 25 of the 41 eyes (61.0 %; 95 % CI 45.7 – 74.3) carried one exteriorised haptic [4].',
+      ),
+    ).not.toContain('em_dash')
+    expect(
+      types(
+        '## 2.3 Introduction\n\nFour families of solutions coexist — anterior chamber lenses, iris fixation and scleral fixation — and none has been shown superior [7].',
+      ),
+    ).toContain('em_dash')
+  })
+})
+
+describe('formulas repeated across sections', () => {
+  const definition = 'whether it remained covered by an intact conjunctiva or crossed it'
+  const slogan =
+    'in nearly nine displaced anchors out of ten the conjunctiva still separated the implant'
+  const TEXT = [
+    '## 2.2 Abstract',
+    '',
+    `Haptic exteriorisation was defined as an anchor having left its scleral cover, ${definition}. Exteriorisation was frequent, but ${slogan} from the ocular surface.`,
+    '',
+    '## 2.4.5 Endpoints',
+    '',
+    `The primary endpoint was exteriorisation of an anchor out of its scleral cover, ${definition}.`,
+    '',
+    '## 2.5.3 Results',
+    '',
+    `Among the 34 exteriorised haptics, 30 stayed under the conjunctiva, ${definition}. The majority therefore remained covered: ${slogan} from the surface.`,
+    '',
+    '## 2.7 Conclusion',
+    '',
+    `Loss of the scleral cover was frequent, but ${slogan} from the ocular surface.`,
+  ].join('\n')
+  const result = sweep(TEXT)
+  const repeated = (fragment: string) =>
+    result.rows
+      .filter((r) => r.text.includes(fragment))
+      .map((r) => r.habits.find((h) => h.type === 'repeated_formula'))
+
+  it('keeps a slogan copied into the conclusion at medium', () => {
+    const habits = repeated('nine displaced anchors')
+    expect(habits).toHaveLength(3)
+    for (const habit of habits) expect(habit?.confidence).toBe('medium')
+  })
+
+  it('reads a definition repeated from the methods as the register, at low', () => {
+    const habits = repeated('intact conjunctiva').filter(Boolean)
+    expect(habits.length).toBeGreaterThan(0)
+    for (const habit of habits) expect(habit).toMatchObject({ confidence: 'low', register: true })
+  })
+
+  it('quotes in each row the words that row repeats', () => {
+    for (const row of result.rows) {
+      for (const habit of row.habits.filter((h) => h.type === 'repeated_formula')) {
+        const quoted = /^"([^"]+)"/.exec(habit.detail)?.[1] ?? ''
+        expect(row.text.replaceAll(/\s+/g, ' ')).toContain(quoted)
+      }
+    }
+  })
+})
+
+describe('the rewrite gate of sweep', () => {
+  const HEDGED =
+    'These data cannot be directly extrapolated to the device, but they could support the plausibility of an infectious risk [32].'
+
+  it('accepts deleting a sentence that carries no figure and no reference call', () => {
+    expect(checkRewrite('The data nevertheless remain reassuring.', '', 'agent')).toEqual({
+      text: '',
+      source: 'agent',
+      verified: true,
+    })
+  })
+
+  it('refuses to delete a sentence that carries a figure or a reference call', () => {
+    const verdict = checkRewrite('Rates range from 0.7 to 13 % [19].', '', 'agent')
+    expect(verdict.verified).toBe(false)
+    expect(verdict.failures?.join(' ')).toMatch(/0\.7|\[19\]/)
+  })
+
+  it('rejects a rewrite that changed nothing', () => {
+    const verdict = checkRewrite(HEDGED, ` ${HEDGED}`, 'agent')
+    expect(verdict.verified).toBe(false)
+    expect(verdict.failures?.join(' ')).toContain('unchanged')
+  })
+
+  it('rejects a rewrite that kept the habit it was asked to remove', () => {
+    const verdict = checkRewrite(
+      HEDGED,
+      'These data cannot be extrapolated to the device, but they might support an infectious risk [32].',
+      'agent',
+    )
+    expect(verdict.verified).toBe(false)
+    expect(verdict.failures?.join(' ')).toContain('stacked hedges')
+  })
+
+  it('rejects a rewrite that brought in a pattern of the catalogue', () => {
+    const verdict = checkRewrite(
+      HEDGED,
+      'These sutured cases delve into a rich tapestry of evidence and make a pivotal infectious risk plausible [32].',
+      'agent',
+    )
+    expect(verdict.verified).toBe(false)
+    expect(verdict.failures?.join(' ')).toMatch(/introduced/)
+  })
+
+  it('still accepts a plain rewrite', () => {
+    expect(
+      checkRewrite(
+        HEDGED,
+        'These cases involved sutures, not the device, but they make an infectious risk plausible [32].',
+        'agent',
+      ).verified,
+    ).toBe(true)
+  })
+
+  it('does not offer a figure without its call for rewriting: only the author can add the call', () => {
+    const result = sweep(
+      '## 2.3 Introduction\n\nThe pocket holds only by the thickness of sclera above the anchor, of the order of 0.30 mm. Rates vary [4].',
+    )
+    const row = result.rows.find((r) => r.text.includes('0.30 mm'))
+    expect(row?.habits.map((h) => h.type)).toEqual(['unsourced_figure'])
+    expect(sweepPrompt(result.rows)).not.toContain(row?.id as string)
+    expect(renderSweep(result, describeLocation)).toContain('add the reference call')
+  })
+
+  it('counts what an agent answered: verified, rejected, and ids it does not know', () => {
+    const result = sweep(DISCUSSION)
+    const row = result.rows.find((r) => r.text.includes('cannot be directly')) as SweepRow
+    const outcome = summariseRewrites(
+      applyRewrites(
+        result.rows,
+        [
+          { id: row.id, rewrite: 'A risk is plausible.' },
+          { id: 'S99999', rewrite: 'Anything.' },
+        ],
+        'agent',
+      ),
+      [
+        { id: row.id, rewrite: 'A risk is plausible.' },
+        { id: 'S99999', rewrite: 'Anything.' },
+      ],
+    )
+    expect(outcome).toEqual({ verified: 0, rejected: 1, unknown: ['S99999'] })
+  })
+})
+
+describe('sweep noise', () => {
+  const types = (text: string) => sweep(text).rows.flatMap((r) => r.habits.map((h) => h.type))
+
+  it('does not take « de plus de » or a mid-sentence « also » for a connector', () => {
+    expect(
+      types(
+        '## 2.6 Discussion\n\nDe plus en plus de patients sont opérés chaque année [2]. Toutefois, ils sont suivis plus de deux ans [3].\n\nThe pocket also holds the anchor [4]. However, the flap is thinner [5].',
+      ),
+    ).not.toContain('connector_series')
+  })
+
+  it('does not read an ordinal « the first » as an announcement', () => {
+    expect(
+      types('## 2.3 Introduction\n\nThe first series reported four eyes with a stable lens [12].'),
+    ).not.toContain('promise_without_follow_up')
+  })
+
+  it('does not read commas around an aside as a triad', () => {
+    expect(
+      types(
+        '## 2.6 Discussion\n\nThe anchor, once displaced, may stay covered and remain stable for years.',
+      ),
+    ).not.toContain('triad')
+  })
+
+  it('raises a register formula repeated three times to medium', () => {
+    const rows = sweep(
+      '## 2.6 Discussion\n\nTo our knowledge, this is the longest series [1]. To our knowledge, one case was reported [2].\n\n## 2.7 Conclusion\n\nTo our knowledge, this is the longest series [1].',
+    ).rows.filter((r) => r.type === 'stock_formula')
+    expect(rows).toHaveLength(3)
+    for (const row of rows)
+      expect(row).toMatchObject({ confidence: 'medium', registerExplained: false })
+  })
+})
+
+describe('hedge after hedge', () => {
+  it('lists each sentence of a dense stretch at medium', () => {
+    const rows = sweep(
+      '## 2.6.3 Mechanistic hypotheses\n\nThe pocket could thin over time [1]. The anchor could move inside it [2]. Inflammation might also play a role [3].',
+    ).rows.filter((r) => r.type === 'stacked_hedge')
+    expect(rows).toHaveLength(3)
+    for (const row of rows) expect(row.confidence).toBe('medium')
   })
 })

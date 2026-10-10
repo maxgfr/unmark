@@ -230,8 +230,32 @@ const DIVERSITY_SPAN = 0.15
 const MATTR_WINDOW = 50
 const REPETITION_WINDOW = 100
 
-/** An em dash that is not a French dialogue dash opening a line. */
-const DASH = /(?<!(?:^|\n)[^\S\n]{0,3})[—–]/gu
+/** An em dash that is not a French dialogue dash opening a line, or a spaced en dash. */
+const DASH = /(?<!(?:^|\n)[^\S\n]{0,3})(?:—|(?<=\s)–(?=\s))/gu
+/** A spaced en dash in fewer words than this is a separator in a title line. */
+const EN_DASH_MIN_WORDS = 8
+
+/**
+ * Offsets, within `sentence`, of the dashes doing a comma's or a colon's work.
+ *
+ * An em dash, unless it opens a line as French dialogue does. An en dash only
+ * when spaced, in a sentence of some length, and not between two numbers: an
+ * unspaced one is a range ("45.7–74.3"), so is a spaced one between figures,
+ * and in "Professeur des Universités – Praticien Hospitalier" it separates two
+ * titles. Shared by `detect` and `sweep`, so both count the same dashes.
+ */
+export function punctuationDashes(sentence: string): number[] {
+  const longEnough = sentence.split(/\s+/u).filter(Boolean).length >= EN_DASH_MIN_WORDS
+  return [...sentence.matchAll(DASH)]
+    .filter((match) => {
+      if (match[0] === '—') return true
+      if (!longEnough) return false
+      const before = sentence.slice(0, match.index).trimEnd().at(-1) ?? ''
+      const after = sentence.slice(match.index + 1).trimStart()[0] ?? ''
+      return !(/\d/u.test(before) && /\d/u.test(after))
+    })
+    .map((match) => match.index)
+}
 
 const CARRIERS: ReadonlySet<FindingKind> = new Set<FindingKind>([
   'zwj_family',
@@ -303,8 +327,8 @@ export function measure(
     // same sentence does not make it twice as generated.
     features.phrase = Math.min(phrase[index] ?? 0, 1)
     features.structure = Math.min(structure[index] ?? 0, 1)
-    const dashes = [...text.slice(sentence.start, sentence.end).matchAll(DASH)].filter(
-      (match) => seg.mask[sentence.start + match.index] !== 1,
+    const dashes = punctuationDashes(text.slice(sentence.start, sentence.end)).filter(
+      (at) => seg.mask[sentence.start + at] !== 1,
     ).length
     features.typography = Math.min(dashes, 2) / 2
   })

@@ -28,6 +28,14 @@ export interface Routing {
 
 const isSupported = (lang: string | undefined): lang is Lang => lang === 'fr' || lang === 'en'
 
+/**
+ * Below this many words, a paragraph read as a language with no catalogue is
+ * not believed: a line of names and specialities — "M. DURAND Paul
+ * Gynécologie-Obstétrique" — comes out Esperanto or Dutch, and listing it as
+ * prose in another language says nothing true. It borrows the document's.
+ */
+const MIN_OTHER_WORDS = 15
+
 /** Up to this much prose, every paragraph is identified on its own. */
 const PRECISE_UNTIL = 60_000
 /** Past it, paragraphs are read in stretches of at least this many characters… */
@@ -100,7 +108,9 @@ export function route(text: string, seg: Segmentation, option: LangOption = 'aut
     words[sentence.paragraphIndex] = (words[sentence.paragraphIndex] ?? 0) + sentence.words
   }
 
-  const found = detect(text, seg, words)
+  const found = detect(text, seg, words).map((lang, index) =>
+    lang && !isSupported(lang) && (words[index] ?? 0) < MIN_OTHER_WORDS ? undefined : lang,
+  )
 
   const totals = new Map<string, number>()
   let total = 0

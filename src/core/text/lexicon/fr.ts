@@ -206,7 +206,8 @@ export const TIER_2: readonly LexiconEntry[] = [
 
 /** Never counts alone: weight added to a sentence something else flagged. */
 export const TIER_3: readonly LexiconEntry[] = [
-  { name: 'ainsi', source: 'ainsi', sample: 'ainsi' },
+  // Not « ainsi que », which means « as well as » and concludes nothing.
+  { name: 'ainsi', source: String.raw`ainsi(?!\s+qu)`, sample: 'ainsi' },
   { name: 'de_plus', source: 'de plus', sample: 'De plus' },
   { name: 'en_fin_de_compte', source: 'en fin de compte', sample: 'en fin de compte' },
   { name: 'veritable', source: 'véritables?', sample: 'un véritable atout' },

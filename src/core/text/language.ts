@@ -257,6 +257,18 @@ function sureLanguage(sample: string): string | undefined {
   const [first, second] = ranked
   if (!first) return undefined
   const lead = first.accuracy - (second?.accuracy ?? 0)
+  // TinyLD's winner a language with no catalogue, French or English its
+  // runner-up, and franc-min sure of that same one: product names and jargon
+  // made TinyLD read a French methods paragraph as Berber 0.56 over French
+  // 0.28, while franc-min put French first. Calling that paragraph "another
+  // language" left it out of the verdict.
+  const runnerUp = second?.lang === 'fr' || second?.lang === 'en' ? second : undefined
+  if (first.lang !== 'fr' && first.lang !== 'en' && runnerUp && runnerUp.accuracy >= WEAK) {
+    const francFirst = francAll(sample, { minLength: 10 })[0]
+    if (francFirst && iso1(francFirst[0]) === runnerUp.lang && francFirst[1] === 1)
+      return runnerUp.lang
+  }
+
   if (first.accuracy >= SURE && lead >= LEAD) return first.lang
   if (first.accuracy >= WEAK && confidentFranc(sample) === first.lang) return first.lang
   // Routing only: a winner far ahead of every other language is an answer

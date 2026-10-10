@@ -744,6 +744,51 @@ describe('detect on a .docx or a PDF', () => {
     expect(mark.placement).toEqual({ paragraph: 5, caption: 'Figure 4. Classification.' })
   })
 
+  it('gives sweep the same verdict as detect on a file that carries a mark', async () => {
+    const manifest = png([{ type: 'caBX', data: c2paStore(CLAUDE_STORE) }])
+    const path = await file(
+      'thesis.docx',
+      thesis([{ name: 'word/media/image1.png', content: manifest }]),
+    )
+    await main(['detect', path, '--json'])
+    const detected = parse()
+    out = []
+    await main(['sweep', path, '--json'])
+    const swept = parse()
+    expect(swept.verdict).toBe(detected.verdict)
+    expect(swept.verdict).not.toBe('likely_human')
+    expect(swept.fileMarks).toHaveLength(1)
+  })
+
+  it('does not say "no technical mark" when the file carries one', async () => {
+    const manifest = png([{ type: 'caBX', data: c2paStore(CLAUDE_STORE) }])
+    const path = await file(
+      'thesis.docx',
+      thesis([{ name: 'word/media/image1.png', content: manifest }]),
+    )
+    await main(['detect', path, '--format', 'md'])
+    expect(stdout()).not.toContain('no technical mark')
+    expect(stdout()).toContain('the file carries 1 mark')
+  })
+
+  it('briefs, verifies and rewrites the prose of a .docx, not its zip bytes', async () => {
+    const path = await file('thesis.docx', thesis())
+    expect(await main(['brief', path])).toBe(0)
+    expect(JSON.parse(stdout()).words).toBeLessThan(1000)
+    out = []
+    expect(
+      await main([
+        'verify',
+        await file('rewritten.md', paragraphs.join('\n\n')),
+        '--against',
+        path,
+      ]),
+    ).toBe(0)
+    out = []
+    expect(await main(['rewrite', path, '--in-place', '--print-prompt'])).toBe(2)
+    expect(stderr()).toContain('--in-place')
+  })
+
   it('reads the marks of --source for a text extracted from it', async () => {
     const manifest = png([{ type: 'caBX', data: new Uint8Array([0, 0, 0, 8]) }])
     const source = await file(
@@ -821,6 +866,35 @@ describe('sweep', () => {
     )
     await main(['sweep', path, '--apply', answers, '--format', 'md'])
     expect(stdout()).toContain('rewrite rejected')
+  })
+
+  it('says when the --apply file cannot be read, rather than calling it not JSON', async () => {
+    const code = await main([
+      'sweep',
+      await file('a.md', ARTICLE),
+      '--apply',
+      join(dir, 'missing.json'),
+    ])
+    expect(code).toBe(2)
+    expect(stderr()).toContain('cannot read')
+    expect(stderr()).not.toContain('not JSON')
+  })
+
+  it('names the ids it does not know and exits 1 when a rewrite was rejected', async () => {
+    const path = await file('article.md', ARTICLE)
+    await main(['sweep', path, '--json'])
+    const { id } = parse().rows.find((r: { text: string }) => r.text.includes('cannot be'))
+    out = []
+    const answers = await file(
+      'rewrites.json',
+      JSON.stringify([
+        { id, rewrite: 'A risk is plausible.' },
+        { id: 'S99999', rewrite: 'Anything.' },
+      ]),
+    )
+    expect(await main(['sweep', path, '--apply', answers, '--format', 'md'])).toBe(1)
+    expect(stderr()).toContain('S99999')
+    expect(stderr()).toMatch(/0 verified, 1 rejected/)
   })
 
   it('refuses an --apply file that is not JSON', async () => {

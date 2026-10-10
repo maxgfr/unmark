@@ -27,6 +27,24 @@ describe('segment', () => {
     expect(texts('Dr. Smith moved to the U.S. last year, e.g. in May. Then left.')).toHaveLength(2)
   })
 
+  it('ends a sentence after a reference call that follows its full stop', () => {
+    expect(
+      texts(
+        'The technique becomes necessary.[1,2] Posterior capsule rupture is the main complication.[3] It is rare.',
+      ),
+    ).toEqual([
+      'The technique becomes necessary.[1,2]',
+      'Posterior capsule rupture is the main complication.[3]',
+      'It is rare.',
+    ])
+    expect(texts('Le taux varie.¹² La définition compte aussi.')).toHaveLength(2)
+  })
+
+  it('ends a sentence on a unit, and not on « MM. »', () => {
+    expect(texts('The sclera is of the order of 0.30 mm. The anchors are covered.')).toHaveLength(2)
+    expect(texts('MM. Dupont et Martin sont venus. Ils sont partis.')).toHaveLength(2)
+  })
+
   it('does not end a sentence inside a decimal number', () => {
     expect(texts('Le taux est de 3.5 pour cent. Il monte.')).toHaveLength(2)
   })

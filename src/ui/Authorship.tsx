@@ -42,6 +42,9 @@ import {
 } from '../core/text/authorship/index.ts'
 import {
   applyRewrites,
+  needsAuthor,
+  rewritesFrom,
+  summariseRewrites,
   HABIT_LABEL,
   renderSweep,
   sweep,
@@ -507,6 +510,10 @@ function Sweep({
     () => (result ? applyRewrites(result.rows, applied, 'agent') : []),
     [result, applied],
   )
+  const outcome = useMemo(
+    () => (applied.length > 0 ? summariseRewrites(rows, applied) : undefined),
+    [rows, applied],
+  )
 
   const apply = () => {
     try {
@@ -514,13 +521,7 @@ function Sweep({
         pasted.slice(pasted.indexOf('['), pasted.lastIndexOf(']') + 1),
       )
       if (!Array.isArray(parsed)) throw new Error('not a list')
-      setApplied(
-        parsed.flatMap((item) =>
-          item && typeof item.id === 'string' && typeof item.rewrite === 'string'
-            ? [{ id: item.id as string, rewrite: item.rewrite as string }]
-            : [],
-        ),
-      )
+      setApplied(rewritesFrom(parsed).rewrites)
       setProblem('')
     } catch {
       setProblem('Paste a JSON list: [{"id": "S123", "rewrite": "…"}].')
@@ -576,6 +577,14 @@ function Sweep({
                 Check and apply
               </button>
               {problem ? <span className="text-[var(--color-signal)]">{problem}</span> : undefined}
+              {outcome ? (
+                <span className="text-[var(--color-muted)]">
+                  {outcome.verified} verified, {outcome.rejected} rejected
+                  {outcome.unknown.length > 0
+                    ? `, unknown id${outcome.unknown.length === 1 ? '' : 's'}: ${outcome.unknown.join(', ')}`
+                    : ''}
+                </span>
+              ) : undefined}
             </div>
           </div>
           <table className="w-full border-collapse text-left">
@@ -608,6 +617,10 @@ function Sweep({
                     ) : row.rewrite ? (
                       <span className="text-[var(--color-muted)]">
                         rejected: {row.rewrite.failures?.[0] ?? 'failed the gate'}
+                      </span>
+                    ) : needsAuthor(row) ? (
+                      <span className="text-[var(--color-muted)]">
+                        add the reference call: only the author knows it
                       </span>
                     ) : (
                       <span className="text-[var(--color-muted)]">—</span>

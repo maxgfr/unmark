@@ -39,8 +39,11 @@ The label then classifies the file, and the difference matters:
 | `signed … no actions declared`   | a manifest with nothing in it but its generator                                       |
 | `could not be decoded`           | present, unreadable — never reported as absent                                        |
 
-Relay the second one carefully. `c2pa.opened` by Claude says a chat assistant
-handed the file back; it does not say the chart was drawn by a model.
+Relay the second one carefully, and in the manifest's own words. `c2pa.opened`
+by Claude says a chat assistant handed the file back, and its description often
+adds that the assistant "may have created or modified the file contents". So
+the manifest leaves both open: it neither shows the chart was drawn by a model,
+nor rules it out. Say that, and quote the description `inspect` prints.
 
 **Chunk removal, not re-encoding.** Dropping a PNG chunk leaves every other
 chunk's CRC valid, and JPEG's scan is copied verbatim, so two real camera JPEGs

@@ -30,6 +30,7 @@ import {
   type AuthorshipReport,
   type AuthorshipVerdict,
   type DocumentSource,
+  type FileMark,
   type Layout,
   type PageText,
 } from '../core/text/authorship/index.ts'
@@ -38,7 +39,10 @@ import { askModel, runRewrite } from './rewrite.ts'
 import {
   applyRewrites,
   HABIT_LABEL,
+  needsAuthor,
   renderSweep,
+  rewritesFrom,
+  summariseRewrites,
   sweep,
   sweepPrompt,
   type SweepRow,
@@ -827,23 +831,30 @@ async function loadProse(
   return { source, prose, layout, document, pages }
 }
 
-async function commandDetect(target: string, options: Options): Promise<number> {
-  const loaded = await loadProse(target, options, 'detect')
-  if (typeof loaded === 'number') return loaded
-  const { source, prose, layout, document } = loaded
-
-  // The container's own marks: the input's when it is a .docx or a PDF, or
-  // those of the file named by --source when the input was extracted from one.
+/**
+ * The container's own marks: the input's when it is a .docx or a PDF, or those
+ * of the file named by --source when the input was extracted from one.
+ * `detect` and `sweep` read the same ones, so they give the same verdict.
+ */
+async function fileMarksOf(loaded: LoadedProse, options: Options): Promise<FileMark[]> {
+  const { source, prose } = loaded
   const containerBytes = options.source
     ? new Uint8Array(await readFile(options.source))
     : prose.source
       ? source.bytes
       : undefined
-  const fileMarks = containerBytes
+  return containerBytes
     ? fileMarksFrom(
         (await inspectContainer(containerBytes, options.source ?? source.name)).findings,
       )
     : []
+}
+
+async function commandDetect(target: string, options: Options): Promise<number> {
+  const loaded = await loadProse(target, options, 'detect')
+  if (typeof loaded === 'number') return loaded
+  const { source, prose, layout, document } = loaded
+  const fileMarks = await fileMarksOf(loaded, options)
 
   const report = detectAuthorship(prose.text, {
     format: prose.format,
@@ -907,6 +918,8 @@ function renderSweepText(name: string, rows: readonly SweepRow[]): string {
       out.push(
         `  ${' '.repeat(17)}${dim(`rewrite rejected: ${row.rewrite.failures?.[0] ?? 'failed the gate'}`)}`,
       )
+    else if (needsAuthor(row))
+      out.push(`  ${' '.repeat(17)}${dim('add the reference call: only the author knows it')}`)
   }
   out.push(
     '',
@@ -936,23 +949,45 @@ async function commandSweep(target: string, options: Options): Promise<number> {
     ...(layout ? { layout } : {}),
     ...(document ? { document } : {}),
     ...(options.register ? { register: options.register } : {}),
+    fileMarks: await fileMarksOf(loaded, options),
     sources,
   })
   let rows = result.rows
+  let failed = false
+
+  /** Applies answers, says what became of them, and remembers a rejection. */
+  const take = (value: unknown, from: 'agent' | 'model') => {
+    const { rewrites, ignored } = rewritesFrom(value)
+    rows = applyRewrites(rows, rewrites, from)
+    const outcome = summariseRewrites(rows, rewrites)
+    process.stderr.write(
+      `${dim(`rewrites: ${outcome.verified} verified, ${outcome.rejected} rejected${outcome.unknown.length > 0 ? `, ${outcome.unknown.length} unknown id${outcome.unknown.length === 1 ? '' : 's'} (${outcome.unknown.join(', ')})` : ''}${ignored > 0 ? `, ${ignored} item${ignored === 1 ? '' : 's'} without an id and a rewrite` : ''}`)}\n`,
+    )
+    if (outcome.rejected > 0 || outcome.unknown.length > 0) failed = true
+  }
 
   if (options.printPrompt) {
     process.stdout.write(`${sweepPrompt(rows)}\n`)
     return 0
   }
   if (options.apply) {
+    let raw: string
+    try {
+      raw = decodeUtf8(new Uint8Array(await readFile(options.apply)))
+    } catch (error) {
+      process.stderr.write(
+        `unmark: cannot read ${options.apply}: ${error instanceof Error ? error.message : String(error)}\n`,
+      )
+      return 2
+    }
     let parsed: unknown
     try {
-      parsed = JSON.parse(decodeUtf8(new Uint8Array(await readFile(options.apply))))
+      parsed = JSON.parse(raw)
     } catch {
       process.stderr.write(`unmark: ${options.apply} is not JSON: [{"id": …, "rewrite": …}]\n`)
       return 2
     }
-    rows = applyRewrites(rows, rewritesFrom(parsed), 'agent')
+    take(parsed, 'agent')
   }
   if (options.rewrite) {
     try {
@@ -960,7 +995,7 @@ async function commandSweep(target: string, options: Options): Promise<number> {
         ...(options.model ? { model: options.model } : {}),
         onNote: (note) => process.stderr.write(`${dim(note)}\n`),
       })
-      rows = applyRewrites(rows, rewritesFrom(jsonIn(answer)), 'model')
+      take(jsonIn(answer), 'model')
     } catch (error) {
       process.stderr.write(
         `unmark: no rewrites — ${error instanceof Error ? error.message : String(error)}. Use --print-prompt and --apply instead.\n`,
@@ -980,6 +1015,7 @@ async function commandSweep(target: string, options: Options): Promise<number> {
           verdict: result.report.verdict,
           score: result.report.score,
           coverage: result.report.coverage,
+          fileMarks: result.report.fileMarks,
           ...(result.report.document ? { document: result.report.document } : {}),
           disclaimer: result.report.disclaimer,
         },
@@ -992,20 +1028,9 @@ async function commandSweep(target: string, options: Options): Promise<number> {
   } else {
     process.stdout.write(renderSweepText(source.name, rows))
   }
-  return 0
-}
-
-/** `[{id, rewrite}]`, from a parsed JSON value, ignoring anything else. */
-function rewritesFrom(value: unknown): { id: string; rewrite: string }[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((item) =>
-    item &&
-    typeof item === 'object' &&
-    typeof item.id === 'string' &&
-    typeof item.rewrite === 'string'
-      ? [{ id: item.id as string, rewrite: item.rewrite as string }]
-      : [],
-  )
+  // 1 when an answer was rejected or named a sentence that is not there: a
+  // script reading the exit code should not take a refused rewrite for done.
+  return failed ? 1 : 0
 }
 
 /** The JSON array in a model's answer, fenced or not. */
@@ -1038,12 +1063,31 @@ function paragraphsOf(text: string): { start: number; end: number; index: number
 // must survive, `verify` checks the answer against both, `rewrite` runs the
 // loop between them.
 
+/**
+ * The text a rewrite command works on: the prose of a .docx or a PDF, the
+ * file as it is otherwise. Read as raw bytes, a .docx briefed its zip — a
+ * million "words" of compressed XML — and verified against itself as passed.
+ */
+async function proseText(
+  target: string,
+  command: string,
+): Promise<{ text: string; container: boolean } | number> {
+  const source = await readSource(target)
+  const prose = await readProse(source.bytes, source.name)
+  if (prose) return { text: prose.text, container: prose.source !== undefined }
+  process.stderr.write(
+    `unmark: ${source.name} has no prose ${command} can read. It reads text (.txt, .md, .html), .docx and PDF.\n`,
+  )
+  return 2
+}
+
 async function commandBrief(target: string): Promise<number> {
   // Always JSON. This had a `if (json || printPrompt === false)` branch whose
   // two arms printed the same thing, which reads as though the flags do
   // something here. They do not: a brief is for a machine to act on.
-  const source = await readSource(target)
-  process.stdout.write(`${JSON.stringify(buildBrief(decodeUtf8(source.bytes)), undefined, 2)}\n`)
+  const read = await proseText(target, 'brief')
+  if (typeof read === 'number') return read
+  process.stdout.write(`${JSON.stringify(buildBrief(read.text), undefined, 2)}\n`)
   return 0
 }
 
@@ -1065,9 +1109,12 @@ async function commandVerify(target: string, options: Options): Promise<number> 
     return 2
   }
 
-  const original = decodeUtf8((await readSource(options.against)).bytes)
-  const rewritten = decodeUtf8((await readSource(target)).bytes)
-  const verdict = verifyRewrite(original, rewritten, buildBrief(original))
+  const against = await proseText(options.against, 'verify')
+  if (typeof against === 'number') return against
+  const candidate = await proseText(target, 'verify')
+  if (typeof candidate === 'number') return candidate
+  const original = against.text
+  const verdict = verifyRewrite(original, candidate.text, buildBrief(original))
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify(verdict, undefined, 2)}\n`)
@@ -1081,8 +1128,15 @@ async function commandVerify(target: string, options: Options): Promise<number> 
 }
 
 async function commandRewrite(target: string, options: Options): Promise<number> {
-  const source = await readSource(target)
-  const text = decodeUtf8(source.bytes)
+  const read = await proseText(target, 'rewrite')
+  if (typeof read === 'number') return read
+  if (read.container && options.inPlace) {
+    process.stderr.write(
+      'unmark: --in-place would write plain text over a .docx or a PDF. Rewrite to stdout, or use `unmark sweep` for the sentences to change in the document.\n',
+    )
+    return 2
+  }
+  const text = read.text
   const brief = buildBrief(text)
 
   const outcome = await runRewrite(text, brief, {

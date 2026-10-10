@@ -84,6 +84,30 @@ describe('docxText', () => {
     expect(read?.skipped).toMatchObject({ table: 2, caption: 2, references: 1, toc: 4 })
   })
 
+  it('takes a known title typed as a plain paragraph for a heading, and leaves the oath out', async () => {
+    const read = await docxText(
+      docx(
+        [
+          paragraph('3. Conclusion', 'Titre1'),
+          paragraph('Ces résultats concluent la thèse.'),
+          paragraph('SERMENT D’HIPPOCRATE'),
+          paragraph(
+            'Au moment d’être admis à exercer la médecine, je promets et je jure d’être fidèle aux lois de l’honneur.',
+          ),
+          paragraph('Je donnerai mes soins à l’indigent et à quiconque me les demandera.'),
+          paragraph('Résumé'),
+          paragraph('Contexte : la fixation sclérale sans suture repose sur deux ancrages.'),
+        ].join(''),
+      ),
+    )
+    expect(read?.text.split('\n\n')).toEqual([
+      'Ces résultats concluent la thèse.',
+      'Contexte : la fixation sclérale sans suture repose sur deux ancrages.',
+    ])
+    expect(read?.paragraphs.map((p) => p.section)).toEqual(['3. Conclusion', 'Résumé'])
+    expect(read?.skipped).toMatchObject({ heading: 3, boilerplate: 2 })
+  })
+
   it('reads tabs, line breaks and field results, but not field codes or deletions', async () => {
     const read = await docxText(
       docx(

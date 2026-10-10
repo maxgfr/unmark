@@ -82,4 +82,18 @@ describe('layoutFromPages', () => {
       [2, 'FIGURES ET TABLEAUX'],
     ])
   })
+
+  it('leaves the oath out of a printed thesis', () => {
+    const { text } = layoutFromPages([
+      {
+        page: 53,
+        text: 'Ces résultats concluent la thèse.\n\nSERMENT D’HIPPOCRATE\n\nAu moment d’être admis à exercer la médecine, je promets et je jure d’être fidèle aux lois de l’honneur.',
+      },
+      { page: 55, text: 'Résumé\n\nContexte : la fixation sclérale repose sur deux ancrages.' },
+    ])
+    expect(text.split('\n\n')).toEqual([
+      'Ces résultats concluent la thèse.',
+      'Contexte : la fixation sclérale repose sur deux ancrages.',
+    ])
+  })
 })
