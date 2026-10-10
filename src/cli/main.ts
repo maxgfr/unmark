@@ -19,6 +19,7 @@ import {
   describeLocation,
   detectAuthorship,
   documentSentence,
+  topSpans,
   withoutFolio,
   fileMarksFrom,
   foundNothing,
@@ -824,22 +825,6 @@ async function loadProse(
     }
   }
   return { source, prose, layout, document, pages }
-}
-
-/**
- * The n sentences scoring highest, in document order.
- *
- * Ties — most often at 0.00 on a careful text — are broken by how many habits
- * the sentence carries, counted or not, so a sentence with two stacked hedges
- * comes before one with nothing at all.
- */
-function topSpans(report: AuthorshipReport, n: number): AuthorshipReport['spans'] {
-  const habits = (span: AuthorshipReport['spans'][number]) =>
-    report.findings.filter((f) => f.start >= span.start && f.start < span.end).length
-  return [...report.spans]
-    .sort((a, b) => b.score - a.score || habits(b) - habits(a) || a.start - b.start)
-    .slice(0, n)
-    .sort((a, b) => a.start - b.start)
 }
 
 async function commandDetect(target: string, options: Options): Promise<number> {

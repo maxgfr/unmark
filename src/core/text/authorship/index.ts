@@ -570,6 +570,7 @@ export {
   NOT_EVIDENCE,
   renderMarkdown,
   toJSON,
+  topSpans,
   UNREACHABLE_NOTE,
   verdictSentence,
 } from './report.ts'

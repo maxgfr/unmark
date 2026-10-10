@@ -640,3 +640,19 @@ export function authorshipFindings(report: AuthorshipReport): Finding[] {
     noFix: finding.fixHint,
   }))
 }
+
+/**
+ * The n sentences scoring highest, in document order (`--top`).
+ *
+ * Ties — most often at 0.00 on a careful text — are broken by how many habits
+ * the sentence carries, counted or not, so a sentence with two stacked hedges
+ * comes before one with nothing at all.
+ */
+export function topSpans(report: AuthorshipReport, n: number): AuthorshipSpan[] {
+  const habits = (span: AuthorshipSpan) =>
+    report.findings.filter((f) => f.start >= span.start && f.start < span.end).length
+  return [...report.spans]
+    .sort((a, b) => b.score - a.score || habits(b) - habits(a) || a.start - b.start)
+    .slice(0, n)
+    .sort((a, b) => a.start - b.start)
+}

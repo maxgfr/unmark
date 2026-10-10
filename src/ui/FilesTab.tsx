@@ -1,7 +1,7 @@
 // oxlint-disable no-await-in-loop -- files are read one at a time so a dropped
 // batch appears in the report as it goes, and one unreadable document does not
 // take the rest of the batch down with it.
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { cleanContainer, type ContainerFormat } from '../core/container/index.ts'
 import { FILE_ACCEPT, FORMAT_LABELS } from '../core/container/formats.ts'
 import type { Finding } from '../core/report.ts'
@@ -10,6 +10,42 @@ import { decodeUtf8 } from '../core/container/types.ts'
 import { IconDownload, IconTrash } from './icons.tsx'
 import { saveBlob } from './download.ts'
 import { cleanedName, formatBytes } from './format.ts'
+
+// Its own chunk, loaded when a reader opens the assessment of a document.
+const DocumentAssessment = lazy(() => import('./DocumentAssessment.tsx'))
+
+/** Containers whose prose `detect` reads. */
+const PROSE: ReadonlySet<ContainerFormat> = new Set<ContainerFormat>([
+  'DOCX',
+  'PDF',
+  'Text',
+  'Markdown',
+  'HTML',
+])
+
+/** The writing assessment of one file, mounted only while it is open. */
+function Assessment({ entry }: { entry: Entry }) {
+  const [open, setOpen] = useState(false)
+  // Stable across the tab's re-renders — a drag over the drop zone renders it
+  // on every mouse move — so the assessment is not recomputed for nothing.
+  const findings = useMemo(() => [...entry.findings, ...entry.preserved], [entry])
+  if (!entry.input) return undefined
+  return (
+    <details
+      className="mt-4 border-t border-[var(--color-rule)] pt-3"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm">Was the writing done by AI?</summary>
+      <div className="mt-4">
+        {open ? (
+          <Suspense fallback={<p className="text-xs text-[var(--color-muted)]">Loading…</p>}>
+            <DocumentAssessment name={entry.name} input={entry.input} findings={findings} />
+          </Suspense>
+        ) : undefined}
+      </div>
+    </details>
+  )
+}
 
 interface Entry {
   id: string
@@ -336,6 +372,7 @@ export function FilesTab() {
               ))}
             </ul>
           ) : undefined}
+          {PROSE.has(entry.format) ? <Assessment entry={entry} /> : undefined}
         </Section>
       ))}
 
