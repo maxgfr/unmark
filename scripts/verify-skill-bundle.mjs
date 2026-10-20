@@ -59,9 +59,6 @@ if (!/^description:\s*\S/m.test(frontmatter)) {
 if (/^disable-model-invocation:\s*true\s*$/m.test(frontmatter)) {
   failures.push('SKILL.md still sets disable-model-invocation: true')
 }
-if (/opencode\/autoinvoke:\s*['"]?false['"]?\s*$/m.test(frontmatter)) {
-  failures.push('SKILL.md still sets opencode/autoinvoke to false')
-}
 if (!/Use only when the user explicitly asks for unmark/.test(frontmatter)) {
   failures.push('SKILL.md description no longer restricts the skill to explicit requests')
 }

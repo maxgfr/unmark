@@ -1,8 +1,6 @@
 ---
 name: unmark
 description: Inspect, decode, or remove hidden marks from text and files, including invisible Unicode, EXIF/C2PA/XMP metadata, PDF/DOCX history, and AI-style signals. Assess whether French or English prose reads as AI-written, with every suspect passage located and a way to fix it. Use image editing for visible pixel watermarks. Use only when the user explicitly asks for unmark, a hidden-mark scan, or an AI-writing check.
-metadata:
-  opencode/autoinvoke: 'true'
 ---
 
 # unmark
