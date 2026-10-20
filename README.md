@@ -10,7 +10,7 @@ literally: click a finding and the cursor lands on the character it found, in a
 view that draws the invisible ones so there is something to look at.
 
 ```bash
-npx skills add maxgfr/unmark    # the same engine, as a Claude skill and a CLI
+npx skills add maxgfr/unmark    # the same engine, as an agent skill and a CLI
 ```
 
 ## Why
@@ -448,7 +448,7 @@ IBM Plex Sans and JetBrains Mono are OFL. Qwen3.5 and WebLLM are Apache-2.0.
 
 The `unmark` skill is model-invocable, but its description restricts it to explicit requests: the agent calls it when you ask for it, not on its own. Ask for it in plain words, or use `$unmark` in Codex or `/unmark` in Claude Code and OpenCode (with the plugin namespace when installed as a Claude plugin).
 
-You keep the switch on every host:
+You keep the switch in the frontmatter of the installed `SKILL.md`:
 
 | Host                  | Shipped, on request                         | Explicit-only                        |
 | --------------------- | ------------------------------------------- | ------------------------------------ |
