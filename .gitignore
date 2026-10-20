@@ -30,3 +30,8 @@ blob-report/
 
 # Local experiment environments and reports
 .cache/
+
+# agent skill installs (produced by `npx skills add .`, never committed)
+.agents/skills/
+.claude/skills/
+skills-lock.json
