@@ -4,7 +4,7 @@
 
 A static page that finds, decodes and removes watermarks and provenance marks
 from text, documents and images, entirely in the visitor's browser. The same
-deterministic engine also ships as a terminal tool and a Claude skill.
+deterministic engine also ships as a terminal tool and an agent skill.
 
 ## Who it is for
 
