@@ -462,7 +462,7 @@ export function verifyRewrite(original: string, rewrite: string, brief: Brief): 
 /**
  * The brief as a prompt.
  *
- * Lives here rather than in the CLI so the Claude skill, the local model and
+ * Lives here rather than in the CLI so the agent skill, the local model and
  * `--print-prompt` are all given the same instructions. Three ways to ask one
  * question is three ways for the answers to disagree.
  */
